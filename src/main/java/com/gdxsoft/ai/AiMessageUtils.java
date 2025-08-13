@@ -4,7 +4,7 @@ import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-public class StringUtils {
+public class AiMessageUtils {
 	/**
 	 * 提取MD的代码内容
 	 * @param markdown

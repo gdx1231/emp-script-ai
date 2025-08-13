@@ -1,8 +1,5 @@
 package com.gdxsoft.ai.providers.gemini.request;
 
-import java.util.ArrayList;
-import java.util.List;
-
 import com.gdxsoft.ai.providers.gemini.response.ApiResponse;
 import com.gdxsoft.easyweb.utils.UNet;
 
@@ -33,22 +30,8 @@ public class Request {
 	}
 
 	public ApiResponse doRequstSimple(String user) {
-		Part part = new Part();
-		part.setText(user);
-
-		List<Part> parts = new ArrayList<>();
-		parts.add(part);
-
-		Content content = new Content();
-		content.setParts(parts);
-
-		List<Content> contents = new ArrayList<>();
-		contents.add(content);
-
 		RequestData data = new RequestData();
-
-		data.setContents(contents);
-
+		data.userMessage(user);
 		return this.doRequest(data);
 	}
 

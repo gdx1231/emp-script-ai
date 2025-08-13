@@ -6,7 +6,7 @@ import java.util.Map;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import com.gdxsoft.ai.StringUtils;
+import com.gdxsoft.ai.AiMessageUtils;
 
 import java.util.ArrayList; // 用于实例化 List
 
@@ -74,7 +74,7 @@ public class ApiResponse {
 	 */
 	public List<Map<String, String>>  getResponseCodes() {
 		String text = this.getResponseText();
-		List<Map<String, String>> codes = StringUtils.extractCodeBlocks(text);
+		List<Map<String, String>> codes = AiMessageUtils.extractCodeBlocks(text);
 		return codes;
 	}
 	
