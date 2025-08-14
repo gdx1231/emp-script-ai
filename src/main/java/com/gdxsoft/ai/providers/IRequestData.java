@@ -20,7 +20,7 @@ public interface IRequestData {
     IRequestData model(String model);
 
     /**
-     * 设置模型是否为深度思考（QWEN 特有）
+     * 设置模型是否为深度思考
      */
     IRequestData thinking(boolean thinking);
 

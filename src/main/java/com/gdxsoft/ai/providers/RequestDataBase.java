@@ -36,18 +36,6 @@ public abstract class RequestDataBase implements IRequestData {
     }
 
     /**
-     * 设置模型是否为深度思考
-     * 
-     * @param thinking
-     * @return
-     */
-    @Override
-    public IRequestData thinking(boolean thinking) {
-        parameters.put("thinking", thinking);
-        return this;
-    }
-
-    /**
      * 设置模型名称
      */
     @Override
@@ -98,6 +86,15 @@ public abstract class RequestDataBase implements IRequestData {
     @Override
     public IRequestData temperature(double temp) {
         parameters.put("temperature", temp);
+        return this;
+    }
+
+    /**
+     * 设置 thinking - 默认实现，子类可以重写
+     */
+    @Override
+    public IRequestData thinking(boolean thinking) {
+        parameters.put("thinking", thinking);
         return this;
     }
 
