@@ -31,13 +31,9 @@ public interface IRequestAI {
 	 */
 	String doStream(IRequestData reqData, PrintWriter writer) throws IOException, URISyntaxException;
 
-	/**
-	 * 输出事件数据到客户端
-	 * 
-	 * @param msg    消息内容
-	 * @param writer 输出流
-	 */
-	void outEvent(Object msg, PrintWriter writer);
+	IOutEvents getOutEvents();
+
+	void setOutEvents(IOutEvents outEvents);
 
 	String getApiUrl();
 

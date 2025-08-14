@@ -15,7 +15,8 @@ public class RequestAIFactory {
 		ProviderType type = ProviderType.fromName(providerName);
 
 		if (type == null) {
-			throw new IllegalArgumentException("不支持的AI提供商: " + providerName + ". 支持的提供商: gemini, grok, openai, qwen");
+			throw new IllegalArgumentException(
+					"不支持的AI提供商: " + providerName + ". 支持的提供商: gemini, grok, openai, qwen, doubao");
 		}
 		return createRequestAI(type);
 	}
@@ -37,6 +38,8 @@ public class RequestAIFactory {
 				return new com.gdxsoft.ai.providers.openai.RequestAI();
 			case QWEN:
 				return new com.gdxsoft.ai.providers.qwen.RequestAI();
+			case DOUBAO:
+				return new com.gdxsoft.ai.providers.doubao.RequestAI();
 			default:
 				throw new IllegalArgumentException("不支持的AI提供商类型: " + type);
 		}

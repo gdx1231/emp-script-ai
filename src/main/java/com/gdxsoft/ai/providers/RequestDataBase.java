@@ -90,11 +90,10 @@ public abstract class RequestDataBase implements IRequestData {
     }
 
     /**
-     * 设置 thinking - 默认实现，子类可以重写
+     * 设置 thinking - 仅 Qwen 模型使用，默认实现返回自身
      */
     @Override
     public IRequestData thinking(boolean thinking) {
-        parameters.put("thinking", thinking);
         return this;
     }
 

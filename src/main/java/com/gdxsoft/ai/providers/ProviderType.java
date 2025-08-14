@@ -7,18 +7,19 @@ public enum ProviderType {
     GEMINI("gemini"),
     GROK("grok"),
     OPENAI("openai"),
-    QWEN("qwen");
-    
+    QWEN("qwen"),
+    DOUBAO("doubao");
+
     private final String name;
-    
-    ProviderType(String name) { 
+
+    ProviderType(String name) {
         this.name = name;
     }
-    
+
     public String getName() {
         return name;
     }
-    
+
     /**
      * 根据名称获取提供商类型
      */
@@ -26,7 +27,7 @@ public enum ProviderType {
         if (name == null) {
             return null;
         }
-        
+
         String lowerName = name.toLowerCase().trim();
         for (ProviderType type : values()) {
             if (type.getName().equals(lowerName)) {

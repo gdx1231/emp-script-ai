@@ -4,6 +4,6 @@ import org.json.JSONObject;
 
 import com.gdxsoft.easyweb.script.RequestValue;
 
-public interface IExport {
-	JSONObject doExport(RequestValue rv, String fullText);
+public interface IStepAction {
+	JSONObject doAction(RequestValue rv, String fullText);
 }

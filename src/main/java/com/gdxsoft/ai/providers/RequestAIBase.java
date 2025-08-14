@@ -13,6 +13,19 @@ import org.json.JSONObject;
 
 public abstract class RequestAIBase implements IRequestAI {
 
+	private IOutEvents outEvents;
+	
+	public IOutEvents getOutEvents() {
+		if (outEvents == null) {
+			outEvents = new DefaultOutEvents();
+		}
+		return outEvents;
+	}
+	
+	public void setOutEvents(IOutEvents outEvents) {
+		this.outEvents = outEvents;
+	}
+	
 	/**
 	 * 使用 GZIP 压缩数据
 	 * 
@@ -45,7 +58,7 @@ public abstract class RequestAIBase implements IRequestAI {
 
 	public HttpURLConnection createApiConn(String u, IRequestData reqData) throws IOException, URISyntaxException {
 		String jsonInput = reqData.buildJson();
-		byte[] gzipData = null;
+		// byte[] gzipData = null;
 		// try {
 		// // 使用 GZIP 压缩数据
 		// gzipData = RequestAIBase.compressPostData(jsonInput);
@@ -67,21 +80,21 @@ public abstract class RequestAIBase implements IRequestAI {
 		conn.setRequestProperty("Accept", "text/event-stream");
 		conn.setDoOutput(true);
 
-		if (gzipData != null) {
-			// 使用 GZIP
-			try (OutputStream os = conn.getOutputStream()) {
-				os.write(gzipData, 0, gzipData.length);
-			}
-		} else {
-			byte[] input = jsonInput.getBytes("utf-8");
-			try (OutputStream os = conn.getOutputStream()) {
-				os.write(input, 0, input.length);
-			}
+		// if (gzipData != null) {
+		// // 使用 GZIP
+		// try (OutputStream os = conn.getOutputStream()) {
+		// os.write(gzipData, 0, gzipData.length);
+		// }
+		// } else {
+		byte[] input = jsonInput.getBytes("utf-8");
+		try (OutputStream os = conn.getOutputStream()) {
+			os.write(input, 0, input.length);
 		}
+		// }
 		return conn;
 	}
 
-	private int messageCount = 0;
+	private int messageCount = -1;
 
 	private String apiUrl;
 	private String apiKey;
@@ -158,20 +171,19 @@ public abstract class RequestAIBase implements IRequestAI {
 		if (json.has("content")) {
 			this.getFullText().append(json.optString("content"));
 		}
-		outEvent(json.toString(), writer);
+		
+		IOutEvents oe = this.getOutEvents();
+		oe.setLine(line);
+		oe.setContenJson(json);
+		oe.setMessageCount(messageCount);
+		
+		this.getOutEvents().outEvent(json.toString(), writer);
+		//outEvent(json.toString(), writer);
+		
+		
 	}
 
-	/**
-	 * 输出事件数据到客户端
-	 * 
-	 * @param msg    消息内容
-	 * @param writer 输出流
-	 */
-	@Override
-	public void outEvent(Object msg, PrintWriter writer) {
-		writer.print("data: " + msg.toString() + "\n\n");
-		writer.flush();
-	}
+	 
 
 	public String getApiUrl() {
 		return apiUrl;

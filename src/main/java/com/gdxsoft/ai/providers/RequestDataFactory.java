@@ -17,7 +17,7 @@ public class RequestDataFactory {
 
         if (type == null) {
             throw new IllegalArgumentException("不支持的AI提供商: " + providerName +
-                    ". 支持的提供商: gemini, grok, openai, qwen");
+                    ". 支持的提供商: gemini, grok, openai, qwen, doubao");
         }
 
         return createRequestData(type);
@@ -40,6 +40,8 @@ public class RequestDataFactory {
                 return new com.gdxsoft.ai.providers.openai.RequestData();
             case QWEN:
                 return new com.gdxsoft.ai.providers.qwen.RequestData();
+            case DOUBAO:
+                return new com.gdxsoft.ai.providers.doubao.RequestData();
             default:
                 throw new IllegalArgumentException("不支持的AI提供商类型: " + type);
         }
@@ -106,6 +108,15 @@ public class RequestDataFactory {
         if (lowerModelName.contains("qwen") ||
                 lowerModelName.contains("通义")) {
             return ProviderType.QWEN;
+        }
+
+        // Doubao（豆包）模型特征
+        if (lowerModelName.contains("doubao") ||
+                lowerModelName.contains("豆包") ||
+                lowerModelName.contains("skylark") || // 部分早期命名
+                lowerModelName.contains("bytegpt") ||
+                lowerModelName.contains("larksuite")) {
+            return ProviderType.DOUBAO;
         }
 
         return null;
