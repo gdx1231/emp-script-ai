@@ -29,16 +29,16 @@ public class RequestAIFactory {
 	 */
 	public static IRequestAI createRequestAI(ProviderType type) {
 		switch (type) {
-		case GEMINI:
-			return new com.gdxsoft.ai.providers.gemini.request.RequestAI();
-		case GROK:
-			return new com.gdxsoft.ai.providers.grok.request.RequestAI();
-		case OPENAI:
-			return new com.gdxsoft.ai.providers.openai.request.RequestAI();
-		case QWEN:
-			return new com.gdxsoft.ai.providers.qwen.request.RequestAI();
-		default:
-			throw new IllegalArgumentException("不支持的AI提供商类型: " + type);
+			case GEMINI:
+				return new com.gdxsoft.ai.providers.gemini.RequestAI();
+			case GROK:
+				return new com.gdxsoft.ai.providers.grok.RequestAI();
+			case OPENAI:
+				return new com.gdxsoft.ai.providers.openai.RequestAI();
+			case QWEN:
+				return new com.gdxsoft.ai.providers.qwen.RequestAI();
+			default:
+				throw new IllegalArgumentException("不支持的AI提供商类型: " + type);
 		}
 	}
 

@@ -5,6 +5,13 @@ import java.io.PrintWriter;
 import java.net.URISyntaxException;
 
 public interface IRequestAI {
+	ProviderType getProviderType();
+
+	/**
+	 * 获取 AI 提供商类型
+	 */
+	String getProviderName();
+
 	/**
 	 * 初始化 API URL 和 API Key
 	 * 

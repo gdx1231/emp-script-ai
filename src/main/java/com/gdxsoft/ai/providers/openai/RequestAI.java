@@ -1,4 +1,4 @@
-package com.gdxsoft.ai.providers.qwen.request;
+package com.gdxsoft.ai.providers.openai;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -14,15 +14,20 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import com.gdxsoft.ai.providers.IRequestData;
+import com.gdxsoft.ai.providers.ProviderType;
 import com.gdxsoft.ai.providers.RequestAIBase;
 import com.gdxsoft.easyweb.utils.UJSon;
 
 public class RequestAI extends RequestAIBase {
-	// 通义千问的流式API 网址，openai兼容模式
-	public static final String DEFAULT_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions";
+	// OpenAI的流式API网址
+	public static final String DEFAULT_URL = "https://api.openai.com/v1/chat/completions";
+
+	public RequestAI() {
+		this.providerType = ProviderType.OPENAI;
+	}
 
 	/**
-	 * 调用通义千问的流式API
+	 * 调用OpenAI的流式API
 	 * 
 	 * @param reqData 用户输入的提示词
 	 * @param writer  输出流
@@ -64,18 +69,18 @@ public class RequestAI extends RequestAIBase {
 	}
 
 	/**
-	 * 提取通义千问返回的JSON数据
+	 * 提取OpenAI返回的JSON数据
 	 * 
 	 * @param line 原始数据行
 	 * @return 解析后的JSON对象
 	 */
 	public JSONObject extraceJson(String line) {
 		/*
-		 * data: {"choices":[{"delta":{"content":"旨在为用户提供全面"}
-		 * ,"finish_reason":null,"index":0,"logprobs":null}]
-		 * ,"object":"chat.completion.chunk","usage":null,"created":1754902913
-		 * ,"system_fingerprint":null,"model":"qwen-turbo"
-		 * ,"id":"chatcmpl-500b1fb4-2b18-9cc7-82d5-c9d0e9fd38a9"}
+		 * data:
+		 * {"id":"chatcmpl-123","object":"chat.completion.chunk","created":1694268190,
+		 * "model":"gpt-3.5-turbo-0125","system_fingerprint":"fp_44709d6fcb","choices":[
+		 * {"index":0,
+		 * "delta":{"content":"Hello"},"logprobs":null,"finish_reason":null}]}
 		 */
 		// 提取 data: 后面的 JSON
 
@@ -86,6 +91,11 @@ public class RequestAI extends RequestAIBase {
 		String jsonData = line.substring(5).trim();
 		if (jsonData.isEmpty()) {
 			return UJSon.rstFalse("data:无数据，" + line);
+		}
+
+		// 检查是否是结束标记
+		if ("[DONE]".equals(jsonData)) {
+			return UJSon.rstTrue("流结束标记");
 		}
 
 		// System.out.println(jsonData);

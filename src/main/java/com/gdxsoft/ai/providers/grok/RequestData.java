@@ -1,7 +1,8 @@
-package com.gdxsoft.ai.providers.grok.request;
+package com.gdxsoft.ai.providers.grok;
 
 import org.json.JSONObject;
 
+import com.gdxsoft.ai.providers.ProviderType;
 import com.gdxsoft.ai.providers.RequestDataBase;
 
 /**
@@ -10,7 +11,8 @@ import com.gdxsoft.ai.providers.RequestDataBase;
 public class RequestData extends RequestDataBase {
 
     public RequestData() {
-        super("grok-2");  // 默认模型
+        super("grok-2"); // 默认模型
+        this.providerType = ProviderType.GROK;
     }
 
     /**

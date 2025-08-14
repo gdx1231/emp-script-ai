@@ -1,7 +1,8 @@
-package com.gdxsoft.ai.providers.openai.request;
+package com.gdxsoft.ai.providers.openai;
 
 import org.json.JSONObject;
 
+import com.gdxsoft.ai.providers.ProviderType;
 import com.gdxsoft.ai.providers.RequestDataBase;
 
 /**
@@ -10,7 +11,8 @@ import com.gdxsoft.ai.providers.RequestDataBase;
 public class RequestData extends RequestDataBase {
 
     public RequestData() {
-        super("gpt-4o-mini");  // 默认模型
+        super("gpt-4o-mini"); // 默认模型
+        this.providerType = ProviderType.OPENAI;
     }
 
     /**

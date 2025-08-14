@@ -1,13 +1,87 @@
 package com.gdxsoft.ai.providers;
 
+import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.io.PrintWriter;
+import java.net.HttpURLConnection;
+import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.zip.GZIPOutputStream;
 
 import org.json.JSONObject;
 
 public abstract class RequestAIBase implements IRequestAI {
-	// 通义千问的流式API 网址，openai兼容模式
+
+	/**
+	 * 使用 GZIP 压缩数据
+	 * 
+	 * @param postData
+	 * @return
+	 * @throws IOException
+	 */
+	// public static byte[] compressPostData (String postData) throws IOException {
+	// // 使用 GZIP 压缩数据
+	// ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+	// try (GZIPOutputStream gzipOutputStream = new
+	// GZIPOutputStream(byteArrayOutputStream)) {
+	// gzipOutputStream.write(postData.getBytes("UTF-8"));
+	// }
+	// // 获取压缩后的字节数组
+	// byte[] compressedData = byteArrayOutputStream.toByteArray();
+	//
+	// return compressedData;
+	// }
+	public String doStream(IRequestData reqData, PrintWriter writer) throws IOException, URISyntaxException {
+		HttpURLConnection conn = this.createApiConn(apiUrl, reqData);
+		try (BufferedReader br = new BufferedReader(new InputStreamReader(conn.getInputStream(), "utf-8"))) {
+			String line;
+			while ((line = br.readLine()) != null) {
+				this.handleLine(line, writer);
+			}
+		}
+		return getFullText().toString();
+	}
+
+	public HttpURLConnection createApiConn(String u, IRequestData reqData) throws IOException, URISyntaxException {
+		String jsonInput = reqData.buildJson();
+		byte[] gzipData = null;
+		// try {
+		// // 使用 GZIP 压缩数据
+		// gzipData = RequestAIBase.compressPostData(jsonInput);
+		// } catch (Exception e) {
+		//
+		// }
+
+		URI url = new URI(u);
+		HttpURLConnection conn = (HttpURLConnection) url.toURL().openConnection();
+		conn.setRequestMethod("POST");
+		if (this.getApiKey() != null && !this.getApiKey().isEmpty()) {
+			conn.setRequestProperty("Authorization", "Bearer " + this.getApiKey());
+		}
+		conn.setRequestProperty("Content-Type", "application/json");
+		// if (gzipData != null) {
+		// // 声明使用 GZIP 压缩
+		// conn.setRequestProperty("Content-Encoding", "gzip");
+		// }
+		conn.setRequestProperty("Accept", "text/event-stream");
+		conn.setDoOutput(true);
+
+		if (gzipData != null) {
+			// 使用 GZIP
+			try (OutputStream os = conn.getOutputStream()) {
+				os.write(gzipData, 0, gzipData.length);
+			}
+		} else {
+			byte[] input = jsonInput.getBytes("utf-8");
+			try (OutputStream os = conn.getOutputStream()) {
+				os.write(input, 0, input.length);
+			}
+		}
+		return conn;
+	}
 
 	private int messageCount = 0;
 
@@ -20,7 +94,27 @@ public abstract class RequestAIBase implements IRequestAI {
 		return fullText;
 	}
 
-	abstract public String doStream(IRequestData reqData, PrintWriter writer) throws IOException, URISyntaxException;
+	protected ProviderType providerType;
+
+	public ProviderType getProviderType() {
+		return providerType;
+	}
+
+	public RequestAIBase() {
+		// 默认不指定，具体实现类负责设置
+		this.providerType = null;
+	}
+
+	/**
+	 * 获取 AI 提供商类型
+	 */
+	public String getProviderName() {
+		if (providerType == null) {
+			return "unknown";
+		}
+		return providerType.toString();
+	}
+
 	/**
 	 * 提取 JSON 对象
 	 * 
@@ -48,8 +142,6 @@ public abstract class RequestAIBase implements IRequestAI {
 		this.messageCount++;
 		return this.messageCount;
 	}
-
-	
 
 	/**
 	 * 处理每一行的响应数据

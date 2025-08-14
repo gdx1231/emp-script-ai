@@ -1,4 +1,4 @@
-package com.gdxsoft.ai.providers.gemini.request;
+package com.gdxsoft.ai.providers.gemini;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -14,12 +14,17 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import com.gdxsoft.ai.providers.IRequestData;
+import com.gdxsoft.ai.providers.ProviderType;
 import com.gdxsoft.ai.providers.RequestAIBase;
 import com.gdxsoft.easyweb.utils.UJSon;
 
 public class RequestAI extends RequestAIBase {
 	// Gemini的流式API网址
 	public static final String DEFAULT_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:streamGenerateContent";
+
+	public RequestAI() {
+		this.providerType = ProviderType.GEMINI;
+	}
 
 	/**
 	 * 调用Gemini的流式API
@@ -40,7 +45,7 @@ public class RequestAI extends RequestAIBase {
 		if (super.getApiKey() != null && !super.getApiKey().isEmpty()) {
 			u += "?key=" + super.getApiKey();
 		}
-		
+
 		URI url = new URI(u);
 		HttpURLConnection conn = (HttpURLConnection) url.toURL().openConnection();
 		conn.setRequestMethod("POST");
@@ -74,7 +79,8 @@ public class RequestAI extends RequestAIBase {
 	public JSONObject extraceJson(String line) {
 		/*
 		 * data: {"candidates":[{"content":{"parts":[{"text":"Hello"}],"role":"model"},
-		 * "finishReason":"STOP","index":0,"safetyRatings":[...]}],"promptFeedback":{...}}
+		 * "finishReason":"STOP","index":0,"safetyRatings":[...]}],"promptFeedback":{...
+		 * }}
 		 */
 		// 提取 data: 后面的 JSON
 

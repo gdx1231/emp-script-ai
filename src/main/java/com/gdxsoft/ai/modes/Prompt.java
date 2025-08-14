@@ -9,6 +9,8 @@ public class Prompt {
     private String dataType;
     private String prefix;
     private String content;
+    // Optional: when dataType is 'json', group result by this field
+    private String dataGroupField;
 
     public Prompt(String name, String role, String description, String sqlRef, String dataType, String prefix,
             String content) {
@@ -50,6 +52,10 @@ public class Prompt {
         return content;
     }
 
+    public String getDataGroupField() {
+        return dataGroupField;
+    }
+
     // Setters
     public void setName(String name) {
         this.name = name;
@@ -77,5 +83,9 @@ public class Prompt {
 
     public void setContent(String content) {
         this.content = content;
+    }
+
+    public void setDataGroupField(String dataGroupField) {
+        this.dataGroupField = dataGroupField;
     }
 }

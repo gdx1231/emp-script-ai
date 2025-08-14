@@ -1,7 +1,8 @@
-package com.gdxsoft.ai.providers.qwen.request;
+package com.gdxsoft.ai.providers.qwen;
 
 import org.json.JSONObject;
 
+import com.gdxsoft.ai.providers.ProviderType;
 import com.gdxsoft.ai.providers.RequestDataBase;
 
 /**
@@ -12,6 +13,7 @@ public class RequestData extends RequestDataBase {
 
 	public RequestData() {
 		super(DEFAULT_MODEL_NAME); // 默认模型
+		this.providerType = ProviderType.QWEN;
 	}
 
 	/**
@@ -27,7 +29,7 @@ public class RequestData extends RequestDataBase {
 	}
 
 	/**
-	 * 构建最终的请求 JSON 对象 OpenAI API 的请求体格式
+	 * 构建最终的请求 JSON 对象 Qwen API 的请求体格式
 	 * 
 	 * @return 返回构建好的 JSON 对象
 	 */

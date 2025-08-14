@@ -14,15 +14,15 @@ public class RequestDataFactory {
      */
     public static IRequestData createRequestData(String providerName) {
         ProviderType type = ProviderType.fromName(providerName);
-        
+
         if (type == null) {
-            throw new IllegalArgumentException("不支持的AI提供商: " + providerName + 
-                ". 支持的提供商: gemini, grok, openai, qwen");
+            throw new IllegalArgumentException("不支持的AI提供商: " + providerName +
+                    ". 支持的提供商: gemini, grok, openai, qwen");
         }
-        
+
         return createRequestData(type);
     }
-    
+
     /**
      * 根据提供商类型创建RequestData实例
      * 
@@ -33,18 +33,18 @@ public class RequestDataFactory {
     public static IRequestData createRequestData(ProviderType type) {
         switch (type) {
             case GEMINI:
-                return new com.gdxsoft.ai.providers.gemini.request.RequestData();
+                return new com.gdxsoft.ai.providers.gemini.RequestData();
             case GROK:
-                return new com.gdxsoft.ai.providers.grok.request.RequestData();
+                return new com.gdxsoft.ai.providers.grok.RequestData();
             case OPENAI:
-                return new com.gdxsoft.ai.providers.openai.request.RequestData();
+                return new com.gdxsoft.ai.providers.openai.RequestData();
             case QWEN:
-                return new com.gdxsoft.ai.providers.qwen.request.RequestData();
+                return new com.gdxsoft.ai.providers.qwen.RequestData();
             default:
                 throw new IllegalArgumentException("不支持的AI提供商类型: " + type);
         }
     }
-    
+
     /**
      * 检查是否支持指定的提供商名称
      * 
@@ -54,7 +54,7 @@ public class RequestDataFactory {
     public static boolean isSupported(String providerName) {
         return ProviderType.fromName(providerName) != null;
     }
-    
+
     /**
      * 获取所有支持的提供商名称
      * 
@@ -68,7 +68,7 @@ public class RequestDataFactory {
         }
         return providers;
     }
-    
+
     /**
      * 根据模型名称推断提供商类型
      * 基于常见的模型命名规律进行推断
@@ -80,37 +80,37 @@ public class RequestDataFactory {
         if (modelName == null || modelName.trim().isEmpty()) {
             return null;
         }
-        
+
         String lowerModelName = modelName.toLowerCase();
-        
+
         // Gemini 模型特征
         if (lowerModelName.contains("gemini")) {
             return ProviderType.GEMINI;
         }
-        
+
         // OpenAI 模型特征
-        if (lowerModelName.startsWith("gpt-") || 
-            lowerModelName.contains("davinci") || 
-            lowerModelName.contains("curie") || 
-            lowerModelName.contains("babbage") || 
-            lowerModelName.contains("ada")) {
+        if (lowerModelName.startsWith("gpt-") ||
+                lowerModelName.contains("davinci") ||
+                lowerModelName.contains("curie") ||
+                lowerModelName.contains("babbage") ||
+                lowerModelName.contains("ada")) {
             return ProviderType.OPENAI;
         }
-        
+
         // Grok 模型特征
         if (lowerModelName.contains("grok")) {
             return ProviderType.GROK;
         }
-        
+
         // Qwen 模型特征
-        if (lowerModelName.contains("qwen") || 
-            lowerModelName.contains("通义")) {
+        if (lowerModelName.contains("qwen") ||
+                lowerModelName.contains("通义")) {
             return ProviderType.QWEN;
         }
-        
+
         return null;
     }
-    
+
     /**
      * 根据模型名称创建对应的RequestData实例
      * 
@@ -123,9 +123,9 @@ public class RequestDataFactory {
         if (type == null) {
             throw new IllegalArgumentException("无法从模型名称推断AI提供商: " + modelName);
         }
-        
+
         IRequestData requestData = createRequestData(type);
-        requestData.model(modelName);  // 设置指定的模型名称
+        requestData.model(modelName); // 设置指定的模型名称
         return requestData;
     }
 }

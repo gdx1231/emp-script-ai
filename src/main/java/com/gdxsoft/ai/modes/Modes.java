@@ -57,7 +57,12 @@ public class Modes {
         String prefix = promptElement.getAttribute("prefix");
         String content = getElementContent(promptElement);
 
-        return new Prompt(promptName, role, description, sqlRef, dataType, prefix, content);
+        String dataGroupField = promptElement.getAttribute("dataGroupField");
+        Prompt p = new Prompt(promptName, role, description, sqlRef, dataType, prefix, content);
+        if (dataGroupField != null && dataGroupField.length() > 0) {
+            p.setDataGroupField(dataGroupField);
+        }
+        return p;
     }
 
     private SqlQuery parseSqlQuery(Element sqlElement) {
@@ -92,6 +97,7 @@ public class Modes {
             Element stepElement = (Element) stepNodes.item(i);
             String stepName = stepElement.getAttribute("name");
             String stepDescription = stepElement.getAttribute("description");
+            String stepAction = stepElement.getAttribute("action");
 
             // Parse prompts within step
             List<Prompt> prompts = new ArrayList<>();
@@ -99,7 +105,11 @@ public class Modes {
             if (promptsNode.getLength() > 0) {
                 prompts = parsePrompts((Element) promptsNode.item(0));
             }
-            steps.add(new Step(stepName, stepDescription, prompts));
+            if (stepAction != null && stepAction.length() > 0) {
+                steps.add(new Step(stepName, stepDescription, prompts, stepAction));
+            } else {
+                steps.add(new Step(stepName, stepDescription, prompts));
+            }
         }
 
         // Parse SQL queries
@@ -109,7 +119,22 @@ public class Modes {
             sqlQueries = parseSqlQueries((Element) sqlsNode.item(0));
         }
 
-        return new Mode(modeName, modeDescription, steps, sqlQueries);
+        // Parse actions
+        List<Action> actions = new ArrayList<>();
+        NodeList actionsNodes = root.getElementsByTagName("actions");
+        if (actionsNodes.getLength() > 0) {
+            Element actionsElement = (Element) actionsNodes.item(0);
+            NodeList actionNodes = actionsElement.getElementsByTagName("action");
+            for (int i = 0; i < actionNodes.getLength(); i++) {
+                Element actionElement = (Element) actionNodes.item(i);
+                String actionName = actionElement.getAttribute("name");
+                String actionDescription = actionElement.getAttribute("description");
+                String className = actionElement.getAttribute("class");
+                actions.add(new Action(actionName, actionDescription, className));
+            }
+        }
+
+        return new Mode(modeName, modeDescription, steps, sqlQueries, actions);
     }
 
     // Helper method to get content of an element, handling CDATA

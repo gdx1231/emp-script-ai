@@ -6,11 +6,20 @@ public class Step {
     private String name;
     private String description;
     private List<Prompt> prompts;
+    // optional action reference name, e.g., createEnqJny
+    private String action;
 
     public Step(String name, String description, List<Prompt> prompts) {
         this.name = name;
         this.description = description;
         this.prompts = prompts;
+    }
+
+    public Step(String name, String description, List<Prompt> prompts, String action) {
+        this.name = name;
+        this.description = description;
+        this.prompts = prompts;
+        this.action = action;
     }
 
     // Getters
@@ -24,6 +33,10 @@ public class Step {
 
     public List<Prompt> getPrompts() {
         return prompts;
+    }
+
+    public String getAction() {
+        return action;
     }
 
     // Setters
@@ -52,5 +65,9 @@ public class Step {
      */
     public void setPrompts(List<Prompt> prompts) {
         this.prompts = prompts;
+    }
+
+    public void setAction(String action) {
+        this.action = action;
     }
 }
