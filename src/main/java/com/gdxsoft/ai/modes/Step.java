@@ -8,6 +8,10 @@ public class Step {
     private List<Prompt> prompts;
     // optional action reference name, e.g., createEnqJny
     private String action;
+    // whether this step uses stream mode, default true
+    private boolean stream = true;
+    // optional SQL reference name for action
+    private String actionSqlRef;
 
     public Step(String name, String description, List<Prompt> prompts) {
         this.name = name;
@@ -37,6 +41,14 @@ public class Step {
 
     public String getAction() {
         return action;
+    }
+
+    public boolean isStream() {
+        return stream;
+    }
+
+    public String getActionSqlRef() {
+        return actionSqlRef;
     }
 
     // Setters
@@ -69,5 +81,13 @@ public class Step {
 
     public void setAction(String action) {
         this.action = action;
+    }
+
+    public void setStream(boolean stream) {
+        this.stream = stream;
+    }
+
+    public void setActionSqlRef(String actionSqlRef) {
+        this.actionSqlRef = actionSqlRef;
     }
 }

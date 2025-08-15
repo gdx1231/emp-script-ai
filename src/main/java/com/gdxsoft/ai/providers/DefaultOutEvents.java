@@ -4,7 +4,11 @@ import java.io.PrintWriter;
 
 import org.json.JSONObject;
 
+/**
+ * 默认的输出SSE（Server-Sent Events）处理类
+ */
 public class DefaultOutEvents implements IOutEvents {
+	private String lang = "zhcn"; // 默认语言为中文
 	private String name;
 	
 	private int messageCount = 0;
@@ -63,6 +67,18 @@ public class DefaultOutEvents implements IOutEvents {
 	 */
 	public void setName(String name) {
 		this.name = name;
+	}
+	/**
+	 * @return the lang
+	 */
+	public String getLang() {
+		return lang;
+	}
+	/**
+	 * @param lang the lang to set
+	 */
+	public void setLang(String lang) {
+		this.lang = lang;
 	}
 
 }

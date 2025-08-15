@@ -1,19 +1,8 @@
 package com.gdxsoft.ai.providers.gemini;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
-import java.io.PrintWriter;
-import java.net.HttpURLConnection;
-import java.net.URI;
-import java.net.URISyntaxException;
-
-import org.apache.commons.lang3.StringUtils;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import com.gdxsoft.ai.providers.IRequestData;
 import com.gdxsoft.ai.providers.ProviderType;
 import com.gdxsoft.ai.providers.RequestAIBase;
 import com.gdxsoft.easyweb.utils.UJSon;
@@ -24,50 +13,6 @@ public class RequestAI extends RequestAIBase {
 
 	public RequestAI() {
 		this.providerType = ProviderType.GEMINI;
-	}
-
-	/**
-	 * 调用Gemini的流式API
-	 * 
-	 * @param reqData 用户输入的提示词
-	 * @param writer  输出流
-	 * @return 完整的响应文本
-	 * @throws IOException        IO异常
-	 * @throws URISyntaxException
-	 */
-	@Override
-	public String doStream(IRequestData reqData, PrintWriter writer) throws IOException, URISyntaxException {
-		String u = super.getApiUrl();
-		if (StringUtils.isBlank(u)) {
-			u = DEFAULT_URL;
-		}
-		// Gemini API 使用查询参数传递 API Key
-		if (super.getApiKey() != null && !super.getApiKey().isEmpty()) {
-			u += "?key=" + super.getApiKey();
-		}
-
-		URI url = new URI(u);
-		HttpURLConnection conn = (HttpURLConnection) url.toURL().openConnection();
-		conn.setRequestMethod("POST");
-		conn.setRequestProperty("Content-Type", "application/json");
-		conn.setRequestProperty("Accept", "text/event-stream");
-		conn.setDoOutput(true);
-
-		String jsonInput = reqData.buildJson();
-		// System.out.println(jsonInput);
-
-		try (OutputStream os = conn.getOutputStream()) {
-			byte[] input = jsonInput.getBytes("utf-8");
-			os.write(input, 0, input.length);
-		}
-
-		try (BufferedReader br = new BufferedReader(new InputStreamReader(conn.getInputStream(), "utf-8"))) {
-			String line;
-			while ((line = br.readLine()) != null) {
-				this.handleLine(line, writer);
-			}
-		}
-		return super.getFullText().toString();
 	}
 
 	/**

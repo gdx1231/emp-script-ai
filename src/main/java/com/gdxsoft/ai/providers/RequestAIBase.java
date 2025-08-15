@@ -1,97 +1,155 @@
 package com.gdxsoft.ai.providers;
 
-import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
 import java.io.PrintWriter;
-import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.security.cert.X509Certificate;
+import java.time.Duration;
+import java.util.stream.Stream;
+import java.util.zip.GZIPOutputStream;
+
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
 
 import org.json.JSONObject;
 
-public abstract class RequestAIBase implements IRequestAI {
 
+/**
+ * AI 请求基类，提供通用的 HTTP 请求处理和流式响应处理
+ */
+public abstract class RequestAIBase implements IRequestAI {
+	private boolean useGzip = false; // control GZIP compression
 	private IOutEvents outEvents;
-	
+
 	public IOutEvents getOutEvents() {
 		if (outEvents == null) {
 			outEvents = new DefaultOutEvents();
 		}
 		return outEvents;
 	}
-	
+
 	public void setOutEvents(IOutEvents outEvents) {
 		this.outEvents = outEvents;
 	}
-	
+
 	/**
-	 * 使用 GZIP 压缩数据
+	 * 调用非流式API
 	 * 
-	 * @param postData
-	 * @return
-	 * @throws IOException
+	 * @param reqData 用户输入的提示词
 	 */
-	// public static byte[] compressPostData (String postData) throws IOException {
-	// // 使用 GZIP 压缩数据
-	// ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
-	// try (GZIPOutputStream gzipOutputStream = new
-	// GZIPOutputStream(byteArrayOutputStream)) {
-	// gzipOutputStream.write(postData.getBytes("UTF-8"));
-	// }
-	// // 获取压缩后的字节数组
-	// byte[] compressedData = byteArrayOutputStream.toByteArray();
-	//
-	// return compressedData;
-	// }
-	public String doStream(IRequestData reqData, PrintWriter writer) throws IOException, URISyntaxException {
-		HttpURLConnection conn = this.createApiConn(apiUrl, reqData);
-		try (BufferedReader br = new BufferedReader(new InputStreamReader(conn.getInputStream(), "utf-8"))) {
-			String line;
-			while ((line = br.readLine()) != null) {
-				this.handleLine(line, writer);
-			}
+	public String doPost(IRequestData reqData) throws IOException, URISyntaxException, InterruptedException {
+		HttpClient client = createHttpClient();
+		HttpRequest request = createHttpRequest(apiUrl, reqData);
+
+		// Send request and handle response as a String
+		HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+		int statusCode = response.statusCode();
+		if (statusCode == 200) {
+			return response.body();
+		} else {
+			throw new IOException("HTTP error code: " + statusCode + ", Response: " + response.body());
 		}
-		return getFullText().toString();
 	}
 
-	public HttpURLConnection createApiConn(String u, IRequestData reqData) throws IOException, URISyntaxException {
+	/**
+	 * 调用流式API
+	 * 
+	 * @param reqData 用户输入的提示词
+	 * @param writer  输出流
+	 * @return 完整的响应文本
+	 */
+	public String doStream(IRequestData reqData, PrintWriter writer)
+			throws IOException, URISyntaxException, InterruptedException {
+		HttpClient client = createHttpClient();
+		HttpRequest request = createHttpRequest(apiUrl, reqData);
+
+		// Send request and handle response as a stream
+		HttpResponse<Stream<String>> response = client.send(request, HttpResponse.BodyHandlers.ofLines());
+
+		int statusCode = response.statusCode();
+		if (200 == statusCode) {
+			try (Stream<String> lines = response.body()) {
+				// 处理每一行的响应数据
+				lines.forEach(line -> this.handleLine(line, writer));
+				return getFullText().toString();
+			}
+		} else {
+			// Handle non-200 response
+			StringBuilder errorResponse = new StringBuilder();
+			try (Stream<String> lines = response.body()) {
+				lines.forEach(line -> errorResponse.append(line).append("\n"));
+			}
+			throw new IOException("HTTP error code: " + statusCode + ", Response: " + errorResponse.toString());
+		}
+	}
+
+	private HttpClient createHttpClient() throws IOException {
+		try {
+			// Create a trust manager that trusts all certificates
+			TrustManager[] trustAllCerts = new TrustManager[] { new X509TrustManager() {
+				public X509Certificate[] getAcceptedIssuers() {
+					return null;
+				}
+
+				public void checkClientTrusted(X509Certificate[] certs, String authType) {
+				}
+
+				public void checkServerTrusted(X509Certificate[] certs, String authType) {
+				}
+			} };
+
+			// Initialize SSL context with the trust manager
+			SSLContext sc = SSLContext.getInstance("TLS");
+			sc.init(null, trustAllCerts, new java.security.SecureRandom());
+
+			// Build HttpClient with HTTP/2 support and custom SSL context
+			return HttpClient.newBuilder().version(HttpClient.Version.HTTP_2) // Explicitly prefer HTTP/2
+					.sslContext(sc) // Bypass SSL verification
+					.connectTimeout(Duration.ofSeconds(20)).build();
+		} catch (Exception e) {
+			throw new IOException("Failed to configure HttpClient: " + e.getMessage(), e);
+		}
+	}
+
+	private HttpRequest createHttpRequest(String u, IRequestData reqData) throws URISyntaxException, IOException {
 		String jsonInput = reqData.buildJson();
-		// byte[] gzipData = null;
-		// try {
-		// // 使用 GZIP 压缩数据
-		// gzipData = RequestAIBase.compressPostData(jsonInput);
-		// } catch (Exception e) {
-		//
-		// }
-
-		URI url = new URI(u);
-		HttpURLConnection conn = (HttpURLConnection) url.toURL().openConnection();
-		conn.setRequestMethod("POST");
+		HttpRequest.Builder builder = HttpRequest.newBuilder().uri(new URI(u)) //
+				.header("Content-Type", "application/json");
+		// Set Accept header for doStream to text/event-stream
+		if (Thread.currentThread().getStackTrace()[2].getMethodName().equals("doStream")) {
+			builder.header("Accept", "text/event-stream");
+		}
+		if (useGzip) {
+			byte[] gzipData = compressPostData(jsonInput);
+			builder.header("Content-Encoding", "gzip").POST(HttpRequest.BodyPublishers.ofByteArray(gzipData));
+		} else {
+			builder.POST(HttpRequest.BodyPublishers.ofString(jsonInput));
+		}
+		// Add Authorization header if API key is present
 		if (this.getApiKey() != null && !this.getApiKey().isEmpty()) {
-			conn.setRequestProperty("Authorization", "Bearer " + this.getApiKey());
+			if (ProviderType.GEMINI == this.getProviderType()) {
+				builder.header("x-goog-api-key", this.getApiKey());
+			} else {
+				builder.header("Authorization", "Bearer " + this.getApiKey());
+			}
 		}
-		conn.setRequestProperty("Content-Type", "application/json");
-		// if (gzipData != null) {
-		// // 声明使用 GZIP 压缩
-		// conn.setRequestProperty("Content-Encoding", "gzip");
-		// }
-		conn.setRequestProperty("Accept", "text/event-stream");
-		conn.setDoOutput(true);
+		return builder.build();
+	}
 
-		// if (gzipData != null) {
-		// // 使用 GZIP
-		// try (OutputStream os = conn.getOutputStream()) {
-		// os.write(gzipData, 0, gzipData.length);
-		// }
-		// } else {
-		byte[] input = jsonInput.getBytes("utf-8");
-		try (OutputStream os = conn.getOutputStream()) {
-			os.write(input, 0, input.length);
+	private byte[] compressPostData(String data) throws IOException {
+		try (ByteArrayOutputStream baos = new ByteArrayOutputStream();
+				GZIPOutputStream gzipOut = new GZIPOutputStream(baos)) {
+			gzipOut.write(data.getBytes("utf-8"));
+			gzipOut.finish(); // Ensure all data is flushed
+			return baos.toByteArray();
 		}
-		// }
-		return conn;
 	}
 
 	private int messageCount = -1;
@@ -171,19 +229,16 @@ public abstract class RequestAIBase implements IRequestAI {
 		if (json.has("content")) {
 			this.getFullText().append(json.optString("content"));
 		}
-		
+
 		IOutEvents oe = this.getOutEvents();
 		oe.setLine(line);
 		oe.setContenJson(json);
 		oe.setMessageCount(messageCount);
-		
-		this.getOutEvents().outEvent(json.toString(), writer);
-		//outEvent(json.toString(), writer);
-		
-		
-	}
 
-	 
+		this.getOutEvents().outEvent(json.toString(), writer);
+		// outEvent(json.toString(), writer);
+
+	}
 
 	public String getApiUrl() {
 		return apiUrl;
@@ -199,6 +254,38 @@ public abstract class RequestAIBase implements IRequestAI {
 
 	public void setApiKey(String apiKey) {
 		this.apiKey = apiKey;
+	}
+
+	/**
+	 * @return the useGzip
+	 */
+	public boolean isUseGzip() {
+		return this.useGzip;
+	}
+
+	public void setUseGzip(boolean isUseGzip) {
+		this.useGzip = isUseGzip;
+	}
+
+	/**
+	 * @param messageCount the messageCount to set
+	 */
+	public void setMessageCount(int messageCount) {
+		this.messageCount = messageCount;
+	}
+
+	/**
+	 * @param fullText the fullText to set
+	 */
+	public void setFullText(StringBuilder fullText) {
+		this.fullText = fullText;
+	}
+
+	/**
+	 * @param providerType the providerType to set
+	 */
+	public void setProviderType(ProviderType providerType) {
+		this.providerType = providerType;
 	}
 
 }

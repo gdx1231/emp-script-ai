@@ -21,7 +21,16 @@ public interface IRequestAI {
 	void initUrlAndKey(String apiUrl, String apiKey);
 
 	/**
-	 * 调用通义千问的流式API
+	 * 调用非流式API
+	 * @param reqData
+	 * @return
+	 * @throws IOException
+	 * @throws URISyntaxException
+	 * @throws InterruptedException
+	 */
+	String doPost(IRequestData reqData) throws IOException, URISyntaxException, InterruptedException;
+	/**
+	 * 调用流式API
 	 * 
 	 * @param reqData 用户输入的提示词
 	 * @param writer  输出流
@@ -29,7 +38,7 @@ public interface IRequestAI {
 	 * @throws IOException        IO异常
 	 * @throws URISyntaxException
 	 */
-	String doStream(IRequestData reqData, PrintWriter writer) throws IOException, URISyntaxException;
+	String doStream(IRequestData reqData, PrintWriter writer) throws IOException, URISyntaxException, InterruptedException;
 
 	IOutEvents getOutEvents();
 

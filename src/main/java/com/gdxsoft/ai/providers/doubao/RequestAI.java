@@ -1,19 +1,8 @@
 package com.gdxsoft.ai.providers.doubao;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
-import java.io.PrintWriter;
-import java.net.HttpURLConnection;
-import java.net.URI;
-import java.net.URISyntaxException;
-
-import org.apache.commons.lang3.StringUtils;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import com.gdxsoft.ai.providers.IRequestData;
 import com.gdxsoft.ai.providers.ProviderType;
 import com.gdxsoft.ai.providers.RequestAIBase;
 import com.gdxsoft.easyweb.utils.UJSon;
@@ -31,36 +20,6 @@ public class RequestAI extends RequestAIBase {
         this.providerType = ProviderType.DOUBAO;
     }
 
-    @Override
-    public String doStream(IRequestData reqData, PrintWriter writer) throws IOException, URISyntaxException {
-        String u = super.getApiUrl();
-        if (StringUtils.isBlank(u)) {
-            u = DEFAULT_URL;
-        }
-        URI url = new URI(u);
-        HttpURLConnection conn = (HttpURLConnection) url.toURL().openConnection();
-        conn.setRequestMethod("POST");
-        if (super.getApiKey() != null && !super.getApiKey().isEmpty()) {
-            conn.setRequestProperty("Authorization", "Bearer " + super.getApiKey());
-        }
-        conn.setRequestProperty("Content-Type", "application/json");
-        conn.setRequestProperty("Accept", "text/event-stream");
-        conn.setDoOutput(true);
-
-        String jsonInput = reqData.buildJson();
-        try (OutputStream os = conn.getOutputStream()) {
-            byte[] input = jsonInput.getBytes("utf-8");
-            os.write(input, 0, input.length);
-        }
-
-        try (BufferedReader br = new BufferedReader(new InputStreamReader(conn.getInputStream(), "utf-8"))) {
-            String line;
-            while ((line = br.readLine()) != null) {
-                this.handleLine(line, writer);
-            }
-        }
-        return super.getFullText().toString();
-    }
 
     /**
      * 解析豆包（OpenAI 兼容）SSE 数据行
