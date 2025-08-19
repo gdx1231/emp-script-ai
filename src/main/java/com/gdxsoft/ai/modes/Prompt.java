@@ -1,6 +1,10 @@
 package com.gdxsoft.ai.modes;
 
-// Class to represent a Prompt
+/**
+ * 表示一个提示（<prompt>），包含角色、描述、数据来源、内容等。
+ * <p>
+ * Represents a prompt (<prompt>), including role, description, data source and content.
+ */
 public class Prompt {
     private String name;
     private String role;

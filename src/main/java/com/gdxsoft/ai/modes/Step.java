@@ -2,6 +2,12 @@ package com.gdxsoft.ai.modes;
 
 import java.util.List;
 
+/**
+ * 流程中的一步（<step>）。包含描述、prompts、可选 action、以及是否流式。
+ * <p>
+ * A step in the flow (<step>), including description, prompts, optional action,
+ * and whether to use streaming.
+ */
 public class Step {
     private String name;
     private String description;
@@ -13,12 +19,14 @@ public class Step {
     // optional SQL reference name for action
     private String actionSqlRef;
 
+    /** Create a step without action. */
     public Step(String name, String description, List<Prompt> prompts) {
         this.name = name;
         this.description = description;
         this.prompts = prompts;
     }
 
+    /** Create a step with action. */
     public Step(String name, String description, List<Prompt> prompts, String action) {
         this.name = name;
         this.description = description;

@@ -1,6 +1,10 @@
 package com.gdxsoft.ai.modes;
 
-// Class to represent an SQL query
+/**
+ * 表示一个 SQL 查询（<sql>）。
+ * <p>
+ * Represents an SQL query (<sql>).
+ */
 public class SqlQuery {
     private String name;
     private String description;

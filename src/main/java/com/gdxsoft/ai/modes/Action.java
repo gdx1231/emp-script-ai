@@ -1,6 +1,10 @@
 package com.gdxsoft.ai.modes;
 
-// Represents an <action> element under <actions>
+/**
+ * <action> 元素的数据模型，来自 XML <actions> 下的子项。
+ * <p>
+ * Data model for <action> element under XML <actions> node.
+ */
 public class Action {
     private String name;
     private String description;

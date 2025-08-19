@@ -13,7 +13,11 @@ import com.gdxsoft.easyweb.data.DTTable;
 import com.gdxsoft.easyweb.script.RequestValue;
 import com.gdxsoft.easyweb.utils.UObjectValue;
 
-// Class to represent a Mode
+/**
+ * 表示一个模式（<mode>），包含步骤、SQL 片段、动作与采样参数。
+ * <p>
+ * Represents a mode (<mode>), containing steps, SQL snippets, actions and sampling params.
+ */
 public class Mode {
 	private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger(Mode.class);
 	private String name;

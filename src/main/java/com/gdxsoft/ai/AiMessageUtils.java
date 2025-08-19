@@ -4,11 +4,23 @@ import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+/**
+ * AI 文本处理工具类。
+ * <p>
+ * Utilities for processing AI-generated text.
+ */
 public class AiMessageUtils {
 	/**
-	 * 提取MD的代码内容
-	 * @param markdown
-	 * @return
+	 * 从 Markdown 文本中提取代码块（以 ``` 开始/结束）。
+	 * <p>
+	 * Extract code blocks from a Markdown string (fenced by ```).
+	 *
+	 * 返回的每个 Map 包含：
+	 * - language: 语言（可能为空字符串）| code language (may be empty)
+	 * - code: 代码内容 | code text
+	 *
+	 * @param markdown Markdown 文本 | markdown content
+	 * @return 代码块列表 | list of code block maps
 	 */
 	public static List<Map<String, String>> extractCodeBlocks(String markdown) {
 		List<Map<String, String>> codeBlocks = new ArrayList<>();
