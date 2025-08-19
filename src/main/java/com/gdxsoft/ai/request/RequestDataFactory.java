@@ -1,4 +1,4 @@
-package com.gdxsoft.ai.providers;
+package com.gdxsoft.ai.request;
 
 /**
  * RequestData 工厂类

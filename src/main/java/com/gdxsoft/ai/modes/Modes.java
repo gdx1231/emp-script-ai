@@ -18,7 +18,8 @@ public class Modes {
     private static volatile Map<String, List<Mode>> XML_MD5 = new ConcurrentHashMap<>();
 
     public static Mode getMode(String name) {
-        return MODES.get(name);
+        Mode m = MODES.get(name);
+        return m == null ? null : m.cloneMode();
     }
 
     private String xmlMd5;

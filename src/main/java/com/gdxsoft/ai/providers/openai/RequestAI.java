@@ -13,9 +13,9 @@ import org.apache.commons.lang3.StringUtils;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import com.gdxsoft.ai.providers.IRequestData;
-import com.gdxsoft.ai.providers.ProviderType;
-import com.gdxsoft.ai.providers.RequestAIBase;
+import com.gdxsoft.ai.request.RequestAIBase;
+import com.gdxsoft.ai.request.IRequestData;
+import com.gdxsoft.ai.request.ProviderType;
 import com.gdxsoft.easyweb.utils.UJSon;
 
 public class RequestAI extends RequestAIBase {

@@ -1,4 +1,4 @@
-package com.gdxsoft.ai.providers;
+package com.gdxsoft.ai.request;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -18,12 +18,15 @@ import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 
 import org.json.JSONObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
  * AI 请求基类，提供通用的 HTTP 请求处理和流式响应处理
  */
 public abstract class RequestAIBase implements IRequestAI {
+	private static Logger LOGGER = LoggerFactory.getLogger(RequestAIBase.class.getName());
 	private boolean useGzip = false; // control GZIP compression
 	private IOutEvents outEvents;
 
@@ -37,7 +40,8 @@ public abstract class RequestAIBase implements IRequestAI {
 	public void setOutEvents(IOutEvents outEvents) {
 		this.outEvents = outEvents;
 	}
-
+	 
+	
 	/**
 	 * 调用非流式API
 	 * 
@@ -54,6 +58,7 @@ public abstract class RequestAIBase implements IRequestAI {
 		if (statusCode == 200) {
 			return response.body();
 		} else {
+			LOGGER.error("HTTP error code: {}, Response: {}", statusCode, response.body());
 			throw new IOException("HTTP error code: " + statusCode + ", Response: " + response.body());
 		}
 	}
@@ -86,10 +91,13 @@ public abstract class RequestAIBase implements IRequestAI {
 			try (Stream<String> lines = response.body()) {
 				lines.forEach(line -> errorResponse.append(line).append("\n"));
 			}
+			LOGGER.error("HTTP error code: {}, Response: {}", statusCode, errorResponse.toString());
 			throw new IOException("HTTP error code: " + statusCode + ", Response: " + errorResponse.toString());
 		}
 	}
 
+	 
+	
 	private HttpClient createHttpClient() throws IOException {
 		try {
 			// Create a trust manager that trusts all certificates
@@ -114,6 +122,7 @@ public abstract class RequestAIBase implements IRequestAI {
 					.sslContext(sc) // Bypass SSL verification
 					.connectTimeout(Duration.ofSeconds(20)).build();
 		} catch (Exception e) {
+			LOGGER.error("Failed to configure HttpClient: " + e.getMessage(), e);
 			throw new IOException("Failed to configure HttpClient: " + e.getMessage(), e);
 		}
 	}
@@ -140,6 +149,7 @@ public abstract class RequestAIBase implements IRequestAI {
 				builder.header("Authorization", "Bearer " + this.getApiKey());
 			}
 		}
+		LOGGER.info("RequestAI URL: {}", u);
 		return builder.build();
 	}
 

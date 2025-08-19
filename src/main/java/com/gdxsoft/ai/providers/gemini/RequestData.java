@@ -3,9 +3,9 @@ package com.gdxsoft.ai.providers.gemini;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import com.gdxsoft.ai.providers.IRequestData;
-import com.gdxsoft.ai.providers.ProviderType;
-import com.gdxsoft.ai.providers.RequestDataBase;
+import com.gdxsoft.ai.request.IRequestData;
+import com.gdxsoft.ai.request.ProviderType;
+import com.gdxsoft.ai.request.RequestDataBase;
 
 /**
  * 用于构建发送到 Google Gemini API 的请求体

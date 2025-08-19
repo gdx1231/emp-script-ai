@@ -2,8 +2,8 @@ package com.gdxsoft.ai.providers.qwen;
 
 import org.json.JSONObject;
 
-import com.gdxsoft.ai.providers.ProviderType;
-import com.gdxsoft.ai.providers.RequestDataBase;
+import com.gdxsoft.ai.request.ProviderType;
+import com.gdxsoft.ai.request.RequestDataBase;
 
 /**
  * 用于构建发送到 Qwen（通义千问）API 的请求体

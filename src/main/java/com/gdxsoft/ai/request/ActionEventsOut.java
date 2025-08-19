@@ -1,4 +1,4 @@
-package com.gdxsoft.ai.providers;
+package com.gdxsoft.ai.request;
 
 import java.io.PrintWriter;
 

@@ -9,8 +9,12 @@ public class Prompt {
     private String dataType;
     private String prefix;
     private String content;
+    // Whether this prompt should be shown in chat messages
+    private boolean showInChat = true; // default true for backward compatibility
     // Optional: when dataType is 'json', group result by this field
     private String dataGroupField;
+    // Action to be performed with this prompt
+    private String action;
 
     public Prompt(String name, String role, String description, String sqlRef, String dataType, String prefix,
             String content) {
@@ -21,6 +25,19 @@ public class Prompt {
         this.dataType = dataType;
         this.prefix = prefix;
         this.content = content;
+        this.action = null; // Default to null
+    }
+
+    public Prompt(String name, String role, String description, String sqlRef, String dataType, String prefix,
+            String content, String action) {
+        this.name = name;
+        this.role = role;
+        this.description = description;
+        this.sqlRef = sqlRef;
+        this.dataType = dataType;
+        this.prefix = prefix;
+        this.content = content;
+        this.action = action;
     }
 
     // Getters
@@ -52,8 +69,16 @@ public class Prompt {
         return content;
     }
 
+    public boolean isShowInChat() {
+        return showInChat;
+    }
+
     public String getDataGroupField() {
         return dataGroupField;
+    }
+
+    public String getAction() {
+        return action;
     }
 
     // Setters
@@ -85,7 +110,15 @@ public class Prompt {
         this.content = content;
     }
 
+    public void setShowInChat(boolean showInChat) {
+        this.showInChat = showInChat;
+    }
+
     public void setDataGroupField(String dataGroupField) {
         this.dataGroupField = dataGroupField;
+    }
+
+    public void setAction(String action) {
+        this.action = action;
     }
 }

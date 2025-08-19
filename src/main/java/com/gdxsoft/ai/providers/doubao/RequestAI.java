@@ -3,8 +3,8 @@ package com.gdxsoft.ai.providers.doubao;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import com.gdxsoft.ai.providers.ProviderType;
-import com.gdxsoft.ai.providers.RequestAIBase;
+import com.gdxsoft.ai.request.RequestAIBase;
+import com.gdxsoft.ai.request.ProviderType;
 import com.gdxsoft.easyweb.utils.UJSon;
 
 /**

@@ -8,13 +8,21 @@ import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
+import com.gdxsoft.ai.export.IAction;
 import com.gdxsoft.easyweb.data.DTTable;
 import com.gdxsoft.easyweb.script.RequestValue;
+import com.gdxsoft.easyweb.utils.UObjectValue;
 
 // Class to represent a Mode
 public class Mode {
+	private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger(Mode.class);
 	private String name;
 	private String description;
+	// Sampling parameters for AI generation
+	private double temperature = 1.0; // default
+	private double topP = 1.0; // default
+	// Whether to enable provider-specific "thinking" capability if supported
+	private boolean thinking = false; // default false
 	private List<Step> steps;
 	private List<SqlQuery> sqlQueries;
 	private List<Action> actions;
@@ -102,8 +110,7 @@ public class Mode {
 			this.createStepPrompt(prompt, dbConfigName, rv);
 		}
 	}
-
-	/**
+/**
 	 * 创建步骤的单个Prompt提示内容
 	 * @param dbConfigName
 	 * @param rv
@@ -111,9 +118,25 @@ public class Mode {
 	 * @throws Exception
 	 */
 	public void createStepPrompt(Prompt prompt, String dbConfigName, RequestValue rv) throws Exception {
+		 boolean isSqlPrompt = this.createStepPromptBySql(prompt, dbConfigName, rv);
+		 if(isSqlPrompt){
+			return;
+		 }
+		 boolean isActionPrompt = this.createStepPromptByAction(prompt, dbConfigName, rv);
+		 LOGGER.info("isActionPrompt: " + isActionPrompt);
+	}
+	/**
+	 * 创建步骤的单个Prompt提示内容（通过Prompt.sqlRef）
+	 * @param prompt
+	 * @param dbConfigName
+	 * @param rv
+	 * @return
+	 * @throws Exception
+	 */
+	private boolean createStepPromptBySql(Prompt prompt, String dbConfigName, RequestValue rv) throws Exception{
 		String sqlRef = prompt.getSqlRef();
 		if (StringUtils.isBlank(sqlRef)) {
-			return;
+			return false;
 		}
 
 		SqlQuery sqlQuery = findSqlQueryByRef(sqlRef);
@@ -140,7 +163,36 @@ public class Mode {
 		} else if ("xml".equalsIgnoreCase(prompt.getDataType())) {
 			prompt.setContent(tb.toXml(rv));
 		}
+
+		return true;
 	}
+
+	/**
+	 * 创建步骤的单个Prompt提示内容（通过Prompt.action）
+	 * @param prompt
+	 * @param dbConfigName
+	 * @param rv
+	 * @return
+	 * @throws Exception
+	 */
+	private boolean createStepPromptByAction(Prompt prompt, String dbConfigName, RequestValue rv) throws Exception{
+		String actionName = prompt.getAction();
+		if (StringUtils.isBlank(actionName)) {
+			return false;
+		}
+		 Action action = this.getAction(actionName);
+		String actionClassName = action.getClassName();
+		System.out.println("加载 actionName=" + actionName + ", 类名：" + actionClassName);
+
+		UObjectValue uv = new UObjectValue();
+		// IExport exporter = new pf2023.AiModeEnqJny();
+		IAction promptAction = (IAction) uv.loadClass(actionClassName, null);
+		String result = promptAction.createPrompt(rv, dbConfigName);
+		prompt.setContent(result );
+		return true;
+	}
+
+	
 
 	private SqlQuery findSqlQueryByRef(String sqlRef) {
 		for (SqlQuery query : sqlQueries) {
@@ -180,6 +232,18 @@ public class Mode {
 		return actions;
 	}
 
+	public double getTemperature() {
+		return temperature;
+	}
+
+	public double getTopP() {
+		return topP;
+	}
+
+	public boolean isThinking() {
+		return thinking;
+	}
+
 	// Setters
 	public void setName(String name) {
 		this.name = name;
@@ -201,6 +265,18 @@ public class Mode {
 		this.actions = actions;
 	}
 
+	public void setTemperature(double temperature) {
+		this.temperature = temperature;
+	}
+
+	public void setTopP(double topP) {
+		this.topP = topP;
+	}
+
+	public void setThinking(boolean thinking) {
+		this.thinking = thinking;
+	}
+
 	public Action getAction(String actionName) {
 		if (actions == null)
 			return null;
@@ -212,10 +288,65 @@ public class Mode {
 		return null;
 	}
 
+	/**
+	 * Create a deep copy of current Mode, including steps/prompts/sqlQueries/actions
+	 */
+	public Mode cloneMode() {
+		List<Step> stepsCopy = new ArrayList<>();
+		if (this.steps != null) {
+			for (Step s : this.steps) {
+				List<Prompt> promptsCopy = new ArrayList<>();
+				if (s.getPrompts() != null) {
+					for (Prompt p : s.getPrompts()) {
+						Prompt np = new Prompt(p.getName(), p.getRole(), p.getDescription(), p.getSqlRef(),
+								p.getDataType(), p.getPrefix(), p.getContent(), p.getAction());
+						if (p.getDataGroupField() != null) {
+							np.setDataGroupField(p.getDataGroupField());
+						}
+						np.setShowInChat(p.isShowInChat());
+						promptsCopy.add(np);
+					}
+				}
+				Step ns;
+				if (s.getAction() != null && s.getAction().length() > 0) {
+					ns = new Step(s.getName(), s.getDescription(), promptsCopy, s.getAction());
+				} else {
+					ns = new Step(s.getName(), s.getDescription(), promptsCopy);
+				}
+				ns.setStream(s.isStream());
+				ns.setActionSqlRef(s.getActionSqlRef());
+				stepsCopy.add(ns);
+			}
+		}
+
+		List<SqlQuery> sqlsCopy = new ArrayList<>();
+		if (this.sqlQueries != null) {
+			for (SqlQuery q : this.sqlQueries) {
+				sqlsCopy.add(new SqlQuery(q.getName(), q.getDescription(), q.getContent()));
+			}
+		}
+
+		List<Action> actionsCopy = new ArrayList<>();
+		if (this.actions != null) {
+			for (Action a : this.actions) {
+				actionsCopy.add(new Action(a.getName(), a.getDescription(), a.getClassName()));
+			}
+		}
+
+		Mode copy = new Mode(this.name, this.description, stepsCopy, sqlsCopy, actionsCopy);
+		copy.setTemperature(this.temperature);
+		copy.setTopP(this.topP);
+		copy.setThinking(this.thinking);
+		return copy;
+	}
+
 	// Parse an XML <mode> element to a Mode instance
 	public static Mode parseMode(Element root) {
 		String modeName = root.getAttribute("name");
 		String modeDescription = root.getAttribute("description");
+		String temperatureAttr = root.getAttribute("temperature");
+		String topPAttr = root.getAttribute("topP");
+		String thinkingAttr = root.getAttribute("thinking");
 
 		// Parse steps
 		List<Step> steps = new ArrayList<>();
@@ -273,7 +404,25 @@ public class Mode {
 			}
 		}
 
-		return new Mode(modeName, modeDescription, steps, sqlQueries, actions);
+		Mode mode = new Mode(modeName, modeDescription, steps, sqlQueries, actions);
+		if (temperatureAttr != null && temperatureAttr.trim().length() > 0) {
+			try {
+				mode.setTemperature(Double.parseDouble(temperatureAttr.trim()));
+			} catch (NumberFormatException ex) {
+				LOGGER.warn("Invalid temperature attribute: {}", temperatureAttr);
+			}
+		}
+		if (topPAttr != null && topPAttr.trim().length() > 0) {
+			try {
+				mode.setTopP(Double.parseDouble(topPAttr.trim()));
+			} catch (NumberFormatException ex) {
+				LOGGER.warn("Invalid topP attribute: {}", topPAttr);
+			}
+		}
+		if (thinkingAttr != null && thinkingAttr.trim().length() > 0) {
+			mode.setThinking(Boolean.parseBoolean(thinkingAttr.trim()));
+		}
+		return mode;
 	}
 
 	// Helper methods for parsing XML content
@@ -298,9 +447,14 @@ public class Mode {
 		String content = getElementContent(promptElement);
 
 		String dataGroupField = promptElement.getAttribute("dataGroupField");
-		Prompt p = new Prompt(promptName, role, description, sqlRef, dataType, prefix, content);
+		String action = promptElement.getAttribute("action");
+		String showInChatAttr = promptElement.getAttribute("showInChat");
+		Prompt p = new Prompt(promptName, role, description, sqlRef, dataType, prefix, content, action);
 		if (dataGroupField != null && dataGroupField.length() > 0) {
 			p.setDataGroupField(dataGroupField);
+		}
+		if (showInChatAttr != null && showInChatAttr.trim().length() > 0) {
+			p.setShowInChat(Boolean.parseBoolean(showInChatAttr.trim()));
 		}
 		return p;
 	}

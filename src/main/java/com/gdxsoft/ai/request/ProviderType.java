@@ -1,4 +1,4 @@
-package com.gdxsoft.ai.providers;
+package com.gdxsoft.ai.request;
 
 /**
  * 支持的AI提供商类型

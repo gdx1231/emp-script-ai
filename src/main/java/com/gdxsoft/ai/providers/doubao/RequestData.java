@@ -2,8 +2,8 @@ package com.gdxsoft.ai.providers.doubao;
 
 import org.json.JSONObject;
 
-import com.gdxsoft.ai.providers.ProviderType;
-import com.gdxsoft.ai.providers.RequestDataBase;
+import com.gdxsoft.ai.request.ProviderType;
+import com.gdxsoft.ai.request.RequestDataBase;
 
 /**
  * 豆包（Doubao/火山引擎）OpenAI 兼容聊天补全请求体

@@ -1,4 +1,4 @@
-package com.gdxsoft.ai.providers;
+package com.gdxsoft.ai.request;
 
 /**
  * RequestData 工厂类 根据提供商名称创建相应的 RequestData 实例
@@ -7,7 +7,7 @@ public class RequestAIFactory {
 	/**
 	 * 根据提供商名称创建RequestData实例
 	 * 
-	 * @param providerName 提供商名称 (gemini, grok, openai, qwen)
+	 * @param providerName 提供商名称 (gemini, grok, openai, qwen, doubao)
 	 * @return RequestData实例
 	 * @throws IllegalArgumentException 如果提供商名称不被支持
 	 */
@@ -30,18 +30,18 @@ public class RequestAIFactory {
 	 */
 	public static IRequestAI createRequestAI(ProviderType type) {
 		switch (type) {
-			case GEMINI:
-				return new com.gdxsoft.ai.providers.gemini.RequestAI();
-			case GROK:
-				return new com.gdxsoft.ai.providers.grok.RequestAI();
-			case OPENAI:
-				return new com.gdxsoft.ai.providers.openai.RequestAI();
-			case QWEN:
-				return new com.gdxsoft.ai.providers.qwen.RequestAI();
-			case DOUBAO:
-				return new com.gdxsoft.ai.providers.doubao.RequestAI();
-			default:
-				throw new IllegalArgumentException("不支持的AI提供商类型: " + type);
+		case GEMINI:
+			return new com.gdxsoft.ai.providers.gemini.RequestAI();
+		case GROK:
+			return new com.gdxsoft.ai.providers.grok.RequestAI();
+		case OPENAI:
+			return new com.gdxsoft.ai.providers.openai.RequestAI();
+		case QWEN:
+			return new com.gdxsoft.ai.providers.qwen.RequestAI();
+		case DOUBAO:
+			return new com.gdxsoft.ai.providers.doubao.RequestAI();
+		default:
+			throw new IllegalArgumentException("不支持的AI提供商类型: " + type);
 		}
 	}
 
