@@ -14,7 +14,7 @@ public class Prompt {
     private String prefix;
     private String content;
     // Whether this prompt should be shown in chat messages
-    private boolean showInChat = true; // default true for backward compatibility
+    private boolean showInChat = false; // default true for backward compatibility
     // Optional: when dataType is 'json', group result by this field
     private String dataGroupField;
     // Action to be performed with this prompt

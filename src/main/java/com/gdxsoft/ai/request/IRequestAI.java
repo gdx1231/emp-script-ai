@@ -5,6 +5,16 @@ import java.io.PrintWriter;
 import java.net.URISyntaxException;
 
 public interface IRequestAI {
+	/**
+	 * 取消正在执行的请求。
+	 * <p>
+	 * Cancel the ongoing request if any.
+	 */
+	void cancelRequest();
+
+	/**
+	 * 获取 AI 提供商类型
+	 */
 	ProviderType getProviderType();
 
 	/**

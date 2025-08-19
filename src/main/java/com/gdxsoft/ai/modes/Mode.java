@@ -16,7 +16,8 @@ import com.gdxsoft.easyweb.utils.UObjectValue;
 /**
  * 表示一个模式（<mode>），包含步骤、SQL 片段、动作与采样参数。
  * <p>
- * Represents a mode (<mode>), containing steps, SQL snippets, actions and sampling params.
+ * Represents a mode (<mode>), containing steps, SQL snippets, actions and
+ * sampling params.
  */
 public class Mode {
 	private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger(Mode.class);
@@ -114,30 +115,34 @@ public class Mode {
 			this.createStepPrompt(prompt, dbConfigName, rv);
 		}
 	}
-/**
+
+	/**
 	 * 创建步骤的单个Prompt提示内容
+	 * 
 	 * @param dbConfigName
 	 * @param rv
 	 * @param prompt
 	 * @throws Exception
 	 */
 	public void createStepPrompt(Prompt prompt, String dbConfigName, RequestValue rv) throws Exception {
-		 boolean isSqlPrompt = this.createStepPromptBySql(prompt, dbConfigName, rv);
-		 if(isSqlPrompt){
+		boolean isSqlPrompt = this.createStepPromptBySql(prompt, dbConfigName, rv);
+		if (isSqlPrompt) {
 			return;
-		 }
-		 boolean isActionPrompt = this.createStepPromptByAction(prompt, dbConfigName, rv);
-		 LOGGER.info("isActionPrompt: " + isActionPrompt);
+		}
+		boolean isActionPrompt = this.createStepPromptByAction(prompt, dbConfigName, rv);
+		LOGGER.info("isActionPrompt: " + isActionPrompt);
 	}
+
 	/**
 	 * 创建步骤的单个Prompt提示内容（通过Prompt.sqlRef）
+	 * 
 	 * @param prompt
 	 * @param dbConfigName
 	 * @param rv
 	 * @return
 	 * @throws Exception
 	 */
-	private boolean createStepPromptBySql(Prompt prompt, String dbConfigName, RequestValue rv) throws Exception{
+	private boolean createStepPromptBySql(Prompt prompt, String dbConfigName, RequestValue rv) throws Exception {
 		String sqlRef = prompt.getSqlRef();
 		if (StringUtils.isBlank(sqlRef)) {
 			return false;
@@ -173,18 +178,22 @@ public class Mode {
 
 	/**
 	 * 创建步骤的单个Prompt提示内容（通过Prompt.action）
+	 * 
 	 * @param prompt
 	 * @param dbConfigName
 	 * @param rv
 	 * @return
 	 * @throws Exception
 	 */
-	private boolean createStepPromptByAction(Prompt prompt, String dbConfigName, RequestValue rv) throws Exception{
+	private boolean createStepPromptByAction(Prompt prompt, String dbConfigName, RequestValue rv) throws Exception {
 		String actionName = prompt.getAction();
 		if (StringUtils.isBlank(actionName)) {
 			return false;
 		}
-		 Action action = this.getAction(actionName);
+		Action action = this.getAction(actionName);
+		if (action == null) {
+			throw new Exception("Action not found for name: " + actionName);
+		}
 		String actionClassName = action.getClassName();
 		System.out.println("加载 actionName=" + actionName + ", 类名：" + actionClassName);
 
@@ -192,11 +201,9 @@ public class Mode {
 		// IExport exporter = new pf2023.AiModeEnqJny();
 		IAction promptAction = (IAction) uv.loadClass(actionClassName, null);
 		String result = promptAction.createPrompt(rv, dbConfigName);
-		prompt.setContent(result );
+		prompt.setContent(result);
 		return true;
 	}
-
-	
 
 	private SqlQuery findSqlQueryByRef(String sqlRef) {
 		for (SqlQuery query : sqlQueries) {
@@ -293,7 +300,8 @@ public class Mode {
 	}
 
 	/**
-	 * Create a deep copy of current Mode, including steps/prompts/sqlQueries/actions
+	 * Create a deep copy of current Mode, including
+	 * steps/prompts/sqlQueries/actions
 	 */
 	public Mode cloneMode() {
 		List<Step> stepsCopy = new ArrayList<>();

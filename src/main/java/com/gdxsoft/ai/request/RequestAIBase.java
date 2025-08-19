@@ -104,6 +104,8 @@ public abstract class RequestAIBase implements IRequestAI {
 	 */
 	public String doStream(IRequestData reqData, PrintWriter writer)
 			throws IOException, URISyntaxException, InterruptedException {
+		// reset cancel flag at the beginning of a new stream
+		this.cancelRequested = false;
 		HttpClient client = createHttpClient();
 		HttpRequest request = createHttpRequest(apiUrl, reqData);
 
@@ -112,10 +114,22 @@ public abstract class RequestAIBase implements IRequestAI {
 
 		int statusCode = response.statusCode();
 		if (200 == statusCode) {
-			try (Stream<String> lines = response.body()) {
-				// 处理每一行的响应数据
-				lines.forEach(line -> this.handleLine(line, writer));
+			Stream<String> lines = response.body();
+			// keep a reference for external cancellation
+			this.currentResponseStream = lines;
+			try (Stream<String> autoClose = lines) {
+				// 显式使用迭代器以便在取消时中断
+				for (java.util.Iterator<String> it = autoClose.iterator(); !cancelRequested && it.hasNext();) {
+					String line = it.next();
+					this.handleLine(line, writer);
+				}
+				if (cancelRequested) {
+					LOGGER.info("Streaming request canceled by user.");
+				}
 				return getFullText().toString();
+			} finally {
+				// clear reference and reset flag for next call
+				this.currentResponseStream = null;
 			}
 		} else {
 			// Handle non-200 response
@@ -228,6 +242,10 @@ public abstract class RequestAIBase implements IRequestAI {
 	private String apiKey;
 
 	private StringBuilder fullText = new StringBuilder();
+
+	// --- Cancellation support for streaming ---
+	private volatile boolean cancelRequested = false;
+	private volatile Stream<String> currentResponseStream;
 
 	/**
 	 * 获取累计的完整响应文本缓冲区。
@@ -430,6 +448,24 @@ public abstract class RequestAIBase implements IRequestAI {
 	 */
 	public void setProviderType(ProviderType providerType) {
 		this.providerType = providerType;
+	}
+
+	/**
+	 * 取消正在执行的流式请求。
+	 * <p>
+	 * Cancel the ongoing doStream call if any. This closes the underlying
+	 * response stream so that iteration stops promptly.
+	 */
+	public void cancelRequest() {
+		this.cancelRequested = true;
+		Stream<String> s = this.currentResponseStream;
+		if (s != null) {
+			try {
+				s.close(); // Closing the stream cancels the subscription
+			} catch (Exception e) {
+				LOGGER.warn("Error while closing stream during cancel: {}", e.toString());
+			}
+		}
 	}
 
 }
