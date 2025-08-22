@@ -74,7 +74,7 @@ public class RequestAI extends RequestAIBase {
 	 * @param line 原始数据行
 	 * @return 解析后的JSON对象
 	 */
-	public JSONObject extraceJson(String line) {
+	public JSONObject extraceJson(String line, boolean skipDataPrefix) {
 		/*
 		 * data:
 		 * {"id":"chatcmpl-123","object":"chat.completion.chunk","created":1694268190,
@@ -83,12 +83,16 @@ public class RequestAI extends RequestAIBase {
 		 * "delta":{"content":"Hello"},"logprobs":null,"finish_reason":null}]}
 		 */
 		// 提取 data: 后面的 JSON
+		String jsonData = null;
+		if (!skipDataPrefix) {
+			if (!line.startsWith("data:")) {
+				return UJSon.rstFalse("没有data:的数据行，" + line);
+			}
 
-		if (!line.startsWith("data:")) {
-			return UJSon.rstFalse("没有data:的数据行，" + line);
+			jsonData = line.substring(5).trim();
+		} else {
+			jsonData = line.trim();
 		}
-
-		String jsonData = line.substring(5).trim();
 		if (jsonData.isEmpty()) {
 			return UJSon.rstFalse("data:无数据，" + line);
 		}

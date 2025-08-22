@@ -37,22 +37,7 @@ public class RequestData extends RequestDataBase {
 		return this;
 	}
 
-	/**
-	 * 设置 thinking - 默认实现，子类可以重写
-	 */
-	@Override
-	public IRequestData thinking(boolean thinking) {
-		return this;
-	}
-
-	/**
-	 * 是否启用流式输出 - 默认实现，子类可以重写
-	 */
-	@Override
-	public IRequestData stream(boolean stream) {
-		return this;
-	}
-
+	 
 	/**
 	 * 构建最终的请求 JSON 对象
 	 * 
@@ -96,7 +81,14 @@ public class RequestData extends RequestDataBase {
 		// "stopSequences": []
 		// },
 		if (this.parameters.length() > 0) {
-			requestData.put("generationConfig", this.parameters);
+			JSONObject clone = new JSONObject(this.parameters.toString());
+			if(clone.has("stream")) {
+				clone.remove("stream");
+			}
+			if(clone.has("thinking")) {
+				clone.remove("thinking");
+			}
+			requestData.put("generationConfig", clone);
 		}
 
 		return requestData;

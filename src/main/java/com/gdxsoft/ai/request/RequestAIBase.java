@@ -17,10 +17,13 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 
+import org.apache.commons.lang3.StringUtils;
+import org.json.JSONArray;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.gdxsoft.easyweb.utils.UJSon;
 
 /**
  * AI 请求基类，提供通用的 HTTP 请求处理和流式响应处理。
@@ -33,33 +36,46 @@ public abstract class RequestAIBase implements IRequestAI {
 	private boolean useGzip = false; // control GZIP compression
 	private IOutEvents outEvents;
 
+
 	/**
-	 * 获取输出事件回调实例，如未设置则返回默认实现。
+	 * 取消正在执行的流式请求。
 	 * <p>
-	 * Get the output events callback instance; returns the default implementation
-	 * if not set.
-	 *
-	 * @return IOutEvents 实例 | the IOutEvents instance
+	 * Cancel the ongoing doStream call if any. This closes the underlying response
+	 * stream so that iteration stops promptly.
 	 */
-	public IOutEvents getOutEvents() {
-		if (outEvents == null) {
-			outEvents = new DefaultOutEvents();
+	public void cancelRequest() {
+		this.cancelRequested = true;
+		Stream<String> s = this.currentResponseStream;
+		if (s != null) {
+			try {
+				s.close(); // Closing the stream cancels the subscription
+			} catch (Exception e) {
+				LOGGER.warn("Error while closing stream during cancel: {}", e.toString());
+			}
 		}
-		return outEvents;
 	}
 
 	/**
-	 * 设置输出事件回调实现。
-	 * <p>
-	 * Set the output events callback implementation.
-	 *
-	 * @param outEvents 回调实现 | the callback implementation
+	 * 转成Curl 命令行格式。| Convert to Curl command line format.
+	 * @return Curl 命令行字符串 | the Curl command line string
 	 */
-	public void setOutEvents(IOutEvents outEvents) {
-		this.outEvents = outEvents;
+	public String curl(IRequestData reqData) {
+		StringBuilder sb = new StringBuilder();
+		sb.append("curl -X POST '").append(this.createUrl(reqData)).append("' \\\n");
+		sb.append(" -H 'Content-Type: application/json' \\\n");
+		if (!StringUtils.isBlank(this.getApiKey())) {
+			if (ProviderType.GEMINI == this.getProviderType()) {
+				sb.append(" -H 'x-goog-api-key: ").append(this.getApiKey()).append("' \\\n");
+			} else {
+				sb.append(" -H 'Authorization: Bearer ").append(this.getApiKey()).append("' \\\n");
+			}
+		}
+		sb.append(" -d '").append(reqData.build().toString(2)).append("'");
+
+		return sb.toString();
+
 	}
-	 
-	
+
 	/**
 	 * 调用非流式 API。
 	 * <p>
@@ -73,7 +89,7 @@ public abstract class RequestAIBase implements IRequestAI {
 	 */
 	public String doPost(IRequestData reqData) throws IOException, URISyntaxException, InterruptedException {
 		HttpClient client = createHttpClient();
-		HttpRequest request = createHttpRequest(apiUrl, reqData);
+		HttpRequest request = createHttpRequest(createUrl(reqData), reqData);
 
 		// Send request and handle response as a String
 		HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
@@ -87,13 +103,17 @@ public abstract class RequestAIBase implements IRequestAI {
 		}
 	}
 
+	public String createUrl(IRequestData reqData) {
+		return this.apiUrl;
+	}
+
 	/**
 	 * 调用流式 API。
 	 * <p>
 	 * Call the streaming API.
 	 *
-	 * 套接字以 Server-Sent Events 的形式逐行返回数据。
-	 * The server responds with Server-Sent Events (SSE) lines.
+	 * 套接字以 Server-Sent Events 的形式逐行返回数据。 The server responds with Server-Sent
+	 * Events (SSE) lines.
 	 *
 	 * @param reqData 用户输入的提示词 | the request data payload
 	 * @param writer  输出流（用于边接收边输出）| writer for incremental output
@@ -107,7 +127,7 @@ public abstract class RequestAIBase implements IRequestAI {
 		// reset cancel flag at the beginning of a new stream
 		this.cancelRequested = false;
 		HttpClient client = createHttpClient();
-		HttpRequest request = createHttpRequest(apiUrl, reqData);
+		HttpRequest request = createHttpRequest(createUrl(reqData), reqData);
 
 		// Send request and handle response as a stream
 		HttpResponse<Stream<String>> response = client.send(request, HttpResponse.BodyHandlers.ofLines());
@@ -142,8 +162,6 @@ public abstract class RequestAIBase implements IRequestAI {
 		}
 	}
 
-	 
-	
 	/**
 	 * 创建带有信任所有证书的 HttpClient（开发/内网环境下方便联调）。
 	 * <p>
@@ -277,28 +295,75 @@ public abstract class RequestAIBase implements IRequestAI {
 	}
 
 	/**
-	 * 获取 AI 提供商名称。
-	 * <p>
-	 * Get AI provider name.
-	 *
-	 * @return 提供商名称，未设置返回 "unknown" | provider name or "unknown"
-	 */
-	public String getProviderName() {
-		if (providerType == null) {
-			return "unknown";
-		}
-		return providerType.toString();
-	}
-
-	/**
 	 * 提取行文本中的 JSON 对象（不同厂商格式不同，由子类实现）。
 	 * <p>
-	 * Extract the JSON object from a text line (provider-specific; implemented by subclasses).
+	 * Extract the JSON object from a text line (provider-specific; implemented by
+	 * subclasses).
 	 *
 	 * @param line 一行文本（SSE 或普通响应）| a single response line (SSE or plain)
 	 * @return 标准化的 JSON 对象 | normalized JSON object
 	 */
-	abstract public JSONObject extraceJson(String line);
+	public JSONObject extraceJson(String line) {
+		return extraceJson(line, false);
+	}
+
+	/**
+	 * 提取OPENAI返回的JSON数据| Extract the JSON data returned by OPENAI.
+	 * 
+	 * @param jsonText       原始数据| Original data
+	 * @param skipDataPrefix 是否跳过以 "data:" 开头的前缀| If true, skip the "data:" prefix
+	 * @return 解析后的JSON对象| Parsed JSON object
+	 */
+	public JSONObject extraceJson(String jsonText, boolean skipDataPrefix) {
+		/*
+		 * data: {"choices":[{"delta":{"content":"旨在为用户提供全面"}
+		 * ,"finish_reason":null,"index":0,"logprobs":null}]
+		 * ,"object":"chat.completion.chunk","usage":null,"created":1754902913
+		 * ,"system_fingerprint":null,"model":"qwen-turbo"
+		 * ,"id":"chatcmpl-500b1fb4-2b18-9cc7-82d5-c9d0e9fd38a9"}
+		 */
+		String jsonData = null;
+		// 提取 data: 后面的 JSON
+		if (!skipDataPrefix) {
+			if (!jsonText.startsWith("data:")) {
+				return UJSon.rstFalse("没有data:的数据行，" + jsonText);
+			}
+
+			jsonData = jsonText.substring(5).trim();
+			if (jsonData.isEmpty()) {
+				return UJSon.rstFalse("data:无数据，" + jsonText);
+			}
+		} else {
+			jsonData = jsonText;
+		}
+
+		try {
+			JSONObject json = new JSONObject(jsonData);
+			JSONArray choices = json.getJSONArray("choices");
+			if (choices.length() > 0) {
+				JSONObject choice = choices.getJSONObject(0);
+				if (choice.has("delta")) {
+					JSONObject delta = choice.getJSONObject("delta");
+
+					// 如果没有 content 字段，返回整个 delta 对象
+					UJSon.rstSetTrue(delta, null);
+					return delta;
+
+				} else if (choice.has("message")) {
+					// 如果有 message 字段，返回 message.delta
+					JSONObject message = choice.getJSONObject("message");
+					UJSon.rstSetTrue(message, null);
+					return message;
+				} else {
+					// 如果没有 delta 和 message 字段，返回整个 choice 对象
+					return UJSon.rstFalse("无效数据，choice 中没有 delta 或 message 字段，" + jsonText);
+				}
+			}
+			return UJSon.rstFalse("无效数据，choices.length() = 0" + jsonText);
+		} catch (Exception e) {
+			return UJSon.rstFalse("无效 JSON，" + jsonText + ", 错误：" + e.getMessage());
+		}
+	}
 
 	/**
 	 * 初始化 API URL 和 API Key。
@@ -451,21 +516,42 @@ public abstract class RequestAIBase implements IRequestAI {
 	}
 
 	/**
-	 * 取消正在执行的流式请求。
+	 * 获取 AI 提供商名称。
 	 * <p>
-	 * Cancel the ongoing doStream call if any. This closes the underlying
-	 * response stream so that iteration stops promptly.
+	 * Get AI provider name.
+	 *
+	 * @return 提供商名称，未设置返回 "unknown" | provider name or "unknown"
 	 */
-	public void cancelRequest() {
-		this.cancelRequested = true;
-		Stream<String> s = this.currentResponseStream;
-		if (s != null) {
-			try {
-				s.close(); // Closing the stream cancels the subscription
-			} catch (Exception e) {
-				LOGGER.warn("Error while closing stream during cancel: {}", e.toString());
-			}
+	public String getProviderName() {
+		if (providerType == null) {
+			return "unknown";
 		}
+		return providerType.toString();
 	}
 
+	/**
+	 * 获取输出事件回调实例，如未设置则返回默认实现。
+	 * <p>
+	 * Get the output events callback instance; returns the default implementation
+	 * if not set.
+	 *
+	 * @return IOutEvents 实例 | the IOutEvents instance
+	 */
+	public IOutEvents getOutEvents() {
+		if (outEvents == null) {
+			outEvents = new DefaultOutEvents();
+		}
+		return outEvents;
+	}
+
+	/**
+	 * 设置输出事件回调实现。
+	 * <p>
+	 * Set the output events callback implementation.
+	 *
+	 * @param outEvents 回调实现 | the callback implementation
+	 */
+	public void setOutEvents(IOutEvents outEvents) {
+		this.outEvents = outEvents;
+	}
 }

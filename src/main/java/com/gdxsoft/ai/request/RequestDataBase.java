@@ -25,6 +25,22 @@ public abstract class RequestDataBase implements IRequestData {
         return providerType;
     }
 
+	public JSONObject getParameters() {
+		return parameters;
+	}
+	
+	public boolean isStream() {
+		return this.parameters.optBoolean("stream");
+	}
+	
+	public String getModel() {
+		return this. model;
+	}
+	
+	public JSONArray getMessages() {
+		return messages;
+	}
+    
     /**
      * 获取 AI 提供商类型
      */
