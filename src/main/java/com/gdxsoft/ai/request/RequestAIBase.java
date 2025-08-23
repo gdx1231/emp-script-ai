@@ -1,6 +1,5 @@
 package com.gdxsoft.ai.request;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.net.URI;
@@ -8,21 +7,14 @@ import java.net.URISyntaxException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.security.cert.X509Certificate;
-import java.time.Duration;
 import java.util.stream.Stream;
-import java.util.zip.GZIPOutputStream;
-
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.TrustManager;
-import javax.net.ssl.X509TrustManager;
-
 import org.apache.commons.lang3.StringUtils;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.gdxsoft.ai.HttpUtils;
 import com.gdxsoft.easyweb.utils.UJSon;
 
 /**
@@ -35,7 +27,6 @@ public abstract class RequestAIBase implements IRequestAI {
 	private static Logger LOGGER = LoggerFactory.getLogger(RequestAIBase.class.getName());
 	private boolean useGzip = false; // control GZIP compression
 	private IOutEvents outEvents;
-
 
 	/**
 	 * 取消正在执行的流式请求。
@@ -57,6 +48,7 @@ public abstract class RequestAIBase implements IRequestAI {
 
 	/**
 	 * 转成Curl 命令行格式。| Convert to Curl command line format.
+	 * 
 	 * @return Curl 命令行字符串 | the Curl command line string
 	 */
 	public String curl(IRequestData reqData) {
@@ -88,7 +80,7 @@ public abstract class RequestAIBase implements IRequestAI {
 	 * @throws InterruptedException 线程中断 | if the operation is interrupted
 	 */
 	public String doPost(IRequestData reqData) throws IOException, URISyntaxException, InterruptedException {
-		HttpClient client = createHttpClient();
+		HttpClient client = HttpUtils.createHttpClient();
 		HttpRequest request = createHttpRequest(createUrl(reqData), reqData);
 
 		// Send request and handle response as a String
@@ -126,7 +118,7 @@ public abstract class RequestAIBase implements IRequestAI {
 			throws IOException, URISyntaxException, InterruptedException {
 		// reset cancel flag at the beginning of a new stream
 		this.cancelRequested = false;
-		HttpClient client = createHttpClient();
+		HttpClient client = HttpUtils.createHttpClient();
 		HttpRequest request = createHttpRequest(createUrl(reqData), reqData);
 
 		// Send request and handle response as a stream
@@ -163,43 +155,6 @@ public abstract class RequestAIBase implements IRequestAI {
 	}
 
 	/**
-	 * 创建带有信任所有证书的 HttpClient（开发/内网环境下方便联调）。
-	 * <p>
-	 * Create an HttpClient that trusts all certificates (useful for dev/intranet).
-	 *
-	 * @return 配置完成的 HttpClient | configured HttpClient instance
-	 * @throws IOException 初始化失败 | if initialization fails
-	 */
-	private HttpClient createHttpClient() throws IOException {
-		try {
-			// Create a trust manager that trusts all certificates
-			TrustManager[] trustAllCerts = new TrustManager[] { new X509TrustManager() {
-				public X509Certificate[] getAcceptedIssuers() {
-					return null;
-				}
-
-				public void checkClientTrusted(X509Certificate[] certs, String authType) {
-				}
-
-				public void checkServerTrusted(X509Certificate[] certs, String authType) {
-				}
-			} };
-
-			// Initialize SSL context with the trust manager
-			SSLContext sc = SSLContext.getInstance("TLS");
-			sc.init(null, trustAllCerts, new java.security.SecureRandom());
-
-			// Build HttpClient with HTTP/2 support and custom SSL context
-			return HttpClient.newBuilder().version(HttpClient.Version.HTTP_2) // Explicitly prefer HTTP/2
-					.sslContext(sc) // Bypass SSL verification
-					.connectTimeout(Duration.ofSeconds(20)).build();
-		} catch (Exception e) {
-			LOGGER.error("Failed to configure HttpClient: " + e.getMessage(), e);
-			throw new IOException("Failed to configure HttpClient: " + e.getMessage(), e);
-		}
-	}
-
-	/**
 	 * 创建 HTTP 请求（根据是否流式设置 Accept 头；根据 useGzip 选择压缩）。
 	 * <p>
 	 * Build the HTTP request (sets Accept for streaming; compresses when useGzip).
@@ -219,7 +174,7 @@ public abstract class RequestAIBase implements IRequestAI {
 			builder.header("Accept", "text/event-stream");
 		}
 		if (useGzip) {
-			byte[] gzipData = compressPostData(jsonInput);
+			byte[] gzipData = HttpUtils.compressPostData(jsonInput);
 			builder.header("Content-Encoding", "gzip").POST(HttpRequest.BodyPublishers.ofByteArray(gzipData));
 		} else {
 			builder.POST(HttpRequest.BodyPublishers.ofString(jsonInput));
@@ -234,24 +189,6 @@ public abstract class RequestAIBase implements IRequestAI {
 		}
 		LOGGER.info("RequestAI URL: {}", u);
 		return builder.build();
-	}
-
-	/**
-	 * 使用 GZIP 压缩请求体字符串。
-	 * <p>
-	 * Compress the request body using GZIP.
-	 *
-	 * @param data 原始文本 | raw text data
-	 * @return 压缩后的字节数组 | compressed bytes
-	 * @throws IOException 压缩异常 | on compression errors
-	 */
-	private byte[] compressPostData(String data) throws IOException {
-		try (ByteArrayOutputStream baos = new ByteArrayOutputStream();
-				GZIPOutputStream gzipOut = new GZIPOutputStream(baos)) {
-			gzipOut.write(data.getBytes("utf-8"));
-			gzipOut.finish(); // Ensure all data is flushed
-			return baos.toByteArray();
-		}
 	}
 
 	private int messageCount = -1;

@@ -1,16 +1,18 @@
 package com.gdxsoft.ai.modes;
 
 import java.util.List;
+import java.util.Map;
 import java.util.ArrayList;
+import java.util.HashMap;
 
 import org.apache.commons.lang3.StringUtils;
 import org.w3c.dom.Element;
-import org.w3c.dom.Node;
-import org.w3c.dom.NodeList;
 
 import com.gdxsoft.ai.export.IAction;
 import com.gdxsoft.easyweb.data.DTTable;
 import com.gdxsoft.easyweb.script.RequestValue;
+import com.gdxsoft.easyweb.utils.UJSon;
+import com.gdxsoft.easyweb.utils.UNet;
 import com.gdxsoft.easyweb.utils.UObjectValue;
 
 /**
@@ -31,6 +33,7 @@ public class Mode {
 	private List<Step> steps;
 	private List<SqlQuery> sqlQueries;
 	private List<Action> actions;
+	private List<Api> apis;
 
 	/**
 	 * 获取模式中的步骤
@@ -109,10 +112,11 @@ public class Mode {
 	 * @param rv
 	 * @throws Exception
 	 */
-	public void createStepPrompts(Step step, String dbConfigName, RequestValue rv) throws Exception {
+	public void createStepPrompts(Step step, String dbConfigName, RequestValue rv, Map<String, String> refHeaders)
+			throws Exception {
 		for (int i = 0; i < step.getPrompts().size(); i++) {
 			Prompt prompt = step.getPrompts().get(i);
-			this.createStepPrompt(prompt, dbConfigName, rv);
+			this.createStepPrompt(prompt, dbConfigName, rv, refHeaders);
 		}
 	}
 
@@ -124,13 +128,18 @@ public class Mode {
 	 * @param prompt
 	 * @throws Exception
 	 */
-	public void createStepPrompt(Prompt prompt, String dbConfigName, RequestValue rv) throws Exception {
+	public void createStepPrompt(Prompt prompt, String dbConfigName, RequestValue rv, Map<String, String> refHeaders)
+			throws Exception {
 		boolean isSqlPrompt = this.createStepPromptBySql(prompt, dbConfigName, rv);
 		if (isSqlPrompt) {
 			return;
 		}
 		boolean isActionPrompt = this.createStepPromptByAction(prompt, dbConfigName, rv);
-		LOGGER.info("isActionPrompt: " + isActionPrompt);
+		if (isActionPrompt) {
+			return;
+		}
+		boolean isApiPrompt = this.createStepPromptByApi(prompt, rv, refHeaders);
+		LOGGER.info("isApiPrompt: " + isApiPrompt);
 	}
 
 	/**
@@ -195,13 +204,108 @@ public class Mode {
 			throw new Exception("Action not found for name: " + actionName);
 		}
 		String actionClassName = action.getClassName();
-		System.out.println("加载 actionName=" + actionName + ", 类名：" + actionClassName);
+		LOGGER.info("加载 actionName=" + actionName + ", 类名：" + actionClassName);
 
 		UObjectValue uv = new UObjectValue();
 		// IExport exporter = new pf2023.AiModeEnqJny();
 		IAction promptAction = (IAction) uv.loadClass(actionClassName, null);
 		String result = promptAction.createPrompt(rv, dbConfigName);
 		prompt.setContent(result);
+		return true;
+	}
+
+	/**
+	 * 根据API创建步骤提示
+	 * 
+	 * @param prompt     提示对象
+	 * @param rv         请求参数容器
+	 * @param refHeaders 引用的Http headers
+	 * @return 创建成功返回true，否则返回false
+	 */
+	private boolean createStepPromptByApi(Prompt prompt, RequestValue rv, Map<String, String> refHeaders)
+			throws Exception {
+		String apiName = prompt.getApi();
+		if (StringUtils.isBlank(apiName)) {
+			return false;
+		}
+		Api api = this.getApi(apiName);
+		if (api == null) {
+			throw new Exception("API not found for name: " + apiName);
+		}
+
+		String url = rv.replaceParameters(api.getUrl());
+		if (api.getParameters() != null && api.getParameters().trim().length() > 0) {
+			String paras = rv.replaceParameters(api.getParameters().trim());
+			url = url + (url.indexOf("?") > 0 ? "&" : "?") + paras;
+		}
+		LOGGER.info("调用 API: " + apiName + ", URL: " + url);
+		
+		UNet net = new UNet();
+		if (api.getTimeout() > 0) {
+			net.setTimeout(api.getTimeout());
+		}
+		if (api.isRefRequest() && refHeaders != null) {
+			for (String key : refHeaders.keySet()) {
+				if ("content-length".equalsIgnoreCase(key)) {
+					continue; // content-length由UNet自动处理
+				}
+				if ("origin".equalsIgnoreCase(key) || "host".equalsIgnoreCase(key)
+						|| "connection".equalsIgnoreCase(key)) {
+					continue; // origin, host, connection等头部通常不需要在API请求中设置
+				}
+				net.addHeader(key, refHeaders.get(key));
+			}
+		}
+
+		for (int i = 0; i < api.getHeaders().size(); i++) {
+			ApiHeader field = api.getHeaders().get(i);
+			net.addHeader(field.getName(), rv.replaceParameters(field.getValue()));
+		}
+
+		Map<String, String> vals = new HashMap<String, String>();
+		for (int i = 0; i < api.getForm().size(); i++) {
+			ApiField field = api.getForm().get(i);
+			vals.put(field.getName(), rv.replaceParameters(field.getValue()));
+		}
+		String body = api.getBody();
+		boolean hasbody = api.getBody() != null && api.getBody().trim().length() > 0;
+		String result;
+
+		//net.setIsShowLog(true);
+		if (api.getMethod().equalsIgnoreCase("POST")) {
+			if (hasbody) {
+				result = net.doPost(url, body);
+			} else {
+				result = net.doPost(url, vals);
+			}
+		} else if (api.getMethod().equalsIgnoreCase("PUT")) {
+			if (hasbody) {
+				result = net.doPut(url, body);
+			} else {
+				result = net.doPut(url, vals);
+			}
+		} else if (api.getMethod().equalsIgnoreCase("DELETE")) {
+			if (hasbody) {
+				result = net.doDelete(url, body);
+			} else {
+				result = net.doDelete(url, vals);
+			}
+		} else if (api.getMethod().equalsIgnoreCase("PATCH")) {
+			if (hasbody) {
+				result = net.doPatch(url, body);
+			} else {
+				result = net.doPatch(url, vals);
+			}
+		} else {
+			result = net.doGet(url);
+		}
+		if (net.getLastStatusCode() != 200) {
+			result = UJSon.rstFalse(net.getLastErr()).put("HTTP_CODE", net.getLastStatusCode()).toString();
+		}
+
+		// 暂时返回一个占位符内容
+		prompt.setContent(result);
+
 		return true;
 	}
 
@@ -220,6 +324,17 @@ public class Mode {
 		this.steps = steps;
 		this.sqlQueries = sqlQueries;
 		this.actions = actions;
+		this.apis = new ArrayList<>();
+	}
+
+	public Mode(String name, String description, List<Step> steps, List<SqlQuery> sqlQueries, List<Action> actions,
+			List<Api> apis) {
+		this.name = name;
+		this.description = description;
+		this.steps = steps;
+		this.sqlQueries = sqlQueries;
+		this.actions = actions;
+		this.apis = apis != null ? apis : new ArrayList<>();
 	}
 
 	// Getters
@@ -241,6 +356,10 @@ public class Mode {
 
 	public List<Action> getActions() {
 		return actions;
+	}
+
+	public List<Api> getApis() {
+		return apis;
 	}
 
 	public double getTemperature() {
@@ -276,6 +395,10 @@ public class Mode {
 		this.actions = actions;
 	}
 
+	public void setApis(List<Api> apis) {
+		this.apis = apis != null ? apis : new ArrayList<>();
+	}
+
 	public void setTemperature(double temperature) {
 		this.temperature = temperature;
 	}
@@ -300,6 +423,23 @@ public class Mode {
 	}
 
 	/**
+	 * 根据名称获取API配置
+	 * 
+	 * @param apiName API名称
+	 * @return API配置对象，如果找不到则返回null
+	 */
+	public Api getApi(String apiName) {
+		if (apis == null)
+			return null;
+		for (Api api : apis) {
+			if (api.getName() != null && api.getName().equalsIgnoreCase(apiName)) {
+				return api;
+			}
+		}
+		return null;
+	}
+
+	/**
 	 * Create a deep copy of current Mode, including
 	 * steps/prompts/sqlQueries/actions
 	 */
@@ -316,6 +456,9 @@ public class Mode {
 							np.setDataGroupField(p.getDataGroupField());
 						}
 						np.setShowInChat(p.isShowInChat());
+						if (p.getApi() != null) {
+							np.setApi(p.getApi());
+						}
 						promptsCopy.add(np);
 					}
 				}
@@ -327,6 +470,9 @@ public class Mode {
 				}
 				ns.setStream(s.isStream());
 				ns.setActionSqlRef(s.getActionSqlRef());
+				if (s.getApi() != null) {
+					ns.setApi(s.getApi());
+				}
 				stepsCopy.add(ns);
 			}
 		}
@@ -345,160 +491,52 @@ public class Mode {
 			}
 		}
 
-		Mode copy = new Mode(this.name, this.description, stepsCopy, sqlsCopy, actionsCopy);
+		List<Api> apisCopy = new ArrayList<>();
+		if (this.apis != null) {
+			for (Api api : this.apis) {
+				Api newApi = new Api(api.getName(), api.getDescription(), api.getUrl());
+				newApi.setMethod(api.getMethod());
+				newApi.setTimeout(api.getTimeout());
+				newApi.setRefRequest(api.isRefRequest());
+				newApi.setParameters(api.getParameters());
+				newApi.setKey(api.getKey());
+				newApi.setBody(api.getBody());
+				// 复制请求头
+				if (api.getHeaders() != null) {
+					List<ApiHeader> headersCopy = new ArrayList<>();
+					for (ApiHeader header : api.getHeaders()) {
+						headersCopy.add(new ApiHeader(header.getName(), header.getValue()));
+					}
+					newApi.setHeaders(headersCopy);
+				}
+				// 复制表单字段
+				if (api.getForm() != null) {
+					List<ApiField> formCopy = new ArrayList<>();
+					for (ApiField field : api.getForm()) {
+						formCopy.add(new ApiField(field.getName(), field.getValue()));
+					}
+					newApi.setForm(formCopy);
+				}
+				apisCopy.add(newApi);
+			}
+		}
+
+		Mode copy = new Mode(this.name, this.description, stepsCopy, sqlsCopy, actionsCopy, apisCopy);
 		copy.setTemperature(this.temperature);
 		copy.setTopP(this.topP);
 		copy.setThinking(this.thinking);
 		return copy;
 	}
 
-	// Parse an XML <mode> element to a Mode instance
+	/**
+	 * 解析XML <mode> 元素为Mode实例
+	 * 该方法委托给ModeParser处理
+	 * 
+	 * @param root mode元素
+	 * @return Mode对象
+	 */
 	public static Mode parseMode(Element root) {
-		String modeName = root.getAttribute("name");
-		String modeDescription = root.getAttribute("description");
-		String temperatureAttr = root.getAttribute("temperature");
-		String topPAttr = root.getAttribute("topP");
-		String thinkingAttr = root.getAttribute("thinking");
-
-		// Parse steps
-		List<Step> steps = new ArrayList<>();
-		NodeList stepNodes = root.getElementsByTagName("step");
-		for (int i = 0; i < stepNodes.getLength(); i++) {
-			Element stepElement = (Element) stepNodes.item(i);
-			String stepName = stepElement.getAttribute("name");
-			String stepDescription = stepElement.getAttribute("description");
-			String stepAction = stepElement.getAttribute("action");
-			String actionSqlRef = stepElement.getAttribute("actionSqlRef");
-			String stepStreamAttr = stepElement.getAttribute("stream");
-			boolean stepStream = true; // default true
-			if (stepStreamAttr != null && stepStreamAttr.trim().length() > 0) {
-				stepStream = Boolean.parseBoolean(stepStreamAttr.trim());
-			}
-
-			// Parse prompts within step
-			List<Prompt> prompts = new ArrayList<>();
-			NodeList promptsNode = stepElement.getElementsByTagName("prompts");
-			if (promptsNode.getLength() > 0) {
-				prompts = parsePrompts((Element) promptsNode.item(0));
-			}
-			Step step;
-			if (stepAction != null && stepAction.length() > 0) {
-				step = new Step(stepName, stepDescription, prompts, stepAction);
-			} else {
-				step = new Step(stepName, stepDescription, prompts);
-			}
-			step.setStream(stepStream);
-			if (actionSqlRef != null && actionSqlRef.trim().length() > 0) {
-				step.setActionSqlRef(actionSqlRef.trim());
-			}
-			steps.add(step);
-		}
-
-		// Parse SQL queries
-		List<SqlQuery> sqlQueries = new ArrayList<>();
-		NodeList sqlsNode = root.getElementsByTagName("sqls");
-		if (sqlsNode.getLength() > 0) {
-			sqlQueries = parseSqlQueries((Element) sqlsNode.item(0));
-		}
-
-		// Parse actions
-		List<Action> actions = new ArrayList<>();
-		NodeList actionsNodes = root.getElementsByTagName("actions");
-		if (actionsNodes.getLength() > 0) {
-			Element actionsElement = (Element) actionsNodes.item(0);
-			NodeList actionNodes = actionsElement.getElementsByTagName("action");
-			for (int i = 0; i < actionNodes.getLength(); i++) {
-				Element actionElement = (Element) actionNodes.item(i);
-				String actionName = actionElement.getAttribute("name");
-				String actionDescription = actionElement.getAttribute("description");
-				String className = actionElement.getAttribute("class");
-				actions.add(new Action(actionName, actionDescription, className));
-			}
-		}
-
-		Mode mode = new Mode(modeName, modeDescription, steps, sqlQueries, actions);
-		if (temperatureAttr != null && temperatureAttr.trim().length() > 0) {
-			try {
-				mode.setTemperature(Double.parseDouble(temperatureAttr.trim()));
-			} catch (NumberFormatException ex) {
-				LOGGER.warn("Invalid temperature attribute: {}", temperatureAttr);
-			}
-		}
-		if (topPAttr != null && topPAttr.trim().length() > 0) {
-			try {
-				mode.setTopP(Double.parseDouble(topPAttr.trim()));
-			} catch (NumberFormatException ex) {
-				LOGGER.warn("Invalid topP attribute: {}", topPAttr);
-			}
-		}
-		if (thinkingAttr != null && thinkingAttr.trim().length() > 0) {
-			mode.setThinking(Boolean.parseBoolean(thinkingAttr.trim()));
-		}
-		return mode;
+		return ModeParser.parseMode(root);
 	}
 
-	// Helper methods for parsing XML content
-	private static List<Prompt> parsePrompts(Element promptsElement) {
-		List<Prompt> prompts = new ArrayList<>();
-		NodeList promptNodes = promptsElement.getElementsByTagName("prompt");
-		for (int i = 0; i < promptNodes.getLength(); i++) {
-			Element promptElement = (Element) promptNodes.item(i);
-			Prompt prompt = parsePrompt(promptElement);
-			prompts.add(prompt);
-		}
-		return prompts;
-	}
-
-	private static Prompt parsePrompt(Element promptElement) {
-		String promptName = promptElement.getAttribute("name");
-		String role = promptElement.getAttribute("role");
-		String description = promptElement.getAttribute("description");
-		String sqlRef = promptElement.getAttribute("sqlRef");
-		String dataType = promptElement.getAttribute("dataType");
-		String prefix = promptElement.getAttribute("prefix");
-		String content = getElementContent(promptElement);
-
-		String dataGroupField = promptElement.getAttribute("dataGroupField");
-		String action = promptElement.getAttribute("action");
-		String showInChatAttr = promptElement.getAttribute("showInChat");
-		Prompt p = new Prompt(promptName, role, description, sqlRef, dataType, prefix, content, action);
-		if (dataGroupField != null && dataGroupField.length() > 0) {
-			p.setDataGroupField(dataGroupField);
-		}
-		if (showInChatAttr != null && showInChatAttr.trim().length() > 0) {
-			p.setShowInChat(Boolean.parseBoolean(showInChatAttr.trim()));
-		}
-		return p;
-	}
-
-	private static SqlQuery parseSqlQuery(Element sqlElement) {
-		String sqlName = sqlElement.getAttribute("name");
-		String sqlDescription = sqlElement.getAttribute("description");
-		String sqlContent = getElementContent(sqlElement);
-		return new SqlQuery(sqlName, sqlDescription, sqlContent);
-	}
-
-	private static List<SqlQuery> parseSqlQueries(Element sqlsElement) {
-		List<SqlQuery> sqlQueries = new ArrayList<>();
-		NodeList sqlNodes = sqlsElement.getElementsByTagName("sql");
-		for (int i = 0; i < sqlNodes.getLength(); i++) {
-			Element sqlElement = (Element) sqlNodes.item(i);
-			SqlQuery sql = parseSqlQuery(sqlElement);
-			sqlQueries.add(sql);
-		}
-		return sqlQueries;
-	}
-
-	// Helper method to get content of an element, handling CDATA
-	private static String getElementContent(Element element) {
-		StringBuilder content = new StringBuilder();
-		NodeList childNodes = element.getChildNodes();
-		for (int i = 0; i < childNodes.getLength(); i++) {
-			Node node = childNodes.item(i);
-			if (node.getNodeType() == Node.CDATA_SECTION_NODE || node.getNodeType() == Node.TEXT_NODE) {
-				content.append(node.getTextContent().trim());
-			}
-		}
-		return content.toString();
-	}
 }

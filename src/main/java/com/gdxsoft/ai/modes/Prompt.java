@@ -3,7 +3,8 @@ package com.gdxsoft.ai.modes;
 /**
  * 表示一个提示（<prompt>），包含角色、描述、数据来源、内容等。
  * <p>
- * Represents a prompt (<prompt>), including role, description, data source and content.
+ * Represents a prompt (<prompt>), including role, description, data source and
+ * content.
  */
 public class Prompt {
     private String name;
@@ -19,6 +20,8 @@ public class Prompt {
     private String dataGroupField;
     // Action to be performed with this prompt
     private String action;
+    // API reference name for API calls
+    private String api;
 
     public Prompt(String name, String role, String description, String sqlRef, String dataType, String prefix,
             String content) {
@@ -85,6 +88,15 @@ public class Prompt {
         return action;
     }
 
+    /**
+     * 获取API引用名称
+     * 
+     * @return API引用名称
+     */
+    public String getApi() {
+        return api;
+    }
+
     // Setters
     public void setName(String name) {
         this.name = name;
@@ -124,5 +136,14 @@ public class Prompt {
 
     public void setAction(String action) {
         this.action = action;
+    }
+
+    /**
+     * 设置API引用名称
+     * 
+     * @param api API引用名称
+     */
+    public void setApi(String api) {
+        this.api = api;
     }
 }

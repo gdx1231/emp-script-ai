@@ -14,6 +14,8 @@ public class Step {
     private List<Prompt> prompts;
     // optional action reference name, e.g., createEnqJny
     private String action;
+    // optional API reference name for API calls
+    private String api;
     // whether this step uses stream mode, default true
     private boolean stream = true;
     // optional SQL reference name for action
@@ -55,6 +57,15 @@ public class Step {
         return stream;
     }
 
+    /**
+     * 获取API引用名称
+     * 
+     * @return API引用名称
+     */
+    public String getApi() {
+        return api;
+    }
+
     public String getActionSqlRef() {
         return actionSqlRef;
     }
@@ -89,6 +100,15 @@ public class Step {
 
     public void setAction(String action) {
         this.action = action;
+    }
+
+    /**
+     * 设置API引用名称
+     * 
+     * @param api API引用名称
+     */
+    public void setApi(String api) {
+        this.api = api;
     }
 
     public void setStream(boolean stream) {
