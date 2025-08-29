@@ -17,10 +17,8 @@ import com.gdxsoft.easyweb.utils.Utils;
  */
 public class Modes {
     private static final Logger LOGGER = Logger.getLogger(Modes.class.getName());
-    private Document document;
-    private static Map<String, Mode> MODES = new ConcurrentHashMap<String, Mode>();
-    // cache md5 to avoid re-parse when xmlContent unchanged
-    private static volatile Map<String, List<Mode>> XML_MD5 = new ConcurrentHashMap<>();
+    private static final Map<String, Mode> MODES = new ConcurrentHashMap<String, Mode>();
+    private static final Map<String, List<Mode>> XML_MD5 = new ConcurrentHashMap<>();
 
     /**
      * 获取指定名称的模式（返回克隆体以避免外部修改缓存原件）。
@@ -32,11 +30,8 @@ public class Modes {
         return m == null ? null : m.cloneMode();
     }
 
+    private Document document;
     private String xmlMd5;
-
-    public Modes() {
-
-    }
 
     /**
      * 从 XML 文本中加载所有 <mode> 定义，按 name 放入缓存并返回列表。
