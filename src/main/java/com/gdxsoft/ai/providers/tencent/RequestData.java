@@ -1,4 +1,4 @@
-package com.gdxsoft.ai.providers.openai;
+package com.gdxsoft.ai.providers.tencent;
 
 import org.json.JSONObject;
 
@@ -11,8 +11,8 @@ import com.gdxsoft.ai.request.RequestDataBase;
 public class RequestData extends RequestDataBase {
 
     public RequestData() {
-        super("hunyuan-turbos-latest"); // 默认模型
-        this.providerType = ProviderType.TENCENT;
+        super("gpt-4o-mini"); // 默认模型
+        this.providerType = ProviderType.OPENAI;
     }
 
     /**

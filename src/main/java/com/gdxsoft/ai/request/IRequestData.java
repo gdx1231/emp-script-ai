@@ -8,13 +8,13 @@ import org.json.JSONObject;
  */
 public interface IRequestData {
 
-	public JSONObject getParameters();
+	JSONObject getParameters();
 
-	public boolean isStream();
+	boolean isStream();
 
-	public String getModel();
+	String getModel();
 
-	public JSONArray getMessages();
+	JSONArray getMessages();
 
 	ProviderType getProviderType();
 

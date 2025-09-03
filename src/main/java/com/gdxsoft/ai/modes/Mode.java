@@ -30,6 +30,9 @@ public class Mode {
 	private double topP = 1.0; // default
 	// Whether to enable provider-specific "thinking" capability if supported
 	private boolean thinking = false; // default false
+	// Response format for mode outputs. Currently only 'text/json_object' is
+	// supported.
+	private String responseFormat;
 	private List<Step> steps;
 	private List<SqlQuery> sqlQueries;
 	private List<Action> actions;
@@ -239,7 +242,7 @@ public class Mode {
 			url = url + (url.indexOf("?") > 0 ? "&" : "?") + paras;
 		}
 		LOGGER.info("调用 API: " + apiName + ", URL: " + url);
-		
+
 		UNet net = new UNet();
 		if (api.getTimeout() > 0) {
 			net.setTimeout(api.getTimeout());
@@ -271,7 +274,7 @@ public class Mode {
 		boolean hasbody = api.getBody() != null && api.getBody().trim().length() > 0;
 		String result;
 
-		//net.setIsShowLog(true);
+		// net.setIsShowLog(true);
 		if (api.getMethod().equalsIgnoreCase("POST")) {
 			if (hasbody) {
 				result = net.doPost(url, body);
@@ -374,6 +377,15 @@ public class Mode {
 		return thinking;
 	}
 
+	/**
+	 * 返回响应格式，目前仅支持 "text"
+	 * 
+	 * @return responseFormat
+	 */
+	public String getResponseFormat() {
+		return responseFormat;
+	}
+
 	// Setters
 	public void setName(String name) {
 		this.name = name;
@@ -409,6 +421,32 @@ public class Mode {
 
 	public void setThinking(boolean thinking) {
 		this.thinking = thinking;
+	}
+
+	/**
+	 * 设置响应格式。返回内容的格式。可选值：{"type": "text"}或{"type": "json_object"}。
+	 *
+	 * @param responseFormat 格式字符串
+	 */
+	public void setResponseFormat(String responseFormat) {
+		if (responseFormat == null) {
+			this.responseFormat = null;
+			return;
+		}
+		// 返回内容的格式。可选值：{"type": "text"}或{"type": "json_object"}。设置为{"type":
+		// "json_object"}时会输出标准格式的JSON字符串。使用方法请参见：结构化输出。
+		// 如果指定该参数为{"type": "json_object"}，您需要在System Message或User
+		// Message中指引模型输出JSON格式，如：“请按照json格式输出。”
+		String v = responseFormat.trim();
+		if ("text".equalsIgnoreCase(v)) {
+			this.responseFormat = "text";
+		} else if ("json_object".equalsIgnoreCase(v)) {
+			this.responseFormat = "json_object";
+		} else {
+			// only 'text' is supported; keep existing value and log
+			org.slf4j.LoggerFactory.getLogger(Mode.class)
+					.warn("Unsupported responseFormat: {}. Only 'text or json_object' is supported.", responseFormat);
+		}
 	}
 
 	public Action getAction(String actionName) {
@@ -525,6 +563,8 @@ public class Mode {
 		copy.setTemperature(this.temperature);
 		copy.setTopP(this.topP);
 		copy.setThinking(this.thinking);
+		// copy responseFormat
+		copy.setResponseFormat(this.responseFormat);
 		return copy;
 	}
 

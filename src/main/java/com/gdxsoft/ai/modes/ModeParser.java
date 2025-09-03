@@ -35,6 +35,7 @@ public class ModeParser {
         String temperatureAttr = root.getAttribute("temperature");
         String topPAttr = root.getAttribute("topP");
         String thinkingAttr = root.getAttribute("thinking");
+        String responseFormatAttr = root.getAttribute("responseFormat");
 
         // Parse steps
         List<Step> steps = new ArrayList<>();
@@ -126,6 +127,9 @@ public class ModeParser {
         }
         if (thinkingAttr != null && thinkingAttr.trim().length() > 0) {
             mode.setThinking(Boolean.parseBoolean(thinkingAttr.trim()));
+        }
+        if (responseFormatAttr != null && responseFormatAttr.trim().length() > 0) {
+            mode.setResponseFormat(responseFormatAttr.trim());
         }
         return mode;
     }

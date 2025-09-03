@@ -88,6 +88,9 @@ public class RequestData extends RequestDataBase {
 			if(clone.has("thinking")) {
 				clone.remove("thinking");
 			}
+			if(clone.has("stream_options")) {
+				clone.remove("stream_options");
+			}
 			requestData.put("generationConfig", clone);
 		}
 

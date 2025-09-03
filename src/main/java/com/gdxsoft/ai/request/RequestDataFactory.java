@@ -42,6 +42,8 @@ public class RequestDataFactory {
                 return new com.gdxsoft.ai.providers.qwen.RequestData();
             case DOUBAO:
                 return new com.gdxsoft.ai.providers.doubao.RequestData();
+			case TENCENT:
+				return new com.gdxsoft.ai.providers.tencent.RequestData();
             default:
                 throw new IllegalArgumentException("不支持的AI提供商类型: " + type);
         }

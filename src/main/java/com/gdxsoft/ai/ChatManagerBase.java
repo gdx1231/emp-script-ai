@@ -391,7 +391,8 @@ public class ChatManagerBase {
 	 * @param rv      请求值对象
 	 */
 	public void appendPreviousMessages(IRequestData reqData, Map<String, Boolean> existsMessages) throws Exception {
-		String existsSql = "select * from AI_CHAT_MSG where ai_id=@ai_id and AIM_ACTION is null order by AIM_ID";
+		String existsSql = "select * from AI_CHAT_MSG where ai_id=@ai_id and AIM_ACTION is null"
+				+" and AIM_ROLE in ('user', 'system', 'assistant') order by AIM_ID";
 		DTTable tbMsg = DTTable.getJdbcTable(existsSql, rv);
 		for (int i = 0; i < tbMsg.getCount(); i++) {
 			String msg = tbMsg.getCell(i, "AIM_MSG").toString();
@@ -427,6 +428,7 @@ public class ChatManagerBase {
 	 * @return 检查结果
 	 */
 	public JSONObject checkParams() throws Exception {
+
 		String requestId = rv.s("request_id");
 		if (requestId == null || requestId.trim().length() == 0) {
 			JSONObject rst = UJSon.rstFalse(getText(ErrorMessages.ERROR_NO_REQUEST_ID));
@@ -511,6 +513,9 @@ public class ChatManagerBase {
 		rv.addOrUpdateValue("AIM_ACTION_CLASS", this.actionClassName);
 
 		JSONObject chat = this.getOrNewAiChat();
+		if (chat.optBoolean("RST")) {
+			return chat;
+		}
 		LOGGER.info(getText(LogMessages.AI_CHAT_RECORD), chat.toString(2));
 
 		rv.addOrUpdateValue("ai_id", this.aiId, "bigint", 100);
@@ -623,14 +628,17 @@ public class ChatManagerBase {
 		sbIns.append("    AI_UID, AI_PROVIDER, AI_MODEL, AI_THINKING, AI_STREAM, AI_CUR_STEP\n");
 		sbIns.append("  , AI_MODE, AI_MAX_TOKEN, AI_CDATE, AI_MDATE, ADM_ID, USR_ID, SUP_ID\n");
 		sbIns.append(") VALUES(\n");
-		sbIns.append("    @request_id, @AI_PROVIDER, @AI_MODEL, " + (this.aiThinking?1:0) + ", " + (this.aiStream?1:0)
-				+ ", @AIM_STEP\n");
+		sbIns.append("    @request_id, @AI_PROVIDER, @AI_MODEL, " + (this.aiThinking ? 1 : 0) + ", "
+				+ (this.aiStream ? 1 : 0) + ", @AIM_STEP\n");
 		sbIns.append("  , @MODE, @AI_MAX_TOKEN, @sys_DATE, @sys_DATE, @g_ADM_ID, @G_WEB_USR_ID, @g_SUP_ID\n");
 		sbIns.append(")");
 
 		DataConnection.insertAndReturnAutoIdLong(sbIns.toString(), dbConfigName, rv);
 		tb = DTTable.getJdbcTable(sql, dbConfigName, rv);
-
+		if (tb.getCount() == 0) {
+			LOGGER.error(getText(ErrorMessages.ERROR_AI_CHAT_CREATE_FAILED), "new AI_CHAT");
+			return UJSon.rstFalse(getText(ErrorMessages.ERROR_AI_CHAT_CREATE_FAILED) + " new AI_CHAT");
+		}
 		JSONObject chat = tb.getRow(0).toJson();
 		chat.put("IS_NEW", true);
 
@@ -669,11 +677,26 @@ public class ChatManagerBase {
 	 * @param msg   消息内容
 	 * @param rv    请求值对象
 	 */
-	public void updateAiChatMsg(long aimId, String msg, RequestValue rv) {
+	public void updateAiChatMsg(long aimId, String msg ) {
 		rv.addOrUpdateValue("AIM_MSG", msg);
 		rv.addOrUpdateValue("AIM_TIME_END", new Date(), "date", 100);
 
 		String sql = "update AI_CHAT_MSG set AIM_MSG = @AIM_MSG, AIM_TIME_END= @AIM_TIME_END where AIM_ID = " + aimId;
+
+		DataConnection.updateAndClose(sql, dbConfigName, rv);
+	}
+
+	/**
+	 * 更新AI聊天消息的Token使用情况
+	 * 
+	 * @param aimId            消息ID
+	 * @param totalTokens      总Token数
+	 * @param completionTokens 完成Token数
+	 * @param promptTokens     提示词Token数
+	 */
+	public void updateAiChatMsgTokens(long aimId, long totalTokens, long completionTokens, long promptTokens) {
+		String sql = "update AI_CHAT_MSG set AIM_TOTAL_TOKENS = " + totalTokens + ", AIM_COMPLETION_TOKENS= "
+				+ completionTokens + ", AIM_PROMPT_TOKENS = " + promptTokens + " where AIM_ID = " + aimId;
 
 		DataConnection.updateAndClose(sql, dbConfigName, rv);
 	}

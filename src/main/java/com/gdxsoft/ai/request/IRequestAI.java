@@ -8,6 +8,13 @@ import org.json.JSONObject;
 
 public interface IRequestAI {
 	/**
+	 * 获取响应中的 Token 使用情况。<br>
+	 * {"prompt_tokens":29,"completion_tokens":68,"total_tokens":97,"prompt_tokens_details":{"cached_tokens":0}}
+	 * @return the tokensUsage
+	 */
+	JSONObject getTokensUsage();
+	
+	/**
 	 * 转成Curl 命令行格式。| Convert to Curl command line format.
 	 * @return Curl 命令行字符串 | the Curl command line string
 	 */

@@ -8,7 +8,8 @@ public enum ProviderType {
     GROK("grok"),
     OPENAI("openai"),
     QWEN("qwen"),
-    DOUBAO("doubao");
+    DOUBAO("doubao"),
+	TENCENT("tencent");
 
     private final String name;
 

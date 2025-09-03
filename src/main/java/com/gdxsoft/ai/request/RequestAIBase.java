@@ -27,7 +27,7 @@ public abstract class RequestAIBase implements IRequestAI {
 	private static Logger LOGGER = LoggerFactory.getLogger(RequestAIBase.class.getName());
 	private boolean useGzip = false; // control GZIP compression
 	private IOutEvents outEvents;
-
+	private JSONObject tokensUsage; // token usage info from response
 	/**
 	 * 取消正在执行的流式请求。
 	 * <p>
@@ -295,6 +295,12 @@ public abstract class RequestAIBase implements IRequestAI {
 					// 如果没有 delta 和 message 字段，返回整个 choice 对象
 					return UJSon.rstFalse("无效数据，choice 中没有 delta 或 message 字段，" + jsonText);
 				}
+			} else if (json.has("usage")) {
+				// "usage":{"prompt_tokens":29,"completion_tokens":68,"total_tokens":97,"prompt_tokens_details":{"cached_tokens":0}}
+				JSONObject usage = json.getJSONObject("usage");
+				UJSon.rstSetTrue(usage, null);
+				this.tokensUsage = usage;
+				return usage;
 			}
 			return UJSon.rstFalse("无效数据，choices.length() = 0" + jsonText);
 		} catch (Exception e) {
@@ -490,5 +496,14 @@ public abstract class RequestAIBase implements IRequestAI {
 	 */
 	public void setOutEvents(IOutEvents outEvents) {
 		this.outEvents = outEvents;
+	}
+
+	/**
+	 * 获取响应中的 Token 使用情况。<br>
+	 * {"prompt_tokens":29,"completion_tokens":68,"total_tokens":97,"prompt_tokens_details":{"cached_tokens":0}}
+	 * @return the tokensUsage
+	 */
+	public JSONObject getTokensUsage() {
+		return tokensUsage;
 	}
 }

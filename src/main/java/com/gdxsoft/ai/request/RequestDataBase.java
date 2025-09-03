@@ -129,6 +129,11 @@ public abstract class RequestDataBase implements IRequestData {
     @Override
     public IRequestData stream(boolean stream) {
         parameters.put("stream", stream);
+		if (stream) {
+			parameters.put("stream_options", new JSONObject("{\"include_usage\": true}"));
+		} else {
+			parameters.remove("stream_options");
+		}
         return this;
     }
 

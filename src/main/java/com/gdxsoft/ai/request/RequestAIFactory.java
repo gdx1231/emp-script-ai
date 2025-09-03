@@ -40,6 +40,8 @@ public class RequestAIFactory {
 			return new com.gdxsoft.ai.providers.qwen.RequestAI();
 		case DOUBAO:
 			return new com.gdxsoft.ai.providers.doubao.RequestAI();
+		case TENCENT:
+			return new com.gdxsoft.ai.providers.tencent.RequestAI();
 		default:
 			throw new IllegalArgumentException("不支持的AI提供商类型: " + type);
 		}
