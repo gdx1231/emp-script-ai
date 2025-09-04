@@ -28,6 +28,17 @@ public abstract class RequestAIBase implements IRequestAI {
 	private boolean useGzip = false; // control GZIP compression
 	private IOutEvents outEvents;
 	private JSONObject tokensUsage; // token usage info from response
+
+	/**
+	 * 设置响应中的 Token 使用情况。<br>
+	 * {"prompt_tokens":29,"completion_tokens":68,"total_tokens":97,"prompt_tokens_details":{"cached_tokens":0}}
+	 * 
+	 * @param tokensUsage the tokensUsage to set
+	 */
+	public void setTokensUsage(JSONObject tokensUsage) {
+		this.tokensUsage = tokensUsage;
+	}
+
 	/**
 	 * 取消正在执行的流式请求。
 	 * <p>
@@ -501,6 +512,7 @@ public abstract class RequestAIBase implements IRequestAI {
 	/**
 	 * 获取响应中的 Token 使用情况。<br>
 	 * {"prompt_tokens":29,"completion_tokens":68,"total_tokens":97,"prompt_tokens_details":{"cached_tokens":0}}
+	 * 
 	 * @return the tokensUsage
 	 */
 	public JSONObject getTokensUsage() {
