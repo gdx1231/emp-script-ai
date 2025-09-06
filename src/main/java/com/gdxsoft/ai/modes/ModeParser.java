@@ -170,6 +170,7 @@ public class ModeParser {
         String action = promptElement.getAttribute("action");
         String api = promptElement.getAttribute("api");
         String showInChatAttr = promptElement.getAttribute("showInChat");
+        String apisCheckAttr = promptElement.getAttribute("apisCheck");
         Prompt p = new Prompt(promptName, role, description, sqlRef, dataType, prefix, content, action);
         if (dataGroupField != null && dataGroupField.length() > 0) {
             p.setDataGroupField(dataGroupField);
@@ -179,6 +180,9 @@ public class ModeParser {
         }
         if (api != null && api.trim().length() > 0) {
             p.setApi(api.trim());
+        }
+        if (apisCheckAttr != null && apisCheckAttr.trim().length() > 0) {
+            p.setApisCheck(Boolean.parseBoolean(apisCheckAttr.trim()));
         }
         return p;
     }

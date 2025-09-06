@@ -46,6 +46,8 @@ public final class ChatManagerI18nConstants {
             put("ACTION_CREATING", new String[] { "正在创建中...", "Creating..." });
             put("SUCCESS_OK", new String[] { "OK", "OK" });
             put("ERROR_AI_CHAT_CREATE_FAILED", new String[] { "AI聊天创建失败：{}", "AI chat creation failed: {}" });
+
+            put("ERROR_API_NOT_FOUND", new String[] { "API未找到：{}", "API not found: {}" });
         }
     };
 
@@ -76,7 +78,8 @@ public final class ChatManagerI18nConstants {
         public static final String ERROR_MODEL_OFFLINE_1 = "ERROR_MODEL_OFFLINE_1";
         public static final String ERROR_API_CONFIG_NOT_EXIST = "ERROR_API_CONFIG_NOT_EXIST";
         public static final String ERROR_GENERAL = "ERROR_GENERAL";
-		public static final String ERROR_AI_CHAT_CREATE_FAILED = "ERROR_AI_CHAT_CREATE_FAILED";
+        public static final String ERROR_AI_CHAT_CREATE_FAILED = "ERROR_AI_CHAT_CREATE_FAILED";
+        public static final String ERROR_API_NOT_FOUND = "ERROR_API_NOT_FOUND";
     }
 
     /** 状态提示类常量 */

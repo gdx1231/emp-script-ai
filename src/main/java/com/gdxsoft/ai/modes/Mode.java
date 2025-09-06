@@ -154,7 +154,7 @@ public class Mode {
 	 * @return
 	 * @throws Exception
 	 */
-	private boolean createStepPromptBySql(Prompt prompt, String dbConfigName, RequestValue rv) throws Exception {
+	public boolean createStepPromptBySql(Prompt prompt, String dbConfigName, RequestValue rv) throws Exception {
 		String sqlRef = prompt.getSqlRef();
 		if (StringUtils.isBlank(sqlRef)) {
 			return false;
@@ -197,7 +197,7 @@ public class Mode {
 	 * @return
 	 * @throws Exception
 	 */
-	private boolean createStepPromptByAction(Prompt prompt, String dbConfigName, RequestValue rv) throws Exception {
+	public boolean createStepPromptByAction(Prompt prompt, String dbConfigName, RequestValue rv) throws Exception {
 		String actionName = prompt.getAction();
 		if (StringUtils.isBlank(actionName)) {
 			return false;
@@ -217,6 +217,16 @@ public class Mode {
 		return true;
 	}
 
+	public String createApiUrl(Api api, RequestValue rv) {
+		String url = rv.replaceParameters(api.getUrl());
+		if (api.getParameters() != null && api.getParameters().trim().length() > 0) {
+			String paras = rv.replaceParameters(api.getParameters().trim());
+			url = url + (url.indexOf("?") > 0 ? "&" : "?") + paras;
+		}
+		return url;
+
+	}
+
 	/**
 	 * 根据API创建步骤提示
 	 * 
@@ -225,7 +235,7 @@ public class Mode {
 	 * @param refHeaders 引用的Http headers
 	 * @return 创建成功返回true，否则返回false
 	 */
-	private boolean createStepPromptByApi(Prompt prompt, RequestValue rv, Map<String, String> refHeaders)
+	public boolean createStepPromptByApi(Prompt prompt, RequestValue rv, Map<String, String> refHeaders)
 			throws Exception {
 		String apiName = prompt.getApi();
 		if (StringUtils.isBlank(apiName)) {
@@ -236,11 +246,8 @@ public class Mode {
 			throw new Exception("API not found for name: " + apiName);
 		}
 
-		String url = rv.replaceParameters(api.getUrl());
-		if (api.getParameters() != null && api.getParameters().trim().length() > 0) {
-			String paras = rv.replaceParameters(api.getParameters().trim());
-			url = url + (url.indexOf("?") > 0 ? "&" : "?") + paras;
-		}
+		String url = this.createApiUrl(api, rv);
+
 		LOGGER.info("调用 API: " + apiName + ", URL: " + url);
 
 		UNet net = new UNet();
@@ -310,6 +317,73 @@ public class Mode {
 		prompt.setContent(result);
 
 		return true;
+	}
+
+	/**
+	 * 根据API创建cURL命令字符串
+	 * 
+	 * @param prompt     提示对象
+	 * @param rv         请求参数容器
+	 * @param refHeaders 引用的Http headers
+	 * @return cURL命令字符串，如果没有API配置则返回null
+	 */
+	public String createCurlOfPromptApi(Prompt prompt, RequestValue rv, Map<String, String> refHeaders)
+			throws Exception {
+		String apiName = prompt.getApi();
+		if (StringUtils.isBlank(apiName)) {
+			return null;
+		}
+		Api api = this.getApi(apiName);
+		if (api == null) {
+			return null;
+		}
+
+		String url = this.createApiUrl(api, rv);
+		StringBuilder curl = new StringBuilder();
+		curl.append("curl -X ").append(api.getMethod().toUpperCase()).append(" '").append(url).append("'");
+
+		// 添加引用的请求头
+		if (api.isRefRequest() && refHeaders != null) {
+			for (String key : refHeaders.keySet()) {
+				if ("content-length".equalsIgnoreCase(key) || "origin".equalsIgnoreCase(key)
+						|| "host".equalsIgnoreCase(key) || "connection".equalsIgnoreCase(key)) {
+					continue; // 跳过这些头部
+				}
+				curl.append(" \\\n  -H '").append(key).append(": ").append(refHeaders.get(key)).append("'");
+			}
+		}
+
+		// 添加API配置的请求头
+		for (int i = 0; i < api.getHeaders().size(); i++) {
+			ApiHeader field = api.getHeaders().get(i);
+			String headerValue = rv.replaceParameters(field.getValue());
+			curl.append(" \\\n  -H '").append(field.getName()).append(": ").append(headerValue).append("'");
+		}
+
+		// 处理请求体或表单数据
+		String body = api.getBody();
+		boolean hasBody = body != null && body.trim().length() > 0;
+
+		if (hasBody) {
+			// 如果有请求体，直接添加
+			String processedBody = rv.replaceParameters(body);
+			curl.append(" \\\n  -d '").append(processedBody.replace("'", "\\'")).append("'");
+		} else if (!api.getForm().isEmpty()) {
+			// 如果有表单字段，构建表单数据
+			if (api.getMethod().equalsIgnoreCase("GET")) {
+				// GET请求的表单数据已经在URL中了，不需要额外处理
+			} else {
+				// POST/PUT等请求的表单数据
+				for (int i = 0; i < api.getForm().size(); i++) {
+					ApiField field = api.getForm().get(i);
+					String fieldValue = rv.replaceParameters(field.getValue());
+					curl.append(" \\\n  -d '").append(field.getName()).append("=")
+							.append(fieldValue.replace("'", "\\'")).append("'");
+				}
+			}
+		}
+
+		return curl.toString();
 	}
 
 	private SqlQuery findSqlQueryByRef(String sqlRef) {
@@ -497,6 +571,7 @@ public class Mode {
 						if (p.getApi() != null) {
 							np.setApi(p.getApi());
 						}
+						np.setApisCheck(p.isApisCheck());
 						promptsCopy.add(np);
 					}
 				}

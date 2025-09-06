@@ -1,18 +1,88 @@
+/*
+ * Copyright (c) 2025 GDX Software
+ * 
+ * 文件名: ChatManagerBase.java
+ * 创建时间: 2025年9月7日
+ * 作者: 郭磊 (guolei)
+ * 版本: 1.0
+ * 
+ * 描述:
+ * AI聊天管理器基础类，负责管理AI聊天会话的核心功能。
+ * 本类提供了AI聊天系统的完整生命周期管理，包括：
+ * 
+ * 主要功能:
+ * 1. 聊天会话管理 - 创建、维护和管理AI聊天会话
+ * 2. 消息处理 - 处理用户输入、AI响应和系统消息
+ * 3. AI模式管理 - 加载和管理不同的AI工作模式
+ * 4. 步骤执行 - 管理AI处理步骤的执行流程
+ * 5. 提示词管理 - 处理和组织AI提示词
+ * 6. API调用管理 - 管理外部API的调用和集成
+ * 7. 动作执行 - 执行自定义的AI动作和操作
+ * 8. 数据持久化 - 管理聊天记录和消息的数据库存储
+ * 9. 事件处理 - 处理实时输出事件和用户交互
+ * 10. 参数验证 - 验证和管理AI请求参数
+ * 
+ * 核心特性:
+ * - 支持多种AI提供商（如OpenAI、Anthropic等）
+ * - 支持流式和非流式响应
+ * - 支持思考模式和普通模式
+ * - 支持多阶段提示词处理
+ * - 支持API工具调用和检查
+ * - 支持自定义动作和扩展
+ * - 完整的国际化支持
+ * - 线程安全的会话管理
+ * 
+ * 使用示例:
+ * ```java
+ * ChatManagerBase manager = new ChatManagerBase(requestValue, dbConfig, writer);
+ * JSONObject result = manager.checkParams();
+ * if (result.optBoolean("RST")) {
+ *     manager.appendPrompts(requestData);
+ *     // 处理AI响应...
+ * }
+ * ```
+ * 
+ * 注意事项:
+ * - 本类使用了线程安全的ConcurrentHashMap来管理AI请求实例缓存
+ * - 所有数据库操作都使用了参数化查询以防止SQL注入
+ * - 支持事务性的消息处理和错误回滚
+ * - 提供了完整的错误处理和日志记录机制
+ * 
+ * 依赖项:
+ * - com.gdxsoft.easyweb.* - EasyWeb框架核心组件
+ * - org.json.* - JSON处理库
+ * - org.apache.commons.* - Apache Commons工具库
+ * - org.slf4j.* - 日志框架
+ * 
+ * 历史记录:
+ * 2025-09-06: 初始版本创建，实现基础聊天管理功能
+ * 2025-09-07: 添加API检查和调用功能，重构代码结构
+ * 
+ * @author 郭磊 (guolei)
+ * @version 1.0
+ * @since 2025-09-06
+ */
 package com.gdxsoft.ai;
 
 import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.json.JSONArray;
 import org.json.JSONObject;
 
+import com.gdxsoft.ai.ChatManagerI18nConstants.ErrorMessages;
+import com.gdxsoft.ai.ChatManagerI18nConstants.LogMessages;
+import com.gdxsoft.ai.ChatManagerI18nConstants.StatusMessages;
 import com.gdxsoft.ai.export.IAction;
 import com.gdxsoft.ai.modes.*;
 import com.gdxsoft.ai.request.DefaultOutEvents;
@@ -27,7 +97,6 @@ import com.gdxsoft.easyweb.script.RequestValue;
 import com.gdxsoft.easyweb.utils.UJSon;
 import com.gdxsoft.easyweb.utils.UObjectValue;
 import com.gdxsoft.easyweb.utils.Utils;
-import static com.gdxsoft.ai.ChatManagerI18nConstants.*;
 
 /**
  * AI聊天管理器 负责管理AI聊天会话、处理消息、管理AI模式和步骤 提供AI请求的创建、参数检查、提示词管理等核心功能
@@ -265,6 +334,24 @@ public class ChatManagerBase {
 		return reqData;
 	}
 
+	public IRequestData createRequestDataForApiCheck() {
+		IRequestData reqData = RequestDataFactory.createRequestData(aiProvider);
+		/*
+		 * 低Temperature（0.1-0.5）： 回答事实性问题（如“1+1=？”）。 生成结构化输出（如JSON、代码）。 确保一致性和准确性。
+		 * 
+		 * 中Temperature（0.5-0.8）： 日常对话、用户交互。 平衡创造性和可预测性。
+		 * 
+		 * 高Temperature（0.9-1.5）： 创意写作（如故事、诗歌）。 头脑风暴或生成多样化点子
+		 */
+		reqData.stream(false).model(this.aiModel).thinking(this.isAiThinking());
+		reqData.temperature(0.3);
+		reqData.topP(0.3);
+		reqData.responseFormat("json_object");
+
+		LOGGER.info(getText(LogMessages.MODEL_REQUEST_PARAMS), reqData.buildJson());
+		return reqData;
+	}
+
 	/**
 	 * 执行AI动作 首先检查是否存在相同内容的历史记录，如果存在则直接返回 否则执行新的动作并保存结果
 	 * 
@@ -304,7 +391,7 @@ public class ChatManagerBase {
 		result.put("source_md5", md5);
 		LOGGER.info(getText(LogMessages.EXPORT_RESULT), result.toString(2));
 		// 保存结果到数据库
-		this.addAiChatMsg(result.toString(), "agent");
+		this.addAiChatMsg(result.toString(), "agent", true);
 
 		// 输出最终结果
 		outEvent(result.toString());
@@ -344,42 +431,212 @@ public class ChatManagerBase {
 			}
 		}
 
+		this.apiToolsChecks(refHeaders);
 		// mode.createStepPrompts(step, "", g_rv);
+		// 分两阶段处理提示词：先处理非apisCheck的提示词，再处理apisCheck=true的提示词
+
 		for (int i = 0; i < step.getPrompts().size(); i++) {
 			Prompt p = step.getPrompts().get(i);
-			if (!"system".equalsIgnoreCase(p.getRole()) && promptSet.size() > 0 && !promptSet.contains(p.getName())) {
-				// 如果不包含在请求的提示词中，则跳过
+			// 处理单个提示词
+			processPrompt(p, promptSet, existsMessages, reqData, refHeaders);
+		}
+
+	}
+
+	/**
+	 * 利用用API检查提示词是否调用Apis
+	 * 
+	 * @param refHeaders
+	 * @throws Exception
+	 */
+	private List<Prompt> apiToolsChecks(Map<String, String> refHeaders) throws Exception {
+		List<Prompt> prompts = new ArrayList<>();
+		for (int i = 0; i < step.getPrompts().size(); i++) {
+			Prompt p = step.getPrompts().get(i);
+			if (p.isApisCheck()) {
+				prompts.add(p);
+			}
+		}
+
+		if (prompts.size() == 0) {
+			return prompts;
+		}
+		StringBuilder totalApiResult = new StringBuilder();
+		for (int i = 0; i < prompts.size(); i++) {
+			Prompt p = prompts.get(i);
+			String apiResult = apiToolsCheck(p, totalApiResult.toString(), refHeaders);
+
+			p.setContent(apiResult);
+			if (totalApiResult.length() > 0) {
+				totalApiResult.append(",\n");
+			}
+			totalApiResult.append(apiResult);
+		}
+
+		return prompts;
+	}
+
+	/**
+	 * 处理单个API检查提示词
+	 * 
+	 * @param prompt             要处理的提示词
+	 * @param previousApiResults 之前的API调用结果
+	 * @param refHeaders         请求头信息
+	 * @return API调用结果内容
+	 * @throws Exception 处理失败时抛出异常
+	 */
+	private String apiToolsCheck(Prompt prompt, String previousApiResults, Map<String, String> refHeaders)
+			throws Exception {
+		var reqCheckData = this.createRequestDataForApiCheck();
+
+		if (previousApiResults.length() > 0) {
+			// 已经有api调用结果，直接设置内容
+			reqCheckData.addMessage(previousApiResults, "assistant");
+		}
+
+		// 处理单个提示词
+		mode.createStepPrompt(prompt, "", rv, refHeaders);
+		String role = prompt.getRole();
+		if (StringUtils.isBlank(role)) {
+			role = "user";
+		}
+		String promptContent = prompt.getContent();
+		if (!StringUtils.isBlank(prompt.getPrefix())) {
+			promptContent = prompt.getPrefix() + promptContent;
+		}
+		promptContent = this.rv.replaceParameters(promptContent);
+		promptContent += "\n\n用户输入：" + this.prompt;
+		reqCheckData.addMessage(promptContent, role);
+
+		// 记录到数据库中
+		rv.addOrUpdateValue("AIM_PROMPT_NAME", prompt.getName());
+		this.addAiChatMsg(promptContent, "api_tools_checks", true);
+		rv.addOrUpdateValue("AIM_PROMPT_NAME", null);
+
+		var req = this.createRequestAI();
+		// 记录一条 curl 命令
+		String aiCurl = req.curl(reqCheckData);
+		this.addAiChatMsg(aiCurl, "api_check_curl", true);
+
+		long aimId = this.addAiChatMsg("", "assistant", true);
+		// 调用AI接口
+		String fullText = req.doPost(reqCheckData);
+		this.updateAiChatMsg(aimId, fullText);
+
+		// 提取 JSON 响应并返回成功信息
+		JSONObject json = req.extraceJson(fullText, true);
+		String content = json.getString("content");
+		JSONArray tools = new JSONArray(content);
+
+		StringBuilder sbApisContent = new StringBuilder();
+		for (int ia = 0; ia < tools.length(); ia++) {
+			JSONObject tool = tools.getJSONObject(ia);
+			String toolName = tool.optString("tool");
+			if (toolName.equalsIgnoreCase("none")) {
 				continue;
 			}
-			String key = step.getName() + "|" + p.getName();
-			if (existsMessages.containsKey(key)) {
-				// 已经存在该消息，不再添加
+			JSONObject args = tool.optJSONObject("args");
+			if (args == null) {
 				continue;
 			}
-			mode.createStepPrompt(p, "", rv, refHeaders);
-			String role = p.getRole();
-			if (StringUtils.isBlank(role)) {
-				role = "user";
-			}
-			String promptContent = p.getContent();
-			if (!StringUtils.isBlank(p.getPrefix())) {
-				promptContent = p.getPrefix() + promptContent;
-			}
-			reqData.addMessage(promptContent, role);
 
-			// 记录到数据库中
-			rv.addOrUpdateValue("AIM_PROMPT_NAME", p.getName());
-			this.addAiChatMsg(promptContent, role);
-			rv.addOrUpdateValue("AIM_PROMPT_NAME", null);
-
-			// 如果是用户角色，且需要在聊天中显示
-			if (p.isShowInChat()) {
-				JSONObject promptMsg = UJSon.rstTrue("");
-				promptMsg.put("content", "```prompt\n" + promptContent + "\n```\n\n");
-
-				promptMsg.put("prompt", p.getName());
-				this.outEvent(promptMsg.toString());
+			String apiCallResult = executeApiCall(toolName, args, refHeaders);
+			if (sbApisContent.length() > 0) {
+				sbApisContent.append(",\n");
 			}
+			sbApisContent.append(apiCallResult);
+		}
+
+		return sbApisContent.toString();
+	}
+
+	/**
+	 * 执行单个API调用
+	 * 
+	 * @param toolName   API工具名称
+	 * @param args       API参数
+	 * @param refHeaders 请求头信息
+	 * @return API调用结果内容
+	 * @throws Exception 执行失败时抛出异常
+	 */
+	private String executeApiCall(String toolName, JSONObject args, Map<String, String> refHeaders) throws Exception {
+		RequestValue rv = this.rv.clone();
+		for (String argName : args.keySet()) {
+			String argValue = args.optString(argName);
+			rv.addOrUpdateValue(argName, argValue);
+		}
+
+		Prompt apiPrompt = new Prompt();
+		apiPrompt.setName(toolName + "##_api");
+		apiPrompt.setRole("user");
+		apiPrompt.setContent("");
+		apiPrompt.setDescription(toolName + " API调用");
+		apiPrompt.setApi(toolName);
+
+		String apiCallCurl = mode.createCurlOfPromptApi(apiPrompt, rv, refHeaders);
+		// 添加一条 curl 命令记录
+		this.addAiChatMsg(apiCallCurl, "api_call_curl", true);
+
+		JSONObject msg = UJSon.rstTrue("");
+		msg.put("reasoning_content", "调用API: " + toolName + ", " + args.toString() + "\n\n");
+		this.outEvent(msg.toString());
+
+		mode.createStepPromptByApi(apiPrompt, rv, refHeaders);
+		String calledContent = apiPrompt.getContent();
+		// 记录api调用的结果
+		this.addAiChatMsg(calledContent, "api_call_content", true);
+
+		var api = mode.getApi(toolName);
+		String apiContent = api.getDescription() + "数据:\n" + calledContent;
+
+		return apiContent;
+	}
+
+	/**
+	 * 处理单个提示词
+	 * 
+	 * @param p              提示词对象
+	 * @param promptSet      指定的提示词集合
+	 * @param existsMessages 已存在的消息映射
+	 * @param reqData        请求数据对象
+	 * @param refHeaders     请求头信息
+	 * @throws Exception 处理失败时抛出异常
+	 */
+	private void processPrompt(Prompt p, Set<String> promptSet, Map<String, Boolean> existsMessages,
+			IRequestData reqData, Map<String, String> refHeaders) throws Exception {
+
+		if (!"system".equalsIgnoreCase(p.getRole()) && promptSet.size() > 0 && !promptSet.contains(p.getName())) {
+			// 如果不包含在请求的提示词中，则跳过
+			return;
+		}
+		String key = step.getName() + "|" + p.getName();
+		if (existsMessages.containsKey(key)) {
+			// 已经存在该消息，不再添加
+			return;
+		}
+		mode.createStepPrompt(p, "", rv, refHeaders);
+		String role = p.getRole();
+		if (StringUtils.isBlank(role)) {
+			role = "user";
+		}
+		String promptContent = p.getContent();
+		if (!StringUtils.isBlank(p.getPrefix())) {
+			promptContent = p.getPrefix() + promptContent;
+		}
+		reqData.addMessage(promptContent, role);
+
+		// 记录到数据库中
+		rv.addOrUpdateValue("AIM_PROMPT_NAME", p.getName());
+		this.addAiChatMsg(promptContent, role, false);
+		rv.addOrUpdateValue("AIM_PROMPT_NAME", null);
+
+		// 如果是用户角色，且需要在聊天中显示
+		if (p.isShowInChat()) {
+			JSONObject promptMsg = UJSon.rstTrue("");
+			promptMsg.put("content", "```prompt\n" + promptContent + "\n```\n\n");
+
+			promptMsg.put("prompt", p.getName());
+			this.outEvent(promptMsg.toString());
 		}
 
 	}
@@ -391,8 +648,9 @@ public class ChatManagerBase {
 	 * @param rv      请求值对象
 	 */
 	public void appendPreviousMessages(IRequestData reqData, Map<String, Boolean> existsMessages) throws Exception {
-		String existsSql = "select * from AI_CHAT_MSG where ai_id=@ai_id and AIM_ACTION is null"
-				+" and AIM_ROLE in ('user', 'system', 'assistant') order by AIM_ID";
+		String existsSql = "select * from AI_CHAT_MSG where ai_id=@ai_id and AIM_ACTION is null \n"
+				+ " and AIM_ROLE in ('user', 'system', 'assistant') \n"
+				+ " and case when AIM_SKIP_APPEND is null then 0 else AIM_SKIP_APPEND end = 0 order by AIM_ID";
 		DTTable tbMsg = DTTable.getJdbcTable(existsSql, rv);
 		for (int i = 0; i < tbMsg.getCount(); i++) {
 			String msg = tbMsg.getCell(i, "AIM_MSG").toString();
@@ -403,6 +661,18 @@ public class ChatManagerBase {
 			existsMessages.put(key, true);
 
 			reqData.addMessage(msg, role);
+		}
+		var apiPrompts = this.apiToolsChecks(rv.getHttpHeaders());
+		for (var p : apiPrompts) {
+			String role = p.getRole();
+			if (StringUtils.isBlank(role)) {
+				role = "user";
+			}
+			String promptContent = p.getContent();
+			if (!StringUtils.isBlank(p.getPrefix())) {
+				promptContent = p.getPrefix() + promptContent;
+			}
+			reqData.addMessage(promptContent, role);
 		}
 	}
 
@@ -656,15 +926,16 @@ public class ChatManagerBase {
 	 * @param rv   请求值对象
 	 * @return 消息ID
 	 */
-	public long addAiChatMsg(String msg, String role) {
+	public long addAiChatMsg(String msg, String role, boolean isSkipAppend) {
 		rv.addOrUpdateValue("AIM_MSG", msg);
 		rv.addOrUpdateValue("AIM_ROLE", role);
 		if (!"assistant".equals(role)) {
 			rv.addOrUpdateValue("AIM_TIME_END", new Date(), "date", 100);
 		}
 
-		String sql = "INSERT INTO AI_CHAT_MSG( AI_ID, AIM_MSG, AIM_ROLE, AIM_TIME_BEGIN, AIM_TIME_END, AIM_STEP, AIM_ACTION, AIM_ACTION_CLASS, AIM_PROMPT_NAME)"
-				+ " VALUES(@ai_id, @AIM_MSG, @AIM_ROLE, @sys_date, @AIM_TIME_END, @AIM_STEP, @AIM_ACTION, @AIM_ACTION_CLASS, @AIM_PROMPT_NAME)";
+		String sql = "INSERT INTO AI_CHAT_MSG( AI_ID, AIM_MSG, AIM_ROLE, AIM_TIME_BEGIN, AIM_TIME_END, AIM_STEP, AIM_ACTION, AIM_ACTION_CLASS, AIM_PROMPT_NAME, AIM_SKIP_APPEND)"
+				+ " VALUES(@ai_id, @AIM_MSG, @AIM_ROLE, @sys_date, @AIM_TIME_END, @AIM_STEP, @AIM_ACTION, @AIM_ACTION_CLASS, @AIM_PROMPT_NAME, "
+				+ (isSkipAppend ? 1 : 0) + ")";
 
 		long aimId = DataConnection.insertAndReturnAutoIdLong(sql, dbConfigName, rv);
 		return aimId;
@@ -677,7 +948,7 @@ public class ChatManagerBase {
 	 * @param msg   消息内容
 	 * @param rv    请求值对象
 	 */
-	public void updateAiChatMsg(long aimId, String msg ) {
+	public void updateAiChatMsg(long aimId, String msg) {
 		rv.addOrUpdateValue("AIM_MSG", msg);
 		rv.addOrUpdateValue("AIM_TIME_END", new Date(), "date", 100);
 

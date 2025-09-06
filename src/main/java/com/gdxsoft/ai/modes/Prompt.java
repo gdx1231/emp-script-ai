@@ -22,6 +22,12 @@ public class Prompt {
     private String action;
     // API reference name for API calls
     private String api;
+    // Whether to check APIs
+    private boolean apisCheck = false;
+
+    public Prompt() {
+        // Default constructor
+    }
 
     public Prompt(String name, String role, String description, String sqlRef, String dataType, String prefix,
             String content) {
@@ -97,6 +103,15 @@ public class Prompt {
         return api;
     }
 
+    /**
+     * 获取是否检查APIs
+     * 
+     * @return 是否检查APIs
+     */
+    public boolean isApisCheck() {
+        return apisCheck;
+    }
+
     // Setters
     public void setName(String name) {
         this.name = name;
@@ -145,5 +160,14 @@ public class Prompt {
      */
     public void setApi(String api) {
         this.api = api;
+    }
+
+    /**
+     * 设置是否检查APIs
+     * 
+     * @param apisCheck 是否检查APIs
+     */
+    public void setApisCheck(boolean apisCheck) {
+        this.apisCheck = apisCheck;
     }
 }
