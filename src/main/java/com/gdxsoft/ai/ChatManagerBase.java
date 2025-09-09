@@ -343,7 +343,7 @@ public class ChatManagerBase {
 		 * 
 		 * 高Temperature（0.9-1.5）： 创意写作（如故事、诗歌）。 头脑风暴或生成多样化点子
 		 */
-		reqData.stream(false).model(this.aiModel).thinking(this.isAiThinking());
+		reqData.stream(false).model(this.aiModel).thinking(false);
 		reqData.temperature(0.3);
 		reqData.topP(0.3);
 		reqData.responseFormat("json_object");
@@ -525,9 +525,16 @@ public class ChatManagerBase {
 
 		// 提取 JSON 响应并返回成功信息
 		JSONObject json = req.extraceJson(fullText, true);
-		String content = json.getString("content");
-		JSONArray tools = new JSONArray(content);
-
+		String content = json.getString("content").trim();
+		JSONArray tools;
+		if (content.startsWith("{")) {
+			// 不是JSON数组，直接返回
+			JSONObject tool = new JSONObject(content);
+			tools = new JSONArray();
+			tools.put(tool);
+		} else {
+			tools = new JSONArray(content);
+		}
 		StringBuilder sbApisContent = new StringBuilder();
 		for (int ia = 0; ia < tools.length(); ia++) {
 			JSONObject tool = tools.getJSONObject(ia);
@@ -620,6 +627,11 @@ public class ChatManagerBase {
 			role = "user";
 		}
 		String promptContent = p.getContent();
+		if (StringUtils.isBlank(promptContent)) {
+			// 为空则跳过
+			return;
+		}
+
 		if (!StringUtils.isBlank(p.getPrefix())) {
 			promptContent = p.getPrefix() + promptContent;
 		}
@@ -654,6 +666,10 @@ public class ChatManagerBase {
 		DTTable tbMsg = DTTable.getJdbcTable(existsSql, rv);
 		for (int i = 0; i < tbMsg.getCount(); i++) {
 			String msg = tbMsg.getCell(i, "AIM_MSG").toString();
+			if (StringUtils.isBlank(msg)) {
+				// 消息为空则跳过
+				continue;
+			}
 			String role = tbMsg.getCell(i, "AIM_ROLE").toString();
 			String step = tbMsg.getCell(i, "AIM_STEP").toString();
 			String promptName = tbMsg.getCell(i, "AIM_PROMPT_NAME").toString();
@@ -669,6 +685,10 @@ public class ChatManagerBase {
 				role = "user";
 			}
 			String promptContent = p.getContent();
+			if (StringUtils.isBlank(promptContent)) {
+				// 为空则跳过
+				continue;
+			}
 			if (!StringUtils.isBlank(p.getPrefix())) {
 				promptContent = p.getPrefix() + promptContent;
 			}
@@ -955,6 +975,21 @@ public class ChatManagerBase {
 		String sql = "update AI_CHAT_MSG set AIM_MSG = @AIM_MSG, AIM_TIME_END= @AIM_TIME_END where AIM_ID = " + aimId;
 
 		DataConnection.updateAndClose(sql, dbConfigName, rv);
+	}
+
+	/**
+	 * 更新AI聊天消息的Token使用情况
+	 * 
+	 * @param aimId 消息ID
+	 * @param usage Token使用情况JSON对象，包含total_tokens, completion_tokens,
+	 *              prompt_tokens字段
+	 */
+	public void updateAiChatMsgTokens(long aimId, JSONObject usage) {
+		long totalTokens = usage.optLong("total_tokens");
+		long completionTokens = usage.optLong("completion_tokens");
+		long promptTokens = usage.optLong("prompt_tokens");
+
+		this.updateAiChatMsgTokens(aimId, totalTokens, completionTokens, promptTokens);
 	}
 
 	/**
