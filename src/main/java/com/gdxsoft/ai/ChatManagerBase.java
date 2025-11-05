@@ -896,7 +896,7 @@ public class ChatManagerBase {
 	 * @return 聊天记录
 	 */
 	public JSONObject getOrNewAiChat() {
-		String sql = "select AI_ID, AI_CUR_STEP as AI_STEP_PREV, AI_UID from ai_chat where adm_id=@g_adm_id and ai_uid=@request_id";
+		String sql = "select AI_ID, AI_CUR_STEP as AI_STEP_PREV, AI_UID from ai_chat where ai_uid=@request_id";
 		DTTable tb = DTTable.getJdbcTable(sql, dbConfigName, rv);
 		if (tb.getCount() > 0) {
 			JSONObject chat = tb.getRow(0).toJson();
