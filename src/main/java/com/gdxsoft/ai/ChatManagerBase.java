@@ -635,6 +635,7 @@ public class ChatManagerBase {
 		if (!StringUtils.isBlank(p.getPrefix())) {
 			promptContent = p.getPrefix() + promptContent;
 		}
+		promptContent = this.rv.replaceParameters(promptContent);
 		reqData.addMessage(promptContent, role);
 
 		// 记录到数据库中
