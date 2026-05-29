@@ -15,6 +15,7 @@ import com.gdxsoft.ai.request.IRequestAI;
 import com.gdxsoft.ai.request.IRequestData;
 import com.gdxsoft.easyweb.script.RequestValue;
 import com.gdxsoft.easyweb.utils.UJSon;
+import com.gdxsoft.easyweb.utils.ULogic;
 
 /**
  * AiStreamOrPost 负责管理 AI 聊天请求的初始化与处理，支持流式和非流式（POST）两种模式。 它协调聊天管理器、AI
@@ -343,6 +344,11 @@ public class AiStreamOrPost {
 
 		// 处理步骤动作
 		handleStepAction(fullText, writer);
+
+		// AI 响应完成后，根据配置表达式判断是否发送 complete UI HTML
+		if (evaluateUiTest(chatManager.getMode().getUiCompleteTest(), fullText)) {
+			sendUiHtmlEvent("complete");
+		}
 	}
 
 	/**
@@ -380,6 +386,69 @@ public class AiStreamOrPost {
 			} catch (Exception e) {
 				LOGGER.error(getMessage("STEP_ACTION_ERROR") + "{}", e.getMessage(), e);
 			}
+		}
+	}
+
+	/**
+	 * 发送 UI HTML 事件到前端。
+	 * <ul>
+	 * <li>welcome：新会话开始时发送，由 Mode.uiWelcome 配置</li>
+	 * <li>complete：AI 响应完成后发送，由 Mode.uiComplete 配置</li>
+	 * </ul>
+	 * 仅在流式输出模式下发送，前端通过 SSE 事件中的 ui_html 和 ui_type 字段渲染。
+	 *
+	 * @param type 事件类型，"welcome" 或 "complete"
+	 */
+	private void sendUiHtmlEvent(String type) {
+		if (!chatManager.getStep().isStream()) {
+			return;
+		}
+		String html = null;
+		if ("welcome".equals(type) && chatManager.isNew()) {
+			html = chatManager.getMode().getUiWelcome();
+		} else if ("complete".equals(type)) {
+			html = chatManager.getMode().getUiComplete();
+		}
+		if (html == null || html.trim().isEmpty()) {
+			return;
+		}
+		JSONObject msg = UJSon.rstTrue("");
+		msg.put("ui_html", html);
+		msg.put("ui_type", type);
+		chatManager.outEvent(msg.toString());
+	}
+
+	/**
+	 * 评估 UI 测试表达式。
+	 * 使用 EWA 框架的 ULogic.runLogic() 通过 HSQLDB 执行 SQL 逻辑表达式。
+	 * <p>
+	 * 表达式使用 SQL 语法，{@code @fullText} 会被替换为 AI 响应文本。例如：
+	 * <ul>
+	 * <li>空或 null — 返回 true（无条件发送）</li>
+	 * <li>{@code @fullText like '%<day>%'} — 文本包含 &lt;day&gt; 标签</li>
+	 * <li>{@code @fullText like '%<day>%' and @fullText like '%<gn>%'} — 多条件组合</li>
+	 * </ul>
+	 *
+	 * @param expression SQL 逻辑表达式，来自 Mode 配置（{@code <complete test="...">}）
+	 * @param fullText   AI 响应的完整文本
+	 * @return 表达式是否成立
+	 */
+	private boolean evaluateUiTest(String expression, String fullText) {
+		if (expression == null || expression.trim().isEmpty()) {
+			return true;
+		}
+		if (fullText == null) {
+			fullText = "";
+		}
+		// 将 @fullText 替换为 SQL 字符串值（转义单引号）
+		String escaped = fullText.replace("'", "''");
+		String exp = expression.replace("@fullText", "'" + escaped + "'");
+
+		try {
+			return ULogic.runLogic(exp);
+		} catch (Exception e) {
+			LOGGER.error("evaluateUiTest error: {}", e.getMessage());
+			return false;
 		}
 	}
 

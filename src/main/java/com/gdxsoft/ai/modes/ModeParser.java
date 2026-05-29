@@ -131,6 +131,32 @@ public class ModeParser {
         if (responseFormatAttr != null && responseFormatAttr.trim().length() > 0) {
             mode.setResponseFormat(responseFormatAttr.trim());
         }
+
+        // Parse UI HTML outputs
+        NodeList uiNodes = root.getElementsByTagName("ui");
+        if (uiNodes.getLength() > 0) {
+            Element uiElement = (Element) uiNodes.item(0);
+            NodeList welcomeNodes = uiElement.getElementsByTagName("welcome");
+            if (welcomeNodes.getLength() > 0) {
+                String welcome = getElementContent((Element) welcomeNodes.item(0));
+                if (welcome != null && welcome.length() > 0) {
+                    mode.setUiWelcome(welcome);
+                }
+            }
+            NodeList completeNodes = uiElement.getElementsByTagName("complete");
+            if (completeNodes.getLength() > 0) {
+                Element completeElement = (Element) completeNodes.item(0);
+                String complete = getElementContent(completeElement);
+                if (complete != null && complete.length() > 0) {
+                    mode.setUiComplete(complete);
+                }
+                String completeTest = completeElement.getAttribute("test");
+                if (completeTest != null && completeTest.length() > 0) {
+                    mode.setUiCompleteTest(completeTest);
+                }
+            }
+        }
+
         return mode;
     }
 

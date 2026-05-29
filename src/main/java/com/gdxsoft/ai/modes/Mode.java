@@ -37,6 +37,10 @@ public class Mode {
 	private List<SqlQuery> sqlQueries;
 	private List<Action> actions;
 	private List<Api> apis;
+	// UI HTML outputs: welcome (new session) and complete (after itinerary generation)
+	private String uiWelcome;
+	private String uiComplete;
+	private String uiCompleteTest;
 
 	/**
 	 * 获取模式中的步骤
@@ -523,6 +527,30 @@ public class Mode {
 		}
 	}
 
+	public String getUiWelcome() {
+		return uiWelcome;
+	}
+
+	public void setUiWelcome(String uiWelcome) {
+		this.uiWelcome = uiWelcome;
+	}
+
+	public String getUiComplete() {
+		return uiComplete;
+	}
+
+	public void setUiComplete(String uiComplete) {
+		this.uiComplete = uiComplete;
+	}
+
+	public String getUiCompleteTest() {
+		return uiCompleteTest;
+	}
+
+	public void setUiCompleteTest(String uiCompleteTest) {
+		this.uiCompleteTest = uiCompleteTest;
+	}
+
 	public Action getAction(String actionName) {
 		if (actions == null)
 			return null;
@@ -640,6 +668,9 @@ public class Mode {
 		copy.setThinking(this.thinking);
 		// copy responseFormat
 		copy.setResponseFormat(this.responseFormat);
+		copy.setUiWelcome(this.uiWelcome);
+		copy.setUiComplete(this.uiComplete);
+		copy.setUiCompleteTest(this.uiCompleteTest);
 		return copy;
 	}
 
