@@ -2,6 +2,7 @@ package com.gdxsoft.ai.providers.openrouter;
 
 import org.json.JSONObject;
 
+import com.gdxsoft.ai.request.IRequestData;
 import com.gdxsoft.ai.request.ProviderType;
 import com.gdxsoft.ai.request.RequestDataBase;
 
@@ -15,6 +16,23 @@ public class RequestData extends RequestDataBase {
 	public RequestData() {
 		super(DEFAULT_MODEL_NAME);
 		this.providerType = ProviderType.OPENROUTER;
+	}
+
+	/**
+	 * OpenRouter 的 reasoning 参数格式
+	 * 启用: {"reasoning": {"enabled": true}}
+	 * 禁用: 不包含此字段
+	 */
+	@Override
+	public IRequestData thinking(boolean thinking) {
+		if (thinking) {
+			JSONObject reasoningObj = new JSONObject();
+			reasoningObj.put("enabled", true);
+			parameters.put("reasoning", reasoningObj);
+		} else {
+			parameters.remove("reasoning");
+		}
+		return this;
 	}
 
 	/**

@@ -128,13 +128,17 @@ Ensure `BUILD SUCCESS` and no new warnings/errors.
 
 - **API Key header**: `RequestAIBase.createHttpRequest()` handles `Authorization: Bearer` for all providers except Gemini (`x-goog-api-key`) and Anthropic (`x-api-key` + `anthropic-version`). If your provider uses a different header scheme, add a case in both `createHttpRequest()` and `curl()` in `RequestAIBase`.
 - **Response format**: The base `extraceJson()` expects `choices[0].delta.content` (streaming) or `choices[0].message.content` (non-streaming). If the provider returns a different structure, override `extraceJson()` in `RequestAI`.
-- **Model inference**: The `inferProviderFromModel()` method uses substring matching on model names. Choose keywords that won't cause false positives (e.g., `deepseek` won't collide with other providers).
+- **Model inference**: The `inferProviderFromModel()` method uses substring matching on model names. Choose keywords that won't cause false positives. **Prefix-based matching** (e.g., `openai*`, `anthropic*` for compat modes) should be placed at the **end** of the method as a fallback, after specific provider keywords, so models like `anthropic/claude-sonnet-4` match `ANTHROPIC` (contains "claude") before falling back to `ANTHROPIC_COMPAT` (starts with "anthropic").
 - **Non-OpenAI-compatible providers**: Providers like Anthropic require:
   - Custom HTTP headers (`x-api-key`, `anthropic-version`) — add handling in `RequestAIBase.createHttpRequest()` and `curl()`
   - Custom request body format (e.g., `system` as a top-level field, mandatory `max_tokens`) — override `systemMessage()`, `maxTokens()`, `thinking()`, and `build()` in `RequestData`
   - Custom SSE event parsing (e.g., `content_block_delta`, `message_delta`) — override `doStream()` and `extraceJson()` in `RequestAI`
   - See `com.gdxsoft.ai.providers.anthropic.*` for a complete example
-- **`thinking` parameter format**: Not all providers accept `thinking: boolean`. DeepSeek expects `{"thinking": {"type": "enabled"}}` when enabled and the field removed when disabled. Always override `thinking()` in `RequestData` if the provider has a non-standard format.
+- **`thinking` parameter format**: Not all providers accept `thinking: boolean`. 
+  - **DeepSeek** expects `{"thinking": {"type": "enabled"}}` when enabled and the field removed when disabled.
+  - **OpenRouter** uses `{"reasoning": {"enabled": true}}` (different field name) — see `providers/openrouter/RequestData.java`.
+  - **Anthropic** does not support it (override to no-op).
+  - Always override `thinking()` in `RequestData` if the provider has a non-standard format.
 - **URL fallback**: `RequestAIBase` does NOT auto-fallback to `DEFAULT_URL` when `initUrlAndKey(null, apiKey)` is called with a null URL — it will throw NPE. Always pass `RequestAI.DEFAULT_URL` as the first argument, or ensure the provider's `RequestAI` overrides `createUrl()` to return `DEFAULT_URL` when `apiUrl` is null.
 - **Test API keys**: Never hardcode API keys in test files. Use `System.getenv("PROVIDER_API_KEY")` so keys come from the environment.
 
