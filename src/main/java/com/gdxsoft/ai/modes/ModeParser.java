@@ -110,7 +110,15 @@ public class ModeParser {
             }
         }
 
+        // Parse paramChecks
+        List<ParamCheck> paramChecks = new ArrayList<>();
+        NodeList paramChecksNodes = root.getElementsByTagName("paramChecks");
+        if (paramChecksNodes.getLength() > 0) {
+            paramChecks = parseParamChecks((Element) paramChecksNodes.item(0));
+        }
+
         Mode mode = new Mode(modeName, modeDescription, steps, sqlQueries, actions, apis);
+        mode.setParamChecks(paramChecks);
         if (temperatureAttr != null && temperatureAttr.trim().length() > 0) {
             try {
                 mode.setTemperature(Double.parseDouble(temperatureAttr.trim()));
@@ -362,5 +370,26 @@ public class ModeParser {
             form.add(new ApiField(name, value));
         }
         return form;
+    }
+
+    /**
+     * 解析paramChecks参数校验定义
+     * 
+     * @param paramChecksElement paramChecks元素
+     * @return ParamCheck列表
+     */
+    public static List<ParamCheck> parseParamChecks(Element paramChecksElement) {
+        List<ParamCheck> paramChecks = new ArrayList<>();
+        NodeList paramCheckNodes = paramChecksElement.getElementsByTagName("paramCheck");
+        for (int i = 0; i < paramCheckNodes.getLength(); i++) {
+            Element pcElement = (Element) paramCheckNodes.item(i);
+            String name = pcElement.getAttribute("name");
+            String des = pcElement.getAttribute("des");
+            String type = pcElement.getAttribute("type");
+            String defaultValue = pcElement.getAttribute("default");
+            String options = pcElement.getAttribute("options");
+            paramChecks.add(new ParamCheck(name, des, type, defaultValue, options));
+        }
+        return paramChecks;
     }
 }

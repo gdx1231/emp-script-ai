@@ -17,7 +17,7 @@ public class RequestDataFactory {
 
         if (type == null) {
             throw new IllegalArgumentException("不支持的AI提供商: " + providerName +
-                    ". 支持的提供商: gemini, grok, openai, qwen, doubao");
+                    ". 支持的提供商: gemini, grok, openai, qwen, doubao, tencent, deepseek, openrouter, anthropic, openai_compat, anthropic_compat");
         }
 
         return createRequestData(type);
@@ -44,6 +44,16 @@ public class RequestDataFactory {
                 return new com.gdxsoft.ai.providers.doubao.RequestData();
 			case TENCENT:
 				return new com.gdxsoft.ai.providers.tencent.RequestData();
+			case DEEPSEEK:
+				return new com.gdxsoft.ai.providers.deepseek.RequestData();
+			case OPENROUTER:
+				return new com.gdxsoft.ai.providers.openrouter.RequestData();
+			case ANTHROPIC:
+				return new com.gdxsoft.ai.providers.anthropic.RequestData();
+			case OPENAI_COMPAT:
+				return new com.gdxsoft.ai.providers.openai_compat.RequestData();
+			case ANTHROPIC_COMPAT:
+				return new com.gdxsoft.ai.providers.anthropic_compat.RequestData();
             default:
                 throw new IllegalArgumentException("不支持的AI提供商类型: " + type);
         }
@@ -119,6 +129,29 @@ public class RequestDataFactory {
                 lowerModelName.contains("bytegpt") ||
                 lowerModelName.contains("larksuite")) {
             return ProviderType.DOUBAO;
+        }
+
+        // DeepSeek 模型特征
+        if (lowerModelName.contains("deepseek")) {
+            return ProviderType.DEEPSEEK;
+        }
+
+        // OpenRouter 模型特征（通常以提供商名/模型名格式出现）
+        if (lowerModelName.contains("openrouter")) {
+            return ProviderType.OPENROUTER;
+        }
+
+        // Anthropic 模型特征
+        if (lowerModelName.contains("claude") || lowerModelName.contains("anthropic")) {
+            return ProviderType.ANTHROPIC;
+        }
+
+        // 兼容模式前缀匹配（兜底）
+        if (lowerModelName.startsWith("openai") || lowerModelName.startsWith("oaic")) {
+            return ProviderType.OPENAI_COMPAT;
+        }
+        if (lowerModelName.startsWith("anthropic") || lowerModelName.startsWith("antc")) {
+            return ProviderType.ANTHROPIC_COMPAT;
         }
 
         return null;

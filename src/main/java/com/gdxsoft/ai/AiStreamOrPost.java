@@ -345,9 +345,29 @@ public class AiStreamOrPost {
 		// 处理步骤动作
 		handleStepAction(fullText, writer);
 
+		// 提取并保存用户请求中的参数到AI_CHAT_PARAMS表
+		extractAndSaveInputParams();
+
 		// AI 响应完成后，根据配置表达式判断是否发送 complete UI HTML
 		if (evaluateUiTest(chatManager.getMode().getUiCompleteTest(), fullText)) {
 			sendUiHtmlEvent("complete");
+		}
+	}
+
+	/**
+	 * 提取并保存用户请求中的参数
+	 * 从对话上下文中提取结构化参数（出发城市、目的地、天数等）并保存到数据库
+	 */
+	private void extractAndSaveInputParams() {
+		try {
+			JSONObject result = chatManager.saveInputParams();
+			if (result.optBoolean("RST")) {
+				LOGGER.info("Input params extracted and saved: {}", result.optJSONObject("params"));
+			} else {
+				LOGGER.debug("Input params extraction skipped: {}", result.optString("MSG"));
+			}
+		} catch (Exception e) {
+			LOGGER.warn("Failed to extract input params: {}", e.getMessage());
 		}
 	}
 

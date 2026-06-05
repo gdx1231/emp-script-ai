@@ -838,6 +838,277 @@ public class ChatManagerBase {
 		return rst;
 	}
 
+	/**
+	 * 检查输入参数是否满足当前模式的paramChecks定义
+	 * 从AI_CHAT_PARAMS表加载已保存的参数，与paramChecks定义进行校验
+	 * 
+	 * @return 校验结果JSON：{RST:true/false, params:{...}, missing:[...], invalid:[...]}
+	 */
+	public JSONObject checkInputParams() {
+		List<ParamCheck> paramChecks = mode.getParamChecks();
+		if (paramChecks == null || paramChecks.isEmpty()) {
+			JSONObject rst = UJSon.rstTrue("No paramChecks defined");
+			rst.put("params", new JSONObject());
+			rst.put("missing", new JSONArray());
+			rst.put("invalid", new JSONArray());
+			return rst;
+		}
+
+		Map<String, String> savedParams = new HashMap<>();
+		try {
+			String sql = "SELECT AIP_NAME, AIP_VAL FROM AI_CHAT_PARAMS WHERE AI_ID = " + this.aiId;
+			DTTable tb = DTTable.getJdbcTable(sql, dbConfigName, rv);
+			for (int i = 0; i < tb.getCount(); i++) {
+				String name = tb.getCell(i, "AIP_NAME").toString();
+				String val = tb.getCell(i, "AIP_VAL").toString();
+				if (name != null && val != null) {
+					savedParams.put(name, val);
+				}
+			}
+		} catch (Exception e) {
+			LOGGER.error("Failed to load AI_CHAT_PARAMS for AI_ID={}", this.aiId, e);
+		}
+
+		JSONObject params = new JSONObject();
+		JSONArray missing = new JSONArray();
+		JSONArray invalid = new JSONArray();
+
+		for (ParamCheck pc : paramChecks) {
+			String name = pc.getName();
+			String value = savedParams.get(name);
+
+			if (value == null || value.trim().isEmpty()) {
+				if (pc.getDefaultValue() != null && !pc.getDefaultValue().isEmpty()) {
+					value = pc.getDefaultValue();
+				} else {
+					missing.put(name);
+					continue;
+				}
+			}
+
+			if ("int".equals(pc.getType())) {
+				try {
+					Integer.parseInt(value);
+				} catch (NumberFormatException e) {
+					JSONObject err = new JSONObject();
+					err.put("name", name);
+					err.put("value", value);
+					err.put("reason", "Invalid integer");
+					invalid.put(err);
+					continue;
+				}
+			} else if ("enum".equals(pc.getType())) {
+				if (!pc.isValidEnumValue(value)) {
+					JSONObject err = new JSONObject();
+					err.put("name", name);
+					err.put("value", value);
+					err.put("reason", "Invalid enum value, expected one of: " + pc.getOptionKeys());
+					invalid.put(err);
+					continue;
+				}
+			}
+
+			params.put(name, value);
+		}
+
+		boolean isValid = missing.length() == 0 && invalid.length() == 0;
+		JSONObject rst = isValid ? UJSon.rstTrue() : UJSon.rstFalse("Parameter validation failed");
+		rst.put("params", params);
+		rst.put("missing", missing);
+		rst.put("invalid", invalid);
+		return rst;
+	}
+
+	/**
+	 * 从用户请求中提取参数并保存到AI_CHAT_PARAMS表
+	 * 使用AI从对话上下文中提取结构化参数（出发城市、目的地、天数等）
+	 * 
+	 * @return 保存结果JSON：{RST:true/false, params:{...}}
+	 */
+	public JSONObject saveInputParams() {
+		List<ParamCheck> paramChecks = mode.getParamChecks();
+		if (paramChecks == null || paramChecks.isEmpty()) {
+			return UJSon.rstTrue("No paramChecks defined");
+		}
+
+		String context = loadConversationContext();
+		if (context.isEmpty()) {
+			return UJSon.rstFalse("No conversation context");
+		}
+
+		String extractPrompt = buildExtractPrompt(paramChecks);
+		String aiResponse = callAiForExtraction(extractPrompt + "\n\n对话内容：\n" + context);
+		if (aiResponse == null || aiResponse.isEmpty()) {
+			return UJSon.rstFalse("AI extraction failed");
+		}
+
+		JSONObject extractedParams = parseExtractedParams(aiResponse);
+		if (extractedParams == null) {
+			return UJSon.rstFalse("Failed to parse AI response as JSON");
+		}
+
+		JSONObject savedParams = saveParamsToDatabase(extractedParams, paramChecks);
+		JSONObject rst = UJSon.rstTrue();
+		rst.put("params", savedParams);
+		return rst;
+	}
+
+	private String loadConversationContext() {
+		try {
+			String sql = "select top 30 AIM_ROLE, AIM_MSG from AI_CHAT_MSG m "
+					+ "inner join AI_CHAT c on m.AI_ID = c.AI_ID "
+					+ "where c.AI_ID = " + this.aiId + " "
+					+ "and isnull(m.AIM_SKIP_APPEND, 0) = 0 "
+					+ "order by m.AIM_ID desc";
+			DTTable tb = DTTable.getJdbcTable(sql, dbConfigName, rv);
+			StringBuilder sb = new StringBuilder();
+			for (int i = tb.getCount() - 1; i >= 0; i--) {
+				String role = tb.getCell(i, "AIM_ROLE").toString();
+				Object value = tb.getCell(i, "AIM_MSG").getValue();
+				String msg = value == null ? "" : value.toString();
+				if (msg.trim().isEmpty()) {
+					continue;
+				}
+				if (sb.length() > 0) {
+					sb.append("\n");
+				}
+				sb.append(role).append(": ").append(msg);
+			}
+			return sb.toString();
+		} catch (Exception e) {
+			LOGGER.error("Failed to load conversation context for AI_ID={}", this.aiId, e);
+			return "";
+		}
+	}
+
+	private String buildExtractPrompt(List<ParamCheck> paramChecks) {
+		StringBuilder sb = new StringBuilder();
+		sb.append("你是一个旅游参数提取专家。请从对话内容中提取以下参数，返回 JSON 格式。\n\n");
+		sb.append("需要提取的参数：\n");
+		for (ParamCheck pc : paramChecks) {
+			sb.append("- ").append(pc.getName()).append("（").append(pc.getDes()).append("）");
+			if ("int".equals(pc.getType())) {
+				sb.append("，类型：整数");
+			} else if ("enum".equals(pc.getType())) {
+				sb.append("，类型：枚举，可选值：").append(pc.getOptions());
+			}
+			if (pc.getDefaultValue() != null && !pc.getDefaultValue().isEmpty()) {
+				sb.append("，默认值：").append(pc.getDefaultValue());
+			}
+			sb.append("\n");
+		}
+		sb.append("\n输出格式（仅返回 JSON，不要其他文字）：\n");
+		sb.append("{");
+		boolean first = true;
+		for (ParamCheck pc : paramChecks) {
+			if (!first) sb.append(",");
+			sb.append("\"").append(pc.getName()).append("\": \"提取到的值或null\"");
+			first = false;
+		}
+		sb.append("}\n\n");
+		sb.append("规则：\n");
+		sb.append("- 如果对话中未提及某参数，对应值设为 null\n");
+		sb.append("- 出发城市：用户出发地，通常在\"从XX出发\"\"XX出发\"等表达中\n");
+		sb.append("- 目的地城市：用户要去的城市，可能有多个，用逗号分隔\n");
+		sb.append("- 行程天数：从\"X天\"\"X日游\"等表达中提取\n");
+		sb.append("- 领队人数：从\"X领队\"\"X全陪\"\"X老师\"等表达中提取\n");
+		sb.append("- 团员人数：游客人数，不含领队\n");
+		sb.append("- 行程类型：根据行程内容判断最匹配的类型\n");
+		return sb.toString();
+	}
+
+	private String callAiForExtraction(String fullPrompt) {
+		try {
+			IRequestData reqData = this.createRequestDataForApiCheck();
+			reqData.addMessage(fullPrompt, "user");
+
+			IRequestAI req = this.createRequestAI();
+			String response = req.doPost(reqData);
+			JSONObject json = req.extraceJson(response, true);
+			return json.optString("content", "").trim();
+		} catch (Exception e) {
+			LOGGER.error("AI extraction call failed", e);
+			return null;
+		}
+	}
+
+	private JSONObject parseExtractedParams(String aiText) {
+		int jsonStart = aiText.indexOf('{');
+		int jsonEnd = aiText.lastIndexOf('}');
+		if (jsonStart < 0 || jsonEnd <= jsonStart) {
+			return null;
+		}
+		String jsonStr = aiText.substring(jsonStart, jsonEnd + 1);
+		try {
+			return new JSONObject(jsonStr);
+		} catch (Exception e) {
+			LOGGER.error("Failed to parse extracted params JSON: {}", jsonStr, e);
+			return null;
+		}
+	}
+
+	private JSONObject saveParamsToDatabase(JSONObject extractedParams, List<ParamCheck> paramChecks) {
+		JSONObject saved = new JSONObject();
+		long aimId = getLastAimId();
+
+		DataConnection cnn = new DataConnection();
+		cnn.setRequestValue(rv);
+		cnn.setConfigName(dbConfigName);
+		cnn.transBegin();
+
+		try {
+			cnn.executeUpdate("DELETE FROM AI_CHAT_PARAMS WHERE AI_ID=" + this.aiId);
+
+			for (ParamCheck pc : paramChecks) {
+				String name = pc.getName();
+				String value = null;
+
+				if (extractedParams.has(name) && !extractedParams.isNull(name)) {
+					value = extractedParams.optString(name, "").trim();
+				}
+
+				if (value == null || value.isEmpty() || "null".equalsIgnoreCase(value)) {
+					value = pc.getDefaultValue();
+				}
+
+				if (value != null && !value.isEmpty()) {
+					rv.addOrUpdateValue("AI_ID", this.aiId, "long", 100);
+					rv.addOrUpdateValue("AIM_ID", aimId, "long", 100);
+					rv.addOrUpdateValue("AIP_NAME", name);
+					rv.addOrUpdateValue("AIP_VAL", value);
+					rv.addOrUpdateValue("AIP_TYPE", pc.getType());
+
+					String insertSql = "INSERT INTO AI_CHAT_PARAMS (AI_ID, AIM_ID, AIP_NAME, AIP_VAL, AIP_TYPE) "
+							+ "VALUES (@AI_ID, @AIM_ID, @AIP_NAME, @AIP_VAL, @AIP_TYPE)";
+					cnn.executeUpdate(insertSql);
+					saved.put(name, value);
+				}
+			}
+
+			cnn.transCommit();
+		} catch (Exception e) {
+			cnn.transRollback();
+			LOGGER.error("Failed to save params to database", e);
+		} finally {
+			cnn.close();
+		}
+
+		return saved;
+	}
+
+	private long getLastAimId() {
+		try {
+			String sql = "select isnull(max(AIM_ID), 0) as LAST_AIM_ID from AI_CHAT_MSG where AI_ID = " + this.aiId;
+			DTTable tb = DTTable.getJdbcTable(sql, dbConfigName, rv);
+			if (tb.getCount() > 0) {
+				return tb.getCell(0, "LAST_AIM_ID").toLong();
+			}
+		} catch (Exception e) {
+			LOGGER.error("Failed to get last AIM_ID for AI_ID={}", this.aiId, e);
+		}
+		return 0;
+	}
+
 	public JSONObject checkProviderAndModel() {
 		String sql = "select a.*,b.ap_status from AI_PROVIDER_MODEL a "
 				+ " inner join AI_PROVIDER b on a.AP_CODE= b.AP_CODE  "

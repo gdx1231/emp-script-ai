@@ -16,7 +16,7 @@ public class RequestAIFactory {
 
 		if (type == null) {
 			throw new IllegalArgumentException(
-					"不支持的AI提供商: " + providerName + ". 支持的提供商: gemini, grok, openai, qwen, doubao");
+					"不支持的AI提供商: " + providerName + ". 支持的提供商: gemini, grok, openai, qwen, doubao, tencent, deepseek, openrouter, anthropic, openai_compat, anthropic_compat");
 		}
 		return createRequestAI(type);
 	}
@@ -42,6 +42,16 @@ public class RequestAIFactory {
 			return new com.gdxsoft.ai.providers.doubao.RequestAI();
 		case TENCENT:
 			return new com.gdxsoft.ai.providers.tencent.RequestAI();
+		case DEEPSEEK:
+			return new com.gdxsoft.ai.providers.deepseek.RequestAI();
+		case OPENROUTER:
+			return new com.gdxsoft.ai.providers.openrouter.RequestAI();
+		case ANTHROPIC:
+			return new com.gdxsoft.ai.providers.anthropic.RequestAI();
+		case OPENAI_COMPAT:
+			return new com.gdxsoft.ai.providers.openai_compat.RequestAI();
+		case ANTHROPIC_COMPAT:
+			return new com.gdxsoft.ai.providers.anthropic_compat.RequestAI();
 		default:
 			throw new IllegalArgumentException("不支持的AI提供商类型: " + type);
 		}

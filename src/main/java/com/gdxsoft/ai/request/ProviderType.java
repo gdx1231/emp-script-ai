@@ -9,7 +9,12 @@ public enum ProviderType {
     OPENAI("openai"),
     QWEN("qwen"),
     DOUBAO("doubao"),
-	TENCENT("tencent");
+	TENCENT("tencent"),
+	DEEPSEEK("deepseek"),
+	OPENROUTER("openrouter"),
+	ANTHROPIC("anthropic"),
+	OPENAI_COMPAT("openai_compat"),
+	ANTHROPIC_COMPAT("anthropic_compat");
 
     private final String name;
 

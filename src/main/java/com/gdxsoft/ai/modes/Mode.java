@@ -41,6 +41,8 @@ public class Mode {
 	private String uiWelcome;
 	private String uiComplete;
 	private String uiCompleteTest;
+	// Parameter check definitions for input validation
+	private List<ParamCheck> paramChecks;
 
 	/**
 	 * 获取模式中的步骤
@@ -551,6 +553,25 @@ public class Mode {
 		this.uiCompleteTest = uiCompleteTest;
 	}
 
+	public List<ParamCheck> getParamChecks() {
+		return paramChecks;
+	}
+
+	public void setParamChecks(List<ParamCheck> paramChecks) {
+		this.paramChecks = paramChecks;
+	}
+
+	public ParamCheck getParamCheck(String name) {
+		if (paramChecks == null)
+			return null;
+		for (ParamCheck pc : paramChecks) {
+			if (pc.getName() != null && pc.getName().equalsIgnoreCase(name)) {
+				return pc;
+			}
+		}
+		return null;
+	}
+
 	public Action getAction(String actionName) {
 		if (actions == null)
 			return null;
@@ -671,6 +692,14 @@ public class Mode {
 		copy.setUiWelcome(this.uiWelcome);
 		copy.setUiComplete(this.uiComplete);
 		copy.setUiCompleteTest(this.uiCompleteTest);
+		if (this.paramChecks != null) {
+			List<ParamCheck> paramChecksCopy = new ArrayList<>();
+			for (ParamCheck pc : this.paramChecks) {
+				paramChecksCopy.add(new ParamCheck(pc.getName(), pc.getDes(), pc.getType(),
+						pc.getDefaultValue(), pc.getOptions()));
+			}
+			copy.setParamChecks(paramChecksCopy);
+		}
 		return copy;
 	}
 

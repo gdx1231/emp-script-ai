@@ -69,6 +69,9 @@ public abstract class RequestAIBase implements IRequestAI {
 		if (!StringUtils.isBlank(this.getApiKey())) {
 			if (ProviderType.GEMINI == this.getProviderType()) {
 				sb.append(" -H 'x-goog-api-key: ").append(this.getApiKey()).append("' \\\n");
+			} else if (ProviderType.ANTHROPIC == this.getProviderType() || ProviderType.ANTHROPIC_COMPAT == this.getProviderType()) {
+				sb.append(" -H 'x-api-key: ").append(this.getApiKey()).append("' \\\n");
+				sb.append(" -H 'anthropic-version: ").append("2023-06-01").append("' \\\n");
 			} else {
 				sb.append(" -H 'Authorization: Bearer ").append(this.getApiKey()).append("' \\\n");
 			}
@@ -194,6 +197,9 @@ public abstract class RequestAIBase implements IRequestAI {
 		if (this.getApiKey() != null && !this.getApiKey().isEmpty()) {
 			if (ProviderType.GEMINI == this.getProviderType()) {
 				builder.header("x-goog-api-key", this.getApiKey());
+			} else if (ProviderType.ANTHROPIC == this.getProviderType() || ProviderType.ANTHROPIC_COMPAT == this.getProviderType()) {
+				builder.header("x-api-key", this.getApiKey());
+				builder.header("anthropic-version", "2023-06-01");
 			} else {
 				builder.header("Authorization", "Bearer " + this.getApiKey());
 			}
