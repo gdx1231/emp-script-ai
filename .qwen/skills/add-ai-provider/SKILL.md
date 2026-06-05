@@ -134,6 +134,9 @@ Ensure `BUILD SUCCESS` and no new warnings/errors.
   - Custom request body format (e.g., `system` as a top-level field, mandatory `max_tokens`) — override `systemMessage()`, `maxTokens()`, `thinking()`, and `build()` in `RequestData`
   - Custom SSE event parsing (e.g., `content_block_delta`, `message_delta`) — override `doStream()` and `extraceJson()` in `RequestAI`
   - See `com.gdxsoft.ai.providers.anthropic.*` for a complete example
+- **`thinking` parameter format**: Not all providers accept `thinking: boolean`. DeepSeek expects `{"thinking": {"type": "enabled"}}` when enabled and the field removed when disabled. Always override `thinking()` in `RequestData` if the provider has a non-standard format.
+- **URL fallback**: `RequestAIBase` does NOT auto-fallback to `DEFAULT_URL` when `initUrlAndKey(null, apiKey)` is called with a null URL — it will throw NPE. Always pass `RequestAI.DEFAULT_URL` as the first argument, or ensure the provider's `RequestAI` overrides `createUrl()` to return `DEFAULT_URL` when `apiUrl` is null.
+- **Test API keys**: Never hardcode API keys in test files. Use `System.getenv("PROVIDER_API_KEY")` so keys come from the environment.
 
 ## Generic Compat Providers
 

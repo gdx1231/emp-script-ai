@@ -2,6 +2,7 @@ package com.gdxsoft.ai.providers.deepseek;
 
 import org.json.JSONObject;
 
+import com.gdxsoft.ai.request.IRequestData;
 import com.gdxsoft.ai.request.ProviderType;
 import com.gdxsoft.ai.request.RequestDataBase;
 
@@ -15,6 +16,23 @@ public class RequestData extends RequestDataBase {
 	public RequestData() {
 		super(DEFAULT_MODEL_NAME);
 		this.providerType = ProviderType.DEEPSEEK;
+	}
+
+	/**
+	 * DeepSeek 的 thinking 参数需要对象格式，非布尔值
+	 * 启用: {"thinking": {"type": "enabled"}}
+	 * 禁用: 不包含此字段
+	 */
+	@Override
+	public IRequestData thinking(boolean thinking) {
+		if (thinking) {
+			JSONObject thinkingObj = new JSONObject();
+			thinkingObj.put("type", "enabled");
+			parameters.put("thinking", thinkingObj);
+		} else {
+			parameters.remove("thinking");
+		}
+		return this;
 	}
 
 	/**
