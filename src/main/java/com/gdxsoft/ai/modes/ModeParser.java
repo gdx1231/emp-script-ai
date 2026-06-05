@@ -374,7 +374,7 @@ public class ModeParser {
 
     /**
      * 解析paramChecks参数校验定义
-     * 
+     *
      * @param paramChecksElement paramChecks元素
      * @return ParamCheck列表
      */
@@ -388,7 +388,15 @@ public class ModeParser {
             String type = pcElement.getAttribute("type");
             String defaultValue = pcElement.getAttribute("default");
             String options = pcElement.getAttribute("options");
-            paramChecks.add(new ParamCheck(name, des, type, defaultValue, options));
+            String promptRule = pcElement.getAttribute("promptRule");
+            String sqlRef = pcElement.getAttribute("sqlRef");
+            String sqlValueField = pcElement.getAttribute("sqlValueField");
+            String sqlLabelField = pcElement.getAttribute("sqlLabelField");
+            ParamCheck pc = new ParamCheck(name, des, type, defaultValue, options, promptRule);
+            pc.setSqlRef(sqlRef);
+            pc.setSqlValueField(sqlValueField);
+            pc.setSqlLabelField(sqlLabelField);
+            paramChecks.add(pc);
         }
         return paramChecks;
     }

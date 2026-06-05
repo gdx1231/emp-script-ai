@@ -432,6 +432,7 @@ public class AiStreamOrPost {
 		if (html == null || html.trim().isEmpty()) {
 			return;
 		}
+		html = chatManager.getRv().replaceParameters(html);
 		JSONObject msg = UJSon.rstTrue("");
 		msg.put("ui_html", html);
 		msg.put("ui_type", type);

@@ -392,7 +392,13 @@ public class Mode {
 		return curl.toString();
 	}
 
-	private SqlQuery findSqlQueryByRef(String sqlRef) {
+	/**
+	 * 根据名称查找 SQL 查询定义
+	 *
+	 * @param sqlRef SQL 引用名称
+	 * @return SqlQuery 对象，未找到返回 null
+	 */
+	public SqlQuery findSqlQueryByRef(String sqlRef) {
 		for (SqlQuery query : sqlQueries) {
 			if (sqlRef.equalsIgnoreCase(query.getName())) {
 				return query;
