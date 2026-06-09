@@ -1,7 +1,11 @@
 {
   "permissions": {
     "allow": [
-      "Bash(ssh *)"
+      "Bash(ssh *)",
+      "Bash(mkdir *)",
+      "Bash(git pull)",
+      "Bash(git stash *)",
+      "Bash(git add *)"
     ]
   },
   "$version": 4
