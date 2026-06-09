@@ -1,11 +1,12 @@
 # emp-script-ai
 
-统一调用多家大模型服务商的 Java 工具库与示例，聚焦“统一请求构建 + 流式输出（SSE）+ XML 场景模式（Mode）解析 + Markdown 代码块提取”。
+统一调用多家大模型服务商的 Java 工具库与示例，聚焦"统一请求构建 + 流式输出（SSE）+ XML 场景模式（Mode）解析 + Markdown 代码块提取"。
 
 ## 功能特性
 - 统一请求体构建器：内置通义千问（Qwen，OpenAI 兼容接口）请求构建 `RequestData`
 - 流式输出（SSE）Servlet 示例：`StreamServlet`
 - 场景模式（Mode）XML 解析：从 XML 解析 Step、Prompt、SqlQuery，支持 step 的 `stream` 与 `actionSqlRef` 属性
+- **多轮对话历史控制**：`ChatManagerBase` 支持配置最大历史消息条数和 token 上限，自动截断旧消息
 - XML 解析性能优化：`Modes` 内置 xmlContent 的 MD5 缓存，相同内容不重复解析（线程安全）
 - Markdown 代码块提取：`StringUtils.extractCodeBlocks`
 - Java 17 + Maven，轻依赖、易扩展
@@ -81,7 +82,34 @@ for (Step s : mode.getSteps()) {
 - 解析实现：`Mode.parseMode(Element)` 已迁移至 `Mode` 类中，`Modes` 负责组织与缓存
 - MD5 缓存：`Modes` 会缓存上一次解析的 `List<Mode>`，当新传入的 xmlContent MD5 未变化时，直接返回缓存结果；变更后自动重新解析
 
-### 2) 构建通义千问（Qwen）请求
+### 2) 控制多轮对话历史（防 Token 膨胀）
+
+在 `<mode>` 元素上配置历史限制属性，`ChatManagerBase.appendPreviousMessages()` 会自动生效：
+
+```xml
+<mode name="chat" description="通用聊天"
+      maxHistoryMessages="20"    <!-- 最多传递最近 20 条消息 -->
+      maxHistoryTokensK="80">    <!-- 历史消息 token 上限 80K -->
+```
+
+| 属性 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `maxHistoryMessages` | int | 30 | 最多传递的历史消息条数 |
+| `maxHistoryTokensK` | int | 100 | 历史消息 token 上限（单位：K），100 = 100K tokens |
+
+**工作机制**：
+1. 按 `maxHistoryMessages` 取最近 N 条消息（使用 DTTable 分页，兼容所有数据库）
+2. 估算总 token 数（CJK 字符 / 2 + 其他字符 / 4）
+3. 如果超过 `maxHistoryTokensK * 1000`，从最早的消息开始删除，直到低于限制
+4. 截断时会在日志中输出 WARN 信息
+
+**Java API**（如通过代码设置）：
+```java
+mode.setMaxHistoryMessages(20);
+mode.setMaxHistoryTokensK(80);  // 80K tokens
+```
+
+### 3) 构建通义千问（Qwen）请求
 ```java
 import com.gdxsoft.ai.providers.qwen.request.RequestData;
 
@@ -97,7 +125,7 @@ String jsonPayload = req.buildJson();
 // 使用 HttpClient/OkHttp 调用对应的 OpenAI 兼容接口
 ```
 
-### 3) 流式输出（SSE）Servlet
+### 4) 流式输出（SSE）Servlet
 `com.gdxsoft.ai.servlets.StreamServlet` 演示将大模型响应以 SSE 推送给前端。
 
 web.xml 映射：
@@ -126,7 +154,7 @@ web.xml 映射：
 
 提示：API Key 请用环境变量或配置中心注入，避免硬编码；生产环境注意日志脱敏。
 
-### 4) Markdown 代码块提取
+### 5) Markdown 代码块提取
 ```java
 import com.gdxsoft.ai.StringUtils;
 import java.util.*;
