@@ -584,9 +584,12 @@ public class ChatManagerBase {
 		// 添加一条 curl 命令记录
 		this.addAiChatMsg(apiCallCurl, "api_call_curl", true);
 
-		JSONObject msg = UJSon.rstTrue("");
-		msg.put("reasoning_content", "调用API: " + toolName + ", " + args.toString() + "\n\n");
-		this.outEvent(msg.toString());
+		// 根据 debugOutput 开关决定是否输出调试信息
+		if (mode.isDebugOutput()) {
+			JSONObject msg = UJSon.rstTrue("");
+			msg.put("reasoning_content", "调用API: " + toolName + ", " + args.toString() + "\n\n");
+			this.outEvent(msg.toString());
+		}
 
 		mode.createStepPromptByApi(apiPrompt, rv, refHeaders);
 		String calledContent = apiPrompt.getContent();

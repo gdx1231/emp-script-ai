@@ -43,6 +43,8 @@ public class Mode {
 	private String uiCompleteTest;
 	// Parameter check definitions for input validation
 	private List<ParamCheck> paramChecks;
+	// Debug output control: whether to show technical details like API calls
+	private boolean debugOutput = false; // default false, hide technical details from users
 
 	/**
 	 * 获取模式中的步骤
@@ -576,6 +578,22 @@ public class Mode {
 			}
 		}
 		return null;
+	}
+
+	/**
+	 * 获取调试输出开关:是否向用户显示技术细节(如API调用信息)
+	 * @return true=显示调试信息, false=隐藏(默认)
+	 */
+	public boolean isDebugOutput() {
+		return debugOutput;
+	}
+
+	/**
+	 * 设置调试输出开关
+	 * @param debugOutput true=显示调试信息, false=隐藏(默认)
+	 */
+	public void setDebugOutput(boolean debugOutput) {
+		this.debugOutput = debugOutput;
 	}
 
 	public Action getAction(String actionName) {

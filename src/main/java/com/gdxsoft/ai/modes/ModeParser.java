@@ -36,6 +36,7 @@ public class ModeParser {
         String topPAttr = root.getAttribute("topP");
         String thinkingAttr = root.getAttribute("thinking");
         String responseFormatAttr = root.getAttribute("responseFormat");
+        String debugOutputAttr = root.getAttribute("debugOutput");
 
         // Parse steps
         List<Step> steps = new ArrayList<>();
@@ -138,6 +139,10 @@ public class ModeParser {
         }
         if (responseFormatAttr != null && responseFormatAttr.trim().length() > 0) {
             mode.setResponseFormat(responseFormatAttr.trim());
+        }
+        // Parse debugOutput attribute (default false to hide technical details from users)
+        if (debugOutputAttr != null && debugOutputAttr.trim().length() > 0) {
+            mode.setDebugOutput(Boolean.parseBoolean(debugOutputAttr.trim()));
         }
 
         // Parse UI HTML outputs
