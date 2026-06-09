@@ -144,6 +144,24 @@ public class ModeParser {
         if (debugOutputAttr != null && debugOutputAttr.trim().length() > 0) {
             mode.setDebugOutput(Boolean.parseBoolean(debugOutputAttr.trim()));
         }
+        // Parse maxHistoryMessages attribute (default 30)
+        String maxHistoryMsgAttr = root.getAttribute("maxHistoryMessages");
+        if (maxHistoryMsgAttr != null && maxHistoryMsgAttr.trim().length() > 0) {
+            try {
+                mode.setMaxHistoryMessages(Integer.parseInt(maxHistoryMsgAttr.trim()));
+            } catch (NumberFormatException ex) {
+                LOGGER.warn("Invalid maxHistoryMessages attribute: {}", maxHistoryMsgAttr);
+            }
+        }
+        // Parse maxHistoryTokensK attribute (default 100, unit: K tokens)
+        String maxHistoryTokAttr = root.getAttribute("maxHistoryTokensK");
+        if (maxHistoryTokAttr != null && maxHistoryTokAttr.trim().length() > 0) {
+            try {
+                mode.setMaxHistoryTokensK(Integer.parseInt(maxHistoryTokAttr.trim()));
+            } catch (NumberFormatException ex) {
+                LOGGER.warn("Invalid maxHistoryTokensK attribute: {}", maxHistoryTokAttr);
+            }
+        }
 
         // Parse UI HTML outputs
         NodeList uiNodes = root.getElementsByTagName("ui");

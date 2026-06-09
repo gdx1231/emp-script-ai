@@ -659,19 +659,34 @@ public class ChatManagerBase {
 
 	/**
 	 * 添加历史消息到请求数据中
-	 * 
+	 *
 	 * @param reqData 请求数据对象
 	 * @param rv      请求值对象
 	 */
 	public void appendPreviousMessages(IRequestData reqData, Map<String, Boolean> existsMessages) throws Exception {
+		// 限制历史消息条数（使用 DTTable 分页，不依赖 SQL 方言）
+		int maxMsgCount = 30; // 默认值
+		if (this.mode != null) {
+			maxMsgCount = this.mode.getMaxHistoryMessages();
+		}
+
 		String existsSql = "select * from AI_CHAT_MSG where ai_id=@ai_id and AIM_ACTION is null \n"
 				+ " and AIM_ROLE in ('user', 'system', 'assistant') \n"
-				+ " and case when AIM_SKIP_APPEND is null then 0 else AIM_SKIP_APPEND end = 0 order by AIM_ID";
-		DTTable tbMsg = DTTable.getJdbcTable(existsSql, rv);
-		for (int i = 0; i < tbMsg.getCount(); i++) {
+				+ " and case when AIM_SKIP_APPEND is null then 0 else AIM_SKIP_APPEND end = 0 order by AIM_ID desc";
+		// 使用 DTTable 分页方法限制返回条数，兼容所有数据库
+		DTTable tbMsg = DTTable.getJdbcTable(existsSql, "AIM_ID", maxMsgCount, 1, "", rv);
+
+		if (tbMsg == null || !tbMsg.isOk()) {
+			// 查询失败或无数据，仅添加 API prompts
+			addApiPrompts(reqData, rv.getHttpHeaders());
+			return;
+		}
+
+		// 反转为正序（因为用了 ORDER BY AIM_ID desc）
+		List<org.json.JSONObject> msgList = new ArrayList<>();
+		for (int i = tbMsg.getCount() - 1; i >= 0; i--) {
 			String msg = tbMsg.getCell(i, "AIM_MSG").toString();
 			if (StringUtils.isBlank(msg)) {
-				// 消息为空则跳过
 				continue;
 			}
 			String role = tbMsg.getCell(i, "AIM_ROLE").toString();
@@ -680,9 +695,32 @@ public class ChatManagerBase {
 			String key = step + "|" + promptName;
 			existsMessages.put(key, true);
 
-			reqData.addMessage(msg, role);
+			org.json.JSONObject msgObj = new org.json.JSONObject();
+			msgObj.put("role", role);
+			msgObj.put("content", msg);
+			msgList.add(msgObj);
 		}
-		var apiPrompts = this.apiToolsChecks(rv.getHttpHeaders());
+
+		// Token 估算和截断
+		int maxTokens = 100000; // 默认值
+		if (this.mode != null) {
+			maxTokens = this.mode.getMaxHistoryTokens();
+		}
+		msgList = truncateByTokens(msgList, maxTokens);
+
+		// 添加到请求
+		for (org.json.JSONObject msgObj : msgList) {
+			reqData.addMessage(msgObj.getString("content"), msgObj.getString("role"));
+		}
+
+		addApiPrompts(reqData, rv.getHttpHeaders());
+	}
+
+	/**
+	 * 添加 API 工具检查提示
+	 */
+	private void addApiPrompts(IRequestData reqData, Map<String, String> refHeaders) throws Exception {
+		var apiPrompts = this.apiToolsChecks(refHeaders);
 		for (var p : apiPrompts) {
 			String role = p.getRole();
 			if (StringUtils.isBlank(role)) {
@@ -690,7 +728,6 @@ public class ChatManagerBase {
 			}
 			String promptContent = p.getContent();
 			if (StringUtils.isBlank(promptContent)) {
-				// 为空则跳过
 				continue;
 			}
 			if (!StringUtils.isBlank(p.getPrefix())) {
@@ -698,6 +735,59 @@ public class ChatManagerBase {
 			}
 			reqData.addMessage(promptContent, role);
 		}
+	}
+
+	/**
+	 * 估算文本的 token 数量
+	 * 中文/日文/韩文按 1.5 char/token，其他按 4 char/token 估算
+	 */
+	private int estimateTokens(String text) {
+		int cjk = 0, other = 0;
+		for (int i = 0; i < text.length(); i++) {
+			char c = text.charAt(i);
+			if (c >= 0x4E00 && c <= 0x9FFF) {
+				cjk++;
+			} else if (c >= 0xAC00 && c <= 0xD7A3) {
+				cjk++; // Korean
+			} else if (c >= 0x3040 && c <= 0x30FF) {
+				cjk++; // Japanese hiragana/katakana
+			} else {
+				other++;
+			}
+		}
+		return (cjk / 2) + (other / 4) + 1; // +1 避免为 0
+	}
+
+	/**
+	 * 根据 token 限制截断消息列表，从最早的消息开始删除
+	 */
+	private List<org.json.JSONObject> truncateByTokens(List<org.json.JSONObject> messages, int maxTokens) {
+		if (maxTokens <= 0) return messages;
+
+		int totalTokens = 0;
+		for (org.json.JSONObject msg : messages) {
+			totalTokens += estimateTokens(msg.optString("content", ""));
+		}
+
+		if (totalTokens <= maxTokens) {
+			return messages; // 未超限，无需截断
+		}
+
+		// 从最早的消息开始删除，直到低于限制
+		List<org.json.JSONObject> result = new ArrayList<>(messages);
+		int removed = 0;
+		while (totalTokens > maxTokens && result.size() > 1) {
+			String removedContent = result.get(0).optString("content", "");
+			totalTokens -= estimateTokens(removedContent);
+			result.remove(0);
+			removed++;
+		}
+
+		if (removed > 0) {
+			LOGGER.warn("History truncated: removed {} messages to stay under {} token limit", removed, maxTokens);
+		}
+
+		return result;
 	}
 
 	/**

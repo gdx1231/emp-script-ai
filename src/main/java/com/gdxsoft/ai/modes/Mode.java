@@ -45,6 +45,10 @@ public class Mode {
 	private List<ParamCheck> paramChecks;
 	// Debug output control: whether to show technical details like API calls
 	private boolean debugOutput = false; // default false, hide technical details from users
+	// Maximum number of history messages to include in each turn (default 30)
+	private int maxHistoryMessages = 30;
+	// Maximum total token count for history messages, in thousands (default 100 = 100K tokens)
+	private int maxHistoryTokensK = 100;
 
 	/**
 	 * 获取模式中的步骤
@@ -596,6 +600,38 @@ public class Mode {
 		this.debugOutput = debugOutput;
 	}
 
+	/**
+	 * 获取历史消息最大条数
+	 * @return maxHistoryMessages
+	 */
+	public int getMaxHistoryMessages() {
+		return maxHistoryMessages;
+	}
+
+	/**
+	 * 设置历史消息最大条数
+	 * @param maxHistoryMessages 最大条数
+	 */
+	public void setMaxHistoryMessages(int maxHistoryMessages) {
+		this.maxHistoryMessages = maxHistoryMessages;
+	}
+
+	/**
+	 * 获取历史消息最大 token 数（单位 K，返回值 = 原始值 * 1000）
+	 * @return maxHistoryTokensK * 1000
+	 */
+	public int getMaxHistoryTokens() {
+		return maxHistoryTokensK * 1000;
+	}
+
+	/**
+	 * 设置历史消息最大 token 数（单位 K）
+	 * @param maxHistoryTokensK 最大 token 数，单位 K
+	 */
+	public void setMaxHistoryTokensK(int maxHistoryTokensK) {
+		this.maxHistoryTokensK = maxHistoryTokensK;
+	}
+
 	public Action getAction(String actionName) {
 		if (actions == null)
 			return null;
@@ -716,6 +752,9 @@ public class Mode {
 		copy.setUiWelcome(this.uiWelcome);
 		copy.setUiComplete(this.uiComplete);
 		copy.setUiCompleteTest(this.uiCompleteTest);
+		copy.setDebugOutput(this.debugOutput);
+		copy.setMaxHistoryMessages(this.maxHistoryMessages);
+		copy.setMaxHistoryTokensK(this.maxHistoryTokensK);
 		if (this.paramChecks != null) {
 			List<ParamCheck> paramChecksCopy = new ArrayList<>();
 			for (ParamCheck pc : this.paramChecks) {
