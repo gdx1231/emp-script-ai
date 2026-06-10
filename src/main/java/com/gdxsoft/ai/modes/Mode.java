@@ -52,7 +52,7 @@ public class Mode {
 
 	/**
 	 * 获取模式中的步骤
-	 * 
+	 *
 	 * @param stepName
 	 * @return
 	 */
@@ -63,6 +63,34 @@ public class Mode {
 			}
 		}
 		return null;
+	}
+
+	/**
+	 * 从 AI_CHAT_PARAMS 表加载已保存的参数到 RequestValue 中
+	 * 用于 SQL 执行时的参数替换（如 @city_ids_split, @g_sup_id 等）
+	 */
+	private void loadParamsFromAiChatParams(RequestValue rv) {
+		String requestId = rv.s("request_id");
+		if (StringUtils.isBlank(requestId)) {
+			return;
+		}
+		try {
+			String sql = "SELECT AIP_NAME, AIP_VAL FROM AI_CHAT_PARAMS p "
+				+ "INNER JOIN AI_CHAT c ON p.AI_ID = c.AI_ID "
+				+ "WHERE c.AI_UID = @request_id "
+				+ "AND AIP_VAL IS NOT NULL AND AIP_VAL <> ''";
+			DTTable tb = DTTable.getJdbcTable(sql, rv);
+			for (int i = 0; i < tb.getCount(); i++) {
+				String name = tb.getCell(i, "AIP_NAME").toString();
+				String val = tb.getCell(i, "AIP_VAL").toString();
+				if (StringUtils.isNotBlank(name) && StringUtils.isNotBlank(val)) {
+					rv.addOrUpdateValue(name, val);
+				}
+			}
+		} catch (Exception e) {
+			// 参数表不存在或查询失败时静默忽略，不影响正常流程
+			LOGGER.debug("Failed to load params from AI_CHAT_PARAMS for request_id={}", requestId, e);
+		}
 	}
 
 	/**
@@ -176,6 +204,9 @@ public class Mode {
 		if (sqlQuery == null) {
 			throw new Exception("SQL query not found for reference: " + sqlRef);
 		}
+
+		// 从 AI_CHAT_PARAMS 加载已保存的参数到 rv（供 SQL 中使用）
+		loadParamsFromAiChatParams(rv);
 
 		String sql = sqlQuery.getContent();
 		DTTable tb = DTTable.getJdbcTable(sql, dbConfigName, rv);
@@ -694,6 +725,11 @@ public class Mode {
 				ns.setActionSqlRef(s.getActionSqlRef());
 				if (s.getApi() != null) {
 					ns.setApi(s.getApi());
+				}
+				ns.setInnerCall(s.isInnerCall());
+				ns.setMultiOnlyUserMsg(s.isMultiOnlyUserMsg());
+				if (s.getValidateParams() != null) {
+					ns.setValidateParams(s.getValidateParams());
 				}
 				stepsCopy.add(ns);
 			}

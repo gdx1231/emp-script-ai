@@ -1280,10 +1280,10 @@ public class ChatManagerBase {
 
 		StringBuilder sbIns = new StringBuilder();
 		sbIns.append("INSERT INTO AI_CHAT (\n");
-		sbIns.append("    AI_UID, AI_PROVIDER, AI_MODEL, AI_THINKING, AI_STREAM, AI_CUR_STEP\n");
+		sbIns.append("    AI_UID, AI_PID, AI_PROVIDER, AI_MODEL, AI_THINKING, AI_STREAM, AI_CUR_STEP\n");
 		sbIns.append("  , AI_MODE, AI_MAX_TOKEN, AI_CDATE, AI_MDATE, ADM_ID, USR_ID, SUP_ID\n");
 		sbIns.append(") VALUES(\n");
-		sbIns.append("    @request_id, @AI_PROVIDER, @AI_MODEL, " + (this.aiThinking ? 1 : 0) + ", "
+		sbIns.append("    @request_id, @p_ai_pid, @AI_PROVIDER, @AI_MODEL, " + (this.aiThinking ? 1 : 0) + ", "
 				+ (this.aiStream ? 1 : 0) + ", @AIM_STEP\n");
 		sbIns.append("  , @MODE, @AI_MAX_TOKEN, @sys_DATE, @sys_DATE, @g_ADM_ID, @G_WEB_USR_ID, @g_SUP_ID\n");
 		sbIns.append(")");
@@ -1312,14 +1312,19 @@ public class ChatManagerBase {
 	 * @return 消息ID
 	 */
 	public long addAiChatMsg(String msg, String role, boolean isSkipAppend) {
+		return addAiChatMsg(msg, role, isSkipAppend, false);
+	}
+
+	public long addAiChatMsg(String msg, String role, boolean isSkipAppend, boolean byUser) {
 		rv.addOrUpdateValue("AIM_MSG", msg);
 		rv.addOrUpdateValue("AIM_ROLE", role);
 		if (!"assistant".equals(role)) {
 			rv.addOrUpdateValue("AIM_TIME_END", new Date(), "date", 100);
 		}
+		rv.addOrUpdateValue("AIM_BY_USER", byUser ? 1 : 0);
 
-		String sql = "INSERT INTO AI_CHAT_MSG( AI_ID, AIM_MSG, AIM_ROLE, AIM_TIME_BEGIN, AIM_TIME_END, AIM_STEP, AIM_ACTION, AIM_ACTION_CLASS, AIM_PROMPT_NAME, AIM_SKIP_APPEND)"
-				+ " VALUES(@ai_id, @AIM_MSG, @AIM_ROLE, @sys_date, @AIM_TIME_END, @AIM_STEP, @AIM_ACTION, @AIM_ACTION_CLASS, @AIM_PROMPT_NAME, "
+		String sql = "INSERT INTO AI_CHAT_MSG( AI_ID, AIM_MSG, AIM_ROLE, AIM_BY_USER, AIM_TIME_BEGIN, AIM_TIME_END, AIM_STEP, AIM_ACTION, AIM_ACTION_CLASS, AIM_PROMPT_NAME, AIM_SKIP_APPEND)"
+				+ " VALUES(@ai_id, @AIM_MSG, @AIM_ROLE, @AIM_BY_USER, @sys_date, @AIM_TIME_END, @AIM_STEP, @AIM_ACTION, @AIM_ACTION_CLASS, @AIM_PROMPT_NAME, "
 				+ (isSkipAppend ? 1 : 0) + ")";
 
 		long aimId = DataConnection.insertAndReturnAutoIdLong(sql, dbConfigName, rv);
@@ -1382,6 +1387,142 @@ public class ChatManagerBase {
 
 	public String getPrompt() {
 		return prompt;
+	}
+
+	/**
+	 * 处理 innerCall 步骤：内部调用，输出不返回给用户
+	 * 使用现有的 apisCheck 机制调用 API（通过 UNet），AI 响应直接返回
+	 * @return AI 返回的内容，如果无 innerCall 步骤或失败返回 null
+	 */
+	public String processInnerCallStep(Step innerStep) {
+		if (innerStep == null || innerStep.getPrompts() == null || innerStep.getPrompts().isEmpty()) {
+			return null;
+		}
+		// 保存当前步骤、输出事件和 AI_ID
+		Step prevStep = this.step;
+		String prevStepName = this.stepName;
+		IOutEvents prevOutEvents = this.outEvents;
+		long parentAiId = this.aiId; // 记录父级 AI_ID
+
+		try {
+			// 设置 innerCall 步骤
+			this.step = innerStep;
+			this.stepName = innerStep.getName();
+			this.rv.addOrUpdateValue("AIM_STEP", this.stepName);
+
+			// 设置父级 AI_PID，让子 chat 关联到父 chat
+			this.rv.addOrUpdateValue("p_ai_pid", parentAiId);
+
+			// 捕获输出（不写到 response）
+			final StringBuilder capturedOutput = new StringBuilder();
+			this.outEvents = new com.gdxsoft.ai.request.IOutEvents() {
+				private int messageCount = 0;
+				@Override public void outEvent(String msg, java.io.PrintWriter w) { capturedOutput.append(msg).append("\n"); }
+				@Override public int getMessageCount() { return messageCount; }
+				@Override public void setMessageCount(int c) { this.messageCount = c; }
+				@Override public String getLine() { return null; }
+				@Override public void setLine(String l) {}
+				@Override public org.json.JSONObject getContenJson() { return null; }
+				@Override public void setContenJson(org.json.JSONObject j) {}
+				@Override public String getName() { return null; }
+				@Override public void setName(String n) {}
+				@Override public String getLang() { return "zhcn"; }
+				@Override public void setLang(String l) {}
+			};
+
+			// 创建新的 AI 会话记录 innerCall（AI_PID 会自动关联到父 chat）
+			getOrNewAiChat();
+
+			// 准备请求数据（会调用 apiToolsChecks 和 appendPrompts）
+			boolean settingStream = this.isAiStream();
+			// innerCall 步骤默认不使用流式输出，避免干扰父级响应
+			this.setAiStream(false);
+			IRequestData reqData = createRequestData();
+			this.setAiStream(settingStream);
+			
+			appendPrompts(reqData);
+			reqData.userMessage(this.prompt);
+			addAiChatMsg(this.prompt, "user", false, true);
+
+			// 调用 AI
+			IRequestAI req = createRequestAI();
+			
+			String fullText = req.doPost(reqData);
+			JSONObject json = req.extraceJson(fullText, true);
+			String content = json != null && json.has("content") ? json.getString("content") : fullText;
+
+			// 记录 AI 响应
+			addAiChatMsg(content, "assistant", true);
+
+			return content;
+		} catch (Exception e) {
+			System.out.println("processInnerCallStep 失败: " + e.getMessage());
+			e.printStackTrace();
+			return null;
+		} finally {
+			// 恢复原步骤和输出事件
+			this.step = prevStep;
+			this.stepName = prevStepName;
+			this.rv.addOrUpdateValue("AIM_STEP", this.stepName);
+			this.outEvents = prevOutEvents;
+		}
+	}
+
+	public String getResolvedPrompt() {
+		if (prompt == null) return null;
+		if (step == null || !step.isMultiOnlyUserMsg()) {
+			return prompt;
+		}
+		// 通过 AI_PID 找到父 chat，然后提取所有相关 chat 的用户消息
+		try {
+			String sql = "select AI_PID from AI_CHAT where AI_ID=" + this.aiId;
+			com.gdxsoft.easyweb.data.DTTable pidTb = com.gdxsoft.easyweb.data.DTTable.getJdbcTable(sql, dbConfigName, rv);
+			if (pidTb.getCount() == 0) return prompt;
+			Object pidObj = pidTb.getCell(0, "AI_PID");
+			if (pidObj == null) return prompt;
+			long parentAiId = 0;
+			try {
+				parentAiId = ((Number) pidObj).longValue();
+			} catch (Exception e) {
+				return prompt;
+			}
+			if (parentAiId <= 0) return prompt;
+
+			// 提取父 chat 和所有子 chat 中 AIM_BY_USER=1 的用户消息
+			String msgSql = "select AIM_MSG from AI_CHAT_MSG m "
+				+ "where m.AIM_BY_USER = 1 and m.AIM_ROLE = 'user' "
+				+ "and m.AI_ID in ("
+				+ "  select AI_ID from AI_CHAT where AI_ID = " + parentAiId + " or AI_PID = " + parentAiId
+				+ ") order by m.AIM_ID";
+			com.gdxsoft.easyweb.data.DTTable msgTb = com.gdxsoft.easyweb.data.DTTable.getJdbcTable(msgSql, dbConfigName, rv);
+			if (msgTb.getCount() == 0) return prompt;
+
+			StringBuilder sb = new StringBuilder();
+			sb.append("【历史对话】\n");
+			String lastMsg = null;
+			int roundNum = 0;
+			for (int i = 0; i < msgTb.getCount(); i++) {
+				String msg = msgTb.getCell(i, "AIM_MSG").toString();
+				// 从消息中提取【当前输入】部分（去除嵌套的历史对话）
+				String actualInput = msg;
+				int idx = msg.indexOf("【当前输入】");
+				if (idx >= 0) {
+					actualInput = msg.substring(idx + 6).trim();
+				}
+				// 去重
+				if (actualInput.equals(lastMsg)) {
+					continue;
+				}
+				roundNum++;
+				sb.append("第").append(roundNum).append("轮用户输入：").append(actualInput).append("\n");
+				lastMsg = actualInput;
+			}
+			sb.append("【当前输入】\n").append(prompt);
+			return sb.toString();
+		} catch (Exception e) {
+			System.out.println("getResolvedPrompt 失败: " + e.getMessage());
+			return prompt;
+		}
 	}
 
 	public void setPrompt(String prompt) {

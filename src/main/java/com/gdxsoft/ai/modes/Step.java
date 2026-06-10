@@ -20,6 +20,12 @@ public class Step {
     private boolean stream = true;
     // optional SQL reference name for action
     private String actionSqlRef;
+    // whether this step is an internal call (not displayed to user), default false
+    private boolean innerCall = false;
+    // whether to extract only user messages from parent chat for multi-turn conversations
+    private boolean multiOnlyUserMsg = false;
+    // comma-separated required parameter names for validation (e.g., "people_num,departure_date")
+    private String validateParams;
 
     /** Create a step without action. */
     public Step(String name, String description, List<Prompt> prompts) {
@@ -117,5 +123,53 @@ public class Step {
 
     public void setActionSqlRef(String actionSqlRef) {
         this.actionSqlRef = actionSqlRef;
+    }
+
+    /**
+     * 是否为内部调用（不向用户展示）
+     * @return innerCall
+     */
+    public boolean isInnerCall() {
+        return innerCall;
+    }
+
+    /**
+     * 设置是否为内部调用
+     * @param innerCall true=内部调用
+     */
+    public void setInnerCall(boolean innerCall) {
+        this.innerCall = innerCall;
+    }
+
+    /**
+     * 是否仅提取父级 chat 中的用户消息
+     * @return multiOnlyUserMsg
+     */
+    public boolean isMultiOnlyUserMsg() {
+        return multiOnlyUserMsg;
+    }
+
+    /**
+     * 设置是否仅提取父级 chat 用户消息
+     * @param multiOnlyUserMsg true=仅提取用户消息
+     */
+    public void setMultiOnlyUserMsg(boolean multiOnlyUserMsg) {
+        this.multiOnlyUserMsg = multiOnlyUserMsg;
+    }
+
+    /**
+     * 获取校验参数列表（逗号分隔）
+     * @return validateParams
+     */
+    public String getValidateParams() {
+        return validateParams;
+    }
+
+    /**
+     * 设置校验参数列表
+     * @param validateParams 逗号分隔的必填参数名
+     */
+    public void setValidateParams(String validateParams) {
+        this.validateParams = validateParams;
     }
 }
