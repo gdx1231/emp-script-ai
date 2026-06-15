@@ -139,6 +139,88 @@ public class AiStreamOrPost {
 		return true;
 	}
 
+	private String handleInnerCallResult(String innerCallResult) {
+		org.json.JSONObject innerJson = new org.json.JSONObject(innerCallResult);
+		return innerJson.toString();
+//		// 优先信任 AI 的明确判断：如果返回了 message 字段
+//		if (innerJson.has("message")) {
+//			if (!innerJson.optBoolean("RST")) {
+//				// AI 明确判断参数不完整或不是旅游请求
+//				String message = innerJson.optString("message", "");
+//				if (!message.isEmpty()) {
+//					chatManager.outEvent(message);
+//					return message;
+//				}
+//			} else {
+//				// AI 认为参数完整，用 validateParams 兜底检查
+//				String missing = checkMissingParams(innerJson, chatManager.getMode());
+//				if (!missing.isEmpty()) {
+//					String msg = "请确认：" + missing + "？";
+//					chatManager.outEvent(msg);
+//					return msg;
+//				}
+//				// 参数确实完整，提取并保存
+//			}
+//		} else {
+//			// AI 返回格式不对（可能是工具原始结果），用 validateParams 检查
+//			String missing = checkMissingParams(innerJson, chatManager.getMode());
+//			if (!missing.isEmpty()) {
+//				String msg = "请确认：" + missing + "？";
+//				chatManager.outEvent(msg);
+//				return msg;
+//			}
+//		}
+//
+//		// 参数校验通过，提取 params 并注入到 RequestValue 供后续 step 使用
+//		// 可能嵌套在 "params" 中，也可能是顶层字段（工具原始结果）
+//		org.json.JSONObject paramsObj = null;
+//		if (innerJson.has("params") && innerJson.getJSONObject("params").length() > 0) {
+//			paramsObj = innerJson.getJSONObject("params");
+//		} else if (innerJson.has("people") || innerJson.has("departure_date") || innerJson.has("cities")) {
+//			// 工具原始结果，直接用顶层对象
+//			paramsObj = innerJson;
+//		}
+//
+//		if (paramsObj != null) {
+//			// 提取顶层键值对
+//			for (String key : paramsObj.keySet()) {
+//				String val = paramsObj.optString(key, "");
+//				if (val != null && !val.isEmpty()) {
+//					chatManager.getRv().addOrUpdateValue(key, val);
+//				}
+//			}
+//			// 提取嵌套的 "people" 对象
+//			if (paramsObj.has("people")) {
+//				org.json.JSONObject people = paramsObj.optJSONObject("people");
+//				if (people != null) {
+//					for (String key : people.keySet()) {
+//						String val = people.optString(key, "");
+//						if (val != null && !val.isEmpty()) {
+//							chatManager.getRv().addOrUpdateValue(key, val);
+//						}
+//					}
+//				}
+//			}
+//			// 保存参数到 AI_CHAT_PARAMS 表，供后续轮次的 checkparamsapi 读取
+//			try {
+//				long aiId = chatManager.getAiId();
+//				if (aiId > 0) {
+//					for (String saveKey : paramsObj.keySet()) {
+//						String saveVal = paramsObj.optString(saveKey, "");
+//						if (saveVal != null && !saveVal.isEmpty() && !saveVal.startsWith("{")) {
+//							String sql = "insert into AI_CHAT_PARAMS (AI_ID, AIM_ID, AIP_NAME, AIP_VAL, AIP_TYPE) "
+//									+ "values (" + aiId + ", 0, '" + saveKey.replace("'", "''") + "', '"
+//									+ saveVal.replace("'", "''") + "', 'validate')";
+//							com.gdxsoft.easyweb.data.DTTable.getJdbcTable(sql, chatManager.getRv());
+//						}
+//					}
+//				}
+//			} catch (Exception saveEx) {
+//				System.out.println("保存 innerCall 参数到 AI_CHAT_PARAMS 失败: " + saveEx.getMessage());
+//			}
+//		}
+	}
+
 	/**
 	 * 处理AI流式请求
 	 */
@@ -148,88 +230,8 @@ public class AiStreamOrPost {
 			// 处理 innerCall 步骤（如果有）
 			String innerCallResult = processInnerCallIfAny();
 			if (innerCallResult != null) {
-				try {
-					org.json.JSONObject innerJson = new org.json.JSONObject(innerCallResult);
-
-					// 优先信任 AI 的明确判断：如果返回了 message 字段
-					if (innerJson.has("message")) {
-						if (!innerJson.optBoolean("RST")) {
-							// AI 明确判断参数不完整或不是旅游请求
-							String message = innerJson.optString("message", "");
-							if (!message.isEmpty()) {
-								chatManager.outEvent(message);
-								return message;
-							}
-						} else {
-							// AI 认为参数完整，用 validateParams 兜底检查
-							String missing = checkMissingParams(innerJson, chatManager.getMode());
-							if (!missing.isEmpty()) {
-								String msg = "请确认：" + missing + "？";
-								chatManager.outEvent(msg);
-								return msg;
-							}
-							// 参数确实完整，提取并保存
-						}
-					} else {
-						// AI 返回格式不对（可能是工具原始结果），用 validateParams 检查
-						String missing = checkMissingParams(innerJson, chatManager.getMode());
-						if (!missing.isEmpty()) {
-							String msg = "请确认：" + missing + "？";
-							chatManager.outEvent(msg);
-							return msg;
-						}
-					}
-
-					// 参数校验通过，提取 params 并注入到 RequestValue 供后续 step 使用
-					// 可能嵌套在 "params" 中，也可能是顶层字段（工具原始结果）
-					org.json.JSONObject paramsObj = null;
-					if (innerJson.has("params") && innerJson.getJSONObject("params").length() > 0) {
-						paramsObj = innerJson.getJSONObject("params");
-					} else if (innerJson.has("people") || innerJson.has("departure_date") || innerJson.has("cities")) {
-						// 工具原始结果，直接用顶层对象
-						paramsObj = innerJson;
-					}
-
-						if (paramsObj != null) {
-							// 提取顶层键值对
-							for (String key : paramsObj.keySet()) {
-								String val = paramsObj.optString(key, "");
-								if (val != null && !val.isEmpty()) {
-									chatManager.getRv().addOrUpdateValue(key, val);
-								}
-							}
-							// 提取嵌套的 "people" 对象
-							if (paramsObj.has("people")) {
-								org.json.JSONObject people = paramsObj.optJSONObject("people");
-								if (people != null) {
-									for (String key : people.keySet()) {
-										String val = people.optString(key, "");
-										if (val != null && !val.isEmpty()) {
-											chatManager.getRv().addOrUpdateValue(key, val);
-										}
-									}
-								}
-							}
-							// 保存参数到 AI_CHAT_PARAMS 表，供后续轮次的 checkparamsapi 读取
-							try {
-								long aiId = chatManager.getAiId();
-								if (aiId > 0) {
-									for (String saveKey : paramsObj.keySet()) {
-										String saveVal = paramsObj.optString(saveKey, "");
-										if (saveVal != null && !saveVal.isEmpty() && !saveVal.startsWith("{")) {
-											String sql = "insert into AI_CHAT_PARAMS (AI_ID, AIM_ID, AIP_NAME, AIP_VAL, AIP_TYPE) "
-												+ "values (" + aiId + ", 0, '" + saveKey.replace("'", "''") + "', '" + saveVal.replace("'", "''") + "', 'validate')";
-											com.gdxsoft.easyweb.data.DTTable.getJdbcTable(sql, chatManager.getRv());
-										}
-									}
-								}
-							} catch (Exception saveEx) {
-								System.out.println("保存 innerCall 参数到 AI_CHAT_PARAMS 失败: " + saveEx.getMessage());
-							}
-						}
-				} catch (Exception e) {
-					// 不是 JSON，忽略
-				}
+				LOGGER.info("Inner call result: {}", innerCallResult);
+				handleInnerCallResult(innerCallResult);
 			}
 
 			// 处理无提示词的情况
@@ -242,7 +244,9 @@ public class AiStreamOrPost {
 			if (reqData == null) {
 				return null;
 			}
-
+			if (innerCallResult != null) {
+				reqData.assistantMessage(innerCallResult);
+			}
 			// 执行AI请求并处理结果
 			String fullText = executeAiRequest(reqData);
 			return fullText;
@@ -269,8 +273,8 @@ public class AiStreamOrPost {
 	}
 
 	/**
-	 * 处理 innerCall 步骤（如果有）
-	 * 查找 mode 中标记为 innerCall=true 的步骤，在正常流程前内部执行
+	 * 处理 innerCall 步骤（如果有） 查找 mode 中标记为 innerCall=true 的步骤，在正常流程前内部执行
+	 * 
 	 * @return innerCall 步骤的 AI 返回内容，如果没有 innerCall 步骤返回 null
 	 */
 	private String processInnerCallIfAny() {
@@ -292,12 +296,14 @@ public class AiStreamOrPost {
 
 	/**
 	 * 检查 innerCall 返回结果中是否缺少必填参数
+	 * 
 	 * @param result innerCall AI 返回的 JSON
-	 * @param mode 当前模式
+	 * @param mode   当前模式
 	 * @return 缺失参数的中文描述，空字符串表示无缺失，null 表示所有参数都缺失（可能不是旅游请求）
 	 */
 	private String checkMissingParams(JSONObject result, com.gdxsoft.ai.modes.Mode mode) {
-		if (mode == null || mode.getSteps() == null) return "";
+		if (mode == null || mode.getSteps() == null)
+			return "";
 
 		// 查找 innerCall step 的 validateParams（逗号分隔的 paramCheck name 列表）
 		String validateParams = null;
@@ -307,7 +313,8 @@ public class AiStreamOrPost {
 				break;
 			}
 		}
-		if (validateParams == null || validateParams.isEmpty()) return "";
+		if (validateParams == null || validateParams.isEmpty())
+			return "";
 
 		// 从 mode.getParamChecks() 构建 param -> des 映射
 		java.util.Map<String, String> paramLabels = new java.util.LinkedHashMap<>();
@@ -324,7 +331,8 @@ public class AiStreamOrPost {
 		String[] defs = validateParams.split(",");
 		for (String def : defs) {
 			String name = def.trim();
-			if (!name.isEmpty()) paramNames.add(name);
+			if (!name.isEmpty())
+				paramNames.add(name);
 		}
 
 		// 检查每个参数是否有值
@@ -376,7 +384,8 @@ public class AiStreamOrPost {
 			if (!hasValue) {
 				missingCount++;
 				String label = paramLabels.getOrDefault(param, param);
-				if (missing.length() > 0) missing.append("和");
+				if (missing.length() > 0)
+					missing.append("和");
 				missing.append(label);
 			}
 		}
@@ -558,8 +567,7 @@ public class AiStreamOrPost {
 	}
 
 	/**
-	 * 提取并保存用户请求中的参数
-	 * 从对话上下文中提取结构化参数（出发城市、目的地、天数等）并保存到数据库
+	 * 提取并保存用户请求中的参数 从对话上下文中提取结构化参数（出发城市、目的地、天数等）并保存到数据库
 	 */
 	private void extractAndSaveInputParams() {
 		try {
@@ -643,8 +651,7 @@ public class AiStreamOrPost {
 	}
 
 	/**
-	 * 评估 UI 测试表达式。
-	 * 使用 EWA 框架的 ULogic.runLogic() 通过 HSQLDB 执行 SQL 逻辑表达式。
+	 * 评估 UI 测试表达式。 使用 EWA 框架的 ULogic.runLogic() 通过 HSQLDB 执行 SQL 逻辑表达式。
 	 * <p>
 	 * 表达式使用 SQL 语法，{@code @fullText} 会被替换为 AI 响应文本。例如：
 	 * <ul>

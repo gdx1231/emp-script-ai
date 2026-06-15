@@ -1476,25 +1476,21 @@ public class ChatManagerBase {
 		// 通过 AI_PID 找到父 chat，然后提取所有相关 chat 的用户消息
 		try {
 			String sql = "select AI_PID from AI_CHAT where AI_ID=" + this.aiId;
-			com.gdxsoft.easyweb.data.DTTable pidTb = com.gdxsoft.easyweb.data.DTTable.getJdbcTable(sql, dbConfigName, rv);
+			DTTable pidTb = DTTable.getJdbcTable(sql, dbConfigName, rv);
 			if (pidTb.getCount() == 0) return prompt;
-			Object pidObj = pidTb.getCell(0, "AI_PID");
+			Double pidObj = pidTb.getCell(0, "AI_PID").toDouble();
 			if (pidObj == null) return prompt;
-			long parentAiId = 0;
-			try {
-				parentAiId = ((Number) pidObj).longValue();
-			} catch (Exception e) {
-				return prompt;
-			}
+			long parentAiId = pidObj.longValue();
+			 
 			if (parentAiId <= 0) return prompt;
 
 			// 提取父 chat 和所有子 chat 中 AIM_BY_USER=1 的用户消息
 			String msgSql = "select AIM_MSG from AI_CHAT_MSG m "
 				+ "where m.AIM_BY_USER = 1 and m.AIM_ROLE = 'user' "
 				+ "and m.AI_ID in ("
-				+ "  select AI_ID from AI_CHAT where AI_ID = " + parentAiId + " or AI_PID = " + parentAiId
+				+ "  select AI_ID from AI_CHAT where AI_PID = " + parentAiId
 				+ ") order by m.AIM_ID";
-			com.gdxsoft.easyweb.data.DTTable msgTb = com.gdxsoft.easyweb.data.DTTable.getJdbcTable(msgSql, dbConfigName, rv);
+			DTTable msgTb = DTTable.getJdbcTable(msgSql, dbConfigName, rv);
 			if (msgTb.getCount() == 0) return prompt;
 
 			StringBuilder sb = new StringBuilder();
@@ -1504,8 +1500,9 @@ public class ChatManagerBase {
 			for (int i = 0; i < msgTb.getCount(); i++) {
 				String msg = msgTb.getCell(i, "AIM_MSG").toString();
 				// 从消息中提取【当前输入】部分（去除嵌套的历史对话）
+				// 使用 lastIndexOf 找到最后一个【当前输入】，避免嵌套问题
 				String actualInput = msg;
-				int idx = msg.indexOf("【当前输入】");
+				int idx = msg.lastIndexOf("【当前输入】");
 				if (idx >= 0) {
 					actualInput = msg.substring(idx + 6).trim();
 				}

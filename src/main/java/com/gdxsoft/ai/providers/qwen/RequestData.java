@@ -18,13 +18,22 @@ public class RequestData extends RequestDataBase {
 
 	/**
 	 * 设置模型是否为深度思考
-	 * 
+	 * Qwen API 要求 thinking 参数为对象格式，非布尔值
+	 * 启用: {"thinking": {"type": "enabled"}}
+	 * 禁用: 不包含此字段
+	 *
 	 * @param thinking
 	 * @return
 	 */
 	@Override
 	public RequestData thinking(boolean thinking) {
-		parameters.put("thinking", thinking);
+		if (thinking) {
+			JSONObject thinkingObj = new JSONObject();
+			thinkingObj.put("type", "enabled");
+			parameters.put("thinking", thinkingObj);
+		} else {
+			parameters.remove("thinking");
+		}
 		return this;
 	}
 
