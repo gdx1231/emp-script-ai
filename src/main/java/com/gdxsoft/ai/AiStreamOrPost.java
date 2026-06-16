@@ -287,7 +287,7 @@ public class AiStreamOrPost {
 		}
 		for (com.gdxsoft.ai.modes.Step s : mode.getSteps()) {
 			if (s.isInnerCall() && s.getPrompts() != null && !s.getPrompts().isEmpty()) {
-				System.out.println("AiStreamOrPost 执行 innerCall 步骤: " + s.getName());
+				LOGGER.info("AiStreamOrPost executing innerCall step: {}", s.getName());
 				return chatManager.processInnerCallStep(s);
 			}
 		}

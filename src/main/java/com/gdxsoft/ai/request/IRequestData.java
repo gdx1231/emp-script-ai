@@ -98,4 +98,99 @@ public interface IRequestData {
 	IRequestData responseFormat(String format);
 
 	String getResponseFormat();
+
+	// ==================== 以下方法为 1.1.0 新增，使用 default 实现，不破坏现有代码 ====================
+
+	/**
+	 * 设置工具列表。AI 模型可以根据需要调用这些工具。
+	 * <p>
+	 * 默认实现不做任何处理（保持向后兼容）。子类应覆写此方法以支持 tool calling。
+	 *
+	 * @param tools 工具定义数组
+	 * @return this
+	 */
+	default IRequestData tools(AiTool... tools) {
+		// 默认空实现，子类覆写以支持 tool calling
+		return this;
+	}
+
+	/**
+	 * 设置工具选择模式。
+	 * <ul>
+	 *   <li>{@code "auto"} — AI 自动决定是否调用工具（默认）</li>
+	 *   <li>{@code "required"} — AI 必须调用至少一个工具</li>
+	 *   <li>{@code "none"} — AI 不调用任何工具</li>
+	 * </ul>
+	 * <p>
+	 * 默认实现不做任何处理。子类应覆写此方法。
+	 *
+	 * @param toolChoice 工具选择模式
+	 * @return this
+	 */
+	default IRequestData toolChoice(String toolChoice) {
+		// 默认空实现
+		return this;
+	}
+
+	/**
+	 * 添加工具调用结果消息（tool 角色）。
+	 * <p>
+	 * 当 AI 模型请求调用工具后，将工具执行结果回传给模型。
+	 * 默认实现将内容作为普通 user 消息添加（降级兼容）。
+	 * 子类应覆写此方法以正确处理 tool 角色。
+	 *
+	 * @param toolCallId 工具调用 ID（对应 AI 返回的 tool_call id）
+	 * @param content    工具执行结果
+	 * @return this
+	 */
+	default IRequestData addToolResult(String toolCallId, String content) {
+		// 默认降级实现：作为普通消息添加
+		return this.addMessage(content, "user");
+	}
+
+	/**
+	 * 添加用户多部分消息（文本 + 图片/音频/视频等）。
+	 * <p>
+	 * 默认实现将所有内容合并为纯文本（降级兼容）。
+	 * 子类应覆写此方法以支持真正的多模态消息。
+	 *
+	 * @param contents 内容片段数组
+	 * @return this
+	 */
+	default IRequestData addUserMultiPart(AiContent... contents) {
+		// 默认降级实现：合并为纯文本
+		StringBuilder sb = new StringBuilder();
+		for (AiContent c : contents) {
+			if (c instanceof AiTextContent) {
+				sb.append(((AiTextContent) c).getText());
+			} else if (c instanceof AiImageContent) {
+				AiImageContent img = (AiImageContent) c;
+				if (img.isUrlMode()) {
+					sb.append("[图片: ").append(img.getUrl()).append("]");
+				} else {
+					sb.append("[图片: base64 ").append(img.getMimeType()).append("]");
+				}
+			} else if (c instanceof AiAudioContent) {
+				AiAudioContent audio = (AiAudioContent) c;
+				if (audio.isUrlMode()) {
+					sb.append("[音频: ").append(audio.getUrl()).append("]");
+				} else {
+					sb.append("[音频: base64 ").append(audio.getMimeType()).append("]");
+				}
+			} else if (c instanceof AiVideoContent) {
+				AiVideoContent video = (AiVideoContent) c;
+				if (video.isUrlMode()) {
+					sb.append("[视频: ").append(video.getUrl()).append("]");
+				} else {
+					sb.append("[视频: base64]");
+				}
+			} else if (c instanceof AiToolResult) {
+				AiToolResult tr = (AiToolResult) c;
+				sb.append("[工具结果: ").append(tr.getToolCallId()).append("] ").append(tr.getContent());
+			} else {
+				sb.append(c.toString());
+			}
+		}
+		return this.addMessage(sb.toString(), "user");
+	}
 }

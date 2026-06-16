@@ -106,21 +106,18 @@ public class RequestAI extends RequestAIBase {
 					existingUsage.put("reasoning_tokens",
 							existingUsage.optInt("reasoning_tokens", 0) + thoughtsTokenCount);
 					existingUsage.put("total_tokens", existingUsage.optInt("total_tokens", 0) + totalTokenCount);
-					
-					System.out.println("Gemini usage: " + existingUsage.toString(2));
 				} else {
 					JSONObject usageOpenAi = new JSONObject();
 					usageOpenAi.put("completion_tokens", candidatesTokenCount + thoughtsTokenCount);
 					usageOpenAi.put("prompt_tokens", promptTokenCount);
 					usageOpenAi.put("total_tokens", totalTokenCount);
 					/*
-					 * OpenAI 的 reasoning_tokens 更侧重于“隐藏”推理（不返回思考内容），适用于 o1 等模型的“黑箱”优化。 Gemini 的
+					 * OpenAI 的 reasoning_tokens 更侧重于"隐藏"推理（不返回思考内容），适用于 o1 等模型的"黑箱"优化。 Gemini 的
 					 * thoughtsTokenCount 更透明，可返回思考摘要（summaries）或签名（signatures）以维护多轮上下文。 OpenAI 标准
 					 * API 无此字段；需使用特定模型或 Azure 变体。Gemini 在 2.5 系列中更普遍。
 					 */
 					usageOpenAi.put("reasoning_tokens", thoughtsTokenCount);
 					UJSon.rstSetTrue(usageOpenAi, null);
-					System.out.println("Gemini usage: " + usageOpenAi.toString(2));
 					super.setTokensUsage(usageOpenAi);
 				}
 			}

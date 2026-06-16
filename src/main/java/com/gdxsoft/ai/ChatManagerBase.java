@@ -910,7 +910,7 @@ public class ChatManagerBase {
 
 		JSONObject rst = UJSon.rstTrue();
 		rst.put("api_url", this.apiUrl);
-		rst.put("api_key", this.apiKey);
+		rst.put("api_key", maskApiKey(this.apiKey));
 		rst.put("ai_provider", aiProvider);
 		rst.put("ai_model", aiModel);
 		rst.put("ai_thinking", this.aiThinking);
@@ -949,7 +949,8 @@ public class ChatManagerBase {
 
 		Map<String, String> savedParams = new HashMap<>();
 		try {
-			String sql = "SELECT AIP_NAME, AIP_VAL FROM AI_CHAT_PARAMS WHERE AI_ID = " + this.aiId;
+			rv.addOrUpdateValue("ai_id", this.aiId, "bigint", 100);
+			String sql = "SELECT AIP_NAME, AIP_VAL FROM AI_CHAT_PARAMS WHERE AI_ID = @ai_id";
 			DTTable tb = DTTable.getJdbcTable(sql, dbConfigName, rv);
 			for (int i = 0; i < tb.getCount(); i++) {
 				String name = tb.getCell(i, "AIP_NAME").toString();
@@ -1048,9 +1049,10 @@ public class ChatManagerBase {
 
 	private String loadConversationContext() {
 		try {
+			rv.addOrUpdateValue("ai_id", this.aiId, "bigint", 100);
 			String sql = "select top 30 AIM_ROLE, AIM_MSG from AI_CHAT_MSG m "
 					+ "inner join AI_CHAT c on m.AI_ID = c.AI_ID "
-					+ "where c.AI_ID = " + this.aiId + " "
+					+ "where c.AI_ID = @ai_id "
 					+ "and isnull(m.AIM_SKIP_APPEND, 0) = 0 "
 					+ "order by m.AIM_ID desc";
 			DTTable tb = DTTable.getJdbcTable(sql, dbConfigName, rv);
@@ -1150,7 +1152,8 @@ public class ChatManagerBase {
 		cnn.transBegin();
 
 		try {
-			cnn.executeUpdate("DELETE FROM AI_CHAT_PARAMS WHERE AI_ID=" + this.aiId);
+			rv.addOrUpdateValue("ai_id", this.aiId, "bigint", 100);
+			cnn.executeUpdate("DELETE FROM AI_CHAT_PARAMS WHERE AI_ID=@ai_id");
 
 			for (ParamCheck pc : paramChecks) {
 				String name = pc.getName();
@@ -1191,7 +1194,8 @@ public class ChatManagerBase {
 
 	private long getLastAimId() {
 		try {
-			String sql = "select isnull(max(AIM_ID), 0) as LAST_AIM_ID from AI_CHAT_MSG where AI_ID = " + this.aiId;
+			rv.addOrUpdateValue("ai_id", this.aiId, "bigint", 100);
+			String sql = "select isnull(max(AIM_ID), 0) as LAST_AIM_ID from AI_CHAT_MSG where AI_ID = @ai_id";
 			DTTable tb = DTTable.getJdbcTable(sql, dbConfigName, rv);
 			if (tb.getCount() > 0) {
 				return tb.getCell(0, "LAST_AIM_ID").toLong();
@@ -1456,8 +1460,7 @@ public class ChatManagerBase {
 
 			return content;
 		} catch (Exception e) {
-			System.out.println("processInnerCallStep 失败: " + e.getMessage());
-			e.printStackTrace();
+			LOGGER.error("processInnerCallStep failed for step: {}", innerStep != null ? innerStep.getName() : "null", e);
 			return null;
 		} finally {
 			// 恢复原步骤和输出事件
@@ -1475,20 +1478,22 @@ public class ChatManagerBase {
 		}
 		// 通过 AI_PID 找到父 chat，然后提取所有相关 chat 的用户消息
 		try {
-			String sql = "select AI_PID from AI_CHAT where AI_ID=" + this.aiId;
+			rv.addOrUpdateValue("ai_id", this.aiId, "bigint", 100);
+			String sql = "select AI_PID from AI_CHAT where AI_ID=@ai_id";
 			DTTable pidTb = DTTable.getJdbcTable(sql, dbConfigName, rv);
 			if (pidTb.getCount() == 0) return prompt;
 			Double pidObj = pidTb.getCell(0, "AI_PID").toDouble();
 			if (pidObj == null) return prompt;
 			long parentAiId = pidObj.longValue();
-			 
+
 			if (parentAiId <= 0) return prompt;
 
 			// 提取父 chat 和所有子 chat 中 AIM_BY_USER=1 的用户消息
+			rv.addOrUpdateValue("parent_ai_id", parentAiId, "bigint", 100);
 			String msgSql = "select AIM_MSG from AI_CHAT_MSG m "
 				+ "where m.AIM_BY_USER = 1 and m.AIM_ROLE = 'user' "
 				+ "and m.AI_ID in ("
-				+ "  select AI_ID from AI_CHAT where AI_PID = " + parentAiId
+				+ "  select AI_ID from AI_CHAT where AI_PID = @parent_ai_id"
 				+ ") order by m.AIM_ID";
 			DTTable msgTb = DTTable.getJdbcTable(msgSql, dbConfigName, rv);
 			if (msgTb.getCount() == 0) return prompt;
@@ -1517,7 +1522,7 @@ public class ChatManagerBase {
 			sb.append("【当前输入】\n").append(prompt);
 			return sb.toString();
 		} catch (Exception e) {
-			System.out.println("getResolvedPrompt 失败: " + e.getMessage());
+			LOGGER.error("getResolvedPrompt failed for aiId={}", this.aiId, e);
 			return prompt;
 		}
 	}
@@ -1604,13 +1609,248 @@ public class ChatManagerBase {
 
 	/**
 	 * 获取国际化文本
-	 * 
+	 *
 	 * @param key  文本键（使用ChatManagerI18nConstants中定义的常量）
 	 * @param args 格式化参数
 	 * @return 根据语言设置返回对应文本
 	 */
 	private String getText(String key, Object... args) {
 		return ChatManagerI18nConstants.getText(key, this.en, args);
+	}
+
+	/**
+	 * 直接调用 AI 并返回结果（非流式、同步调用）。
+	 * <p>
+	 * 利用当前 ChatManagerBase 的上下文（provider、model、apiUrl、apiKey、历史消息等）
+	 * 自动加载历史对话、保存用户消息和 AI 响应到数据库，支持多轮对话。
+	 *
+	 * <h3>使用示例</h3>
+	 * <pre>
+	 * ChatManagerBase manager = new ChatManagerBase(rv, dbConfig, writer);
+	 * manager.checkParams();  // 初始化 provider/model/apiUrl/apiKey/aiId
+	 *
+	 * // 第一轮
+	 * JSONObject result = manager.callAI("你好");
+	 * String content = result.getString("content");
+	 *
+	 * // 第二轮（自动附带第一轮的历史消息）
+	 * manager.setPrompt("请继续");
+	 * JSONObject result2 = manager.callAI("请继续");
+	 * </pre>
+	 *
+	 * @param prompt 用户输入内容
+	 * @return 包含 content（回复内容）和 usage（Token 用量）的 JSONObject
+	 *         失败时返回 {RST:false, error:错误信息}
+	 */
+	public JSONObject callAI(String prompt) {
+		return callAI(prompt, null);
+	}
+
+	/**
+	 * 直接调用 AI 并返回结果（非流式、同步调用）。
+	 * <p>
+	 * 支持传入工具列表，自动加载历史消息并保存本轮对话到数据库。
+	 *
+	 * @param prompt 用户输入内容
+	 * @param tools  工具列表（可选，传 null 表示不使用工具）
+	 * @return 包含 content 和 usage 的 JSONObject
+	 */
+	public JSONObject callAI(String prompt, com.gdxsoft.ai.request.AiTool... tools) {
+		try {
+			// 创建请求实例
+			IRequestAI req = createRequestAI();
+			if (req == null) {
+				return UJSon.rstFalse(getText(ErrorMessages.ERROR_NO_AI_PROVIDER));
+			}
+
+			// 创建请求数据
+			boolean prevStream = this.aiStream;
+			this.aiStream = false; // 非流式
+			IRequestData reqData = createRequestData();
+			this.aiStream = prevStream;
+
+			// 加载历史消息（多轮对话支持）
+			if (!isNew) {
+				Map<String, Boolean> existsMessages = new HashMap<>();
+				appendPreviousMessages(reqData, existsMessages);
+			}
+
+			// 添加当前用户消息
+			reqData.addMessage(prompt, "user");
+
+			// 添加工具
+			if (tools != null && tools.length > 0) {
+				reqData.tools(tools);
+			}
+
+			// 保存用户消息到数据库
+			long userMsgId = addAiChatMsg(prompt, "user", false, true);
+
+			// 创建 AI 响应占位消息
+			long aimId = addAiChatMsg("", "assistant", true);
+
+			// 调用 AI
+			String fullText = req.doPost(reqData);
+			JSONObject json = req.extraceJson(fullText, true);
+
+			String content = json != null && json.optBoolean("RST", false) && json.has("content")
+					? json.getString("content")
+					: fullText;
+
+			// 更新 AI 响应到数据库
+			updateAiChatMsg(aimId, content);
+
+			// 更新 Token 使用情况
+			JSONObject usage = req.getTokensUsage();
+			if (usage != null) {
+				updateAiChatMsgTokens(aimId, usage);
+			}
+
+			// 构建返回结果
+			JSONObject result = UJSon.rstTrue();
+			result.put("content", content);
+			if (usage != null) {
+				result.put("usage", usage);
+			}
+			result.put("aim_id", aimId);
+
+			return result;
+		} catch (Exception e) {
+			LOGGER.error("callAI failed for prompt: {}", prompt, e);
+			return UJSon.rstFalse(getText(ErrorMessages.ERROR_GENERAL, e.getMessage()));
+		}
+	}
+
+	/**
+	 * 直接调用 AI 并返回结果（非流式、同步调用）。
+	 * <p>
+	 * 最简用法：传入 provider、model、apiUrl、apiKey 和 prompt 即可返回 AI 响应。
+	 * 无需初始化 ChatManagerBase，无需数据库配置，无需 RequestValue。
+	 * 此为静态工具方法，不支持多轮对话（每次调用为独立会话）。
+	 *
+	 * <h3>使用示例</h3>
+	 * <pre>
+	 * // 一次性调用（无历史上下文）
+	 * JSONObject result = ChatManagerBase.callAI("openai", "gpt-4o",
+	 *     "https://api.openai.com/v1/chat/completions", "sk-xxx...", "你好");
+	 * String content = result.getString("content");
+	 *
+	 * // 带系统提示词
+	 * JSONObject result = ChatManagerBase.callAI("qwen", "qwen-max",
+	 *     apiUrl, apiKey, "请翻译以下内容：Hello World",
+	 *     "你是一个专业的翻译助手");
+	 *
+	 * // 查看 Token 使用情况
+	 * JSONObject usage = result.optJSONObject("usage");
+	 * int totalTokens = usage.optInt("total_tokens");
+	 * </pre>
+	 *
+	 * @param provider 提供商名称（openai, qwen, gemini, anthropic, deepseek 等）
+	 * @param model    模型名称（gpt-4o, qwen-max, gemini-2.5-flash 等）
+	 * @param apiUrl   AI API 地址
+	 * @param apiKey   API 密钥
+	 * @param prompt   用户输入内容
+	 * @return 包含 content（回复内容）和 usage（Token 用量）的 JSONObject
+	 *         失败时返回 {RST:false, error:错误信息}
+	 */
+	public static JSONObject callAI(String provider, String model, String apiUrl, String apiKey, String prompt) {
+		return callAI(provider, model, apiUrl, apiKey, prompt, null);
+	}
+
+	/**
+	 * 直接调用 AI 并返回结果（非流式、同步调用）。
+	 * <p>
+	 * 支持传入系统提示词（system prompt）。
+	 *
+	 * @param provider  提供商名称
+	 * @param model     模型名称
+	 * @param apiUrl    AI API 地址
+	 * @param apiKey    API 密钥
+	 * @param prompt    用户输入内容
+	 * @param systemMsg 系统提示词（可选，传 null 表示无系统提示）
+	 * @return 包含 content 和 usage 的 JSONObject
+	 */
+	public static JSONObject callAI(String provider, String model, String apiUrl, String apiKey,
+			String prompt, String systemMsg) {
+		return callAI(provider, model, apiUrl, apiKey, prompt, systemMsg, null);
+	}
+
+	/**
+	 * 直接调用 AI 并返回结果（非流式、同步调用）。
+	 * <p>
+	 * 支持系统提示词和工具列表。
+	 *
+	 * @param provider  提供商名称
+	 * @param model     模型名称
+	 * @param apiUrl    AI API 地址
+	 * @param apiKey    API 密钥
+	 * @param prompt    用户输入内容
+	 * @param systemMsg 系统提示词（可选）
+	 * @param tools     工具列表（可选，传 null 表示不使用工具）
+	 * @return 包含 content 和 usage 的 JSONObject
+	 */
+	public static JSONObject callAI(String provider, String model, String apiUrl, String apiKey,
+			String prompt, String systemMsg, com.gdxsoft.ai.request.AiTool... tools) {
+		try {
+			IRequestAI req = RequestAIFactory.createRequestAI(provider);
+			req.initUrlAndKey(apiUrl, apiKey);
+
+			IRequestData reqData = RequestDataFactory.createRequestData(provider);
+			reqData.model(model).stream(false);
+
+			if (systemMsg != null && !systemMsg.isEmpty()) {
+				reqData.addMessage(systemMsg, "system");
+			}
+			reqData.addMessage(prompt, "user");
+
+			if (tools != null && tools.length > 0) {
+				reqData.tools(tools);
+			}
+
+			String fullText = req.doPost(reqData);
+			JSONObject json = req.extraceJson(fullText, true);
+
+			JSONObject result = new JSONObject();
+			if (json != null && json.optBoolean("RST", false) && json.has("content")) {
+				result.put("content", json.getString("content"));
+				UJSon.rstSetTrue(result, null);
+			} else {
+				result.put("content", fullText);
+				UJSon.rstSetTrue(result, null);
+			}
+
+			// 附加 Token 使用情况
+			JSONObject usage = req.getTokensUsage();
+			if (usage != null) {
+				result.put("usage", usage);
+			}
+
+			return result;
+		} catch (Exception e) {
+			LOGGER.error("callAI failed: provider={}, model={}", provider, model, e);
+			JSONObject error = UJSon.rstFalse(e.getMessage());
+			error.put("provider", provider);
+			error.put("model", model);
+			return error;
+		}
+	}
+
+	/**
+	 * 脱敏 API Key，防止日志泄露。
+	 * <p>
+	 * 格式：前4位 + **** + 后4位，长度不足8时返回 ****。
+	 *
+	 * @param key 原始 API Key
+	 * @return 脱敏后的字符串
+	 */
+	private String maskApiKey(String key) {
+		if (key == null || key.isEmpty()) {
+			return "";
+		}
+		if (key.length() <= 8) {
+			return "****";
+		}
+		return key.substring(0, 4) + "****" + key.substring(key.length() - 4);
 	}
 
 }

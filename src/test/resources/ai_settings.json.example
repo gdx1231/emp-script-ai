@@ -1,0 +1,59 @@
+{
+  "_comment": "复制此文件为 ai_settings.json 并填写真实 API Key",
+  
+  "openai": {
+    "api_url": "https://api.openai.com/v1/chat/completions",
+    "api_key": "sk-xxx",
+    "model": "gpt-4o"
+  },
+  "qwen": {
+    "api_url": "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+    "api_key": "sk-xxx",
+    "model": "qwen-max"
+  },
+  "gemini": {
+    "api_url": "https://generativelanguage.googleapis.com/v1beta",
+    "api_key": "xxx",
+    "model": "gemini-2.5-flash"
+  },
+  "deepseek": {
+    "api_url": "https://api.deepseek.com/v1/chat/completions",
+    "api_key": "sk-xxx",
+    "model": "deepseek-chat"
+  },
+  "doubao": {
+    "api_url": "https://ark.cn-beijing.volces.com/api/v3/chat/completions",
+    "api_key": "xxx",
+    "model": ""
+  },
+  "grok": {
+    "api_url": "https://api.x.ai/v1/chat/completions",
+    "api_key": "xai-xxx",
+    "model": "grok-3"
+  },
+  "anthropic": {
+    "api_url": "https://api.anthropic.com/v1/messages",
+    "api_key": "sk-ant-xxx",
+    "model": "claude-sonnet-4-20250514"
+  },
+  "openrouter": {
+    "api_url": "https://openrouter.ai/api/v1/chat/completions",
+    "api_key": "sk-or-xxx",
+    "model": ""
+  },
+  "tencent": {
+    "api_url": "https://api.hunyuan.cloud.tencent.com/v1/chat/completions",
+    "api_key": "sk-xxx",
+    "model": "hunyuan-lite"
+  },
+  "openai_compat": {
+    "api_url": "",
+    "api_key": "",
+    "model": ""
+  },
+  "anthropic_compat": {
+    "api_url": "",
+    "api_key": "",
+    "model": ""
+  }
+}

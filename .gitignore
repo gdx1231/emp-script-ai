@@ -6,6 +6,7 @@
 /target/
 *.log
 /src/test/*.*
+/src/test/resources/ai_settings.json
 /.idea/
 /.settings/
 /.project
