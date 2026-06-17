@@ -1,13 +1,14 @@
-package com.gdxsoft.ai.providers.qwen;
+package com.gdxsoft.ai.providers.openaiCompat;
 
 import com.gdxsoft.ai.request.ProviderType;
 import com.gdxsoft.ai.request.style.OpenAiRequestAI;
 
 /**
- * 通义千问（Qwen）请求实现 — OpenAI 兼容模式。
+ * OpenAI 兼容模式请求实现。
+ * 可指向任意 OpenAI 兼容端点。
  */
 public class RequestAI extends OpenAiRequestAI {
 	public RequestAI() {
-		this.providerType = ProviderType.QWEN;
+		this.providerType = ProviderType.OPENAI_COMPAT;
 	}
 }

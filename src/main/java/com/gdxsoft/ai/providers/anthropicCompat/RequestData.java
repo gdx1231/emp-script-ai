@@ -1,14 +1,14 @@
-package com.gdxsoft.ai.providers.anthropic;
+package com.gdxsoft.ai.providers.anthropicCompat;
 
 import com.gdxsoft.ai.request.ProviderType;
 import com.gdxsoft.ai.request.style.AnthropicRequestData;
 
 /**
- * Anthropic Messages API 请求体。
+ * Anthropic 兼容模式请求体。
  */
 public class RequestData extends AnthropicRequestData {
 	public RequestData() {
-		super("claude-sonnet-4-20250514");
-		this.providerType = ProviderType.ANTHROPIC;
+		super("");
+		this.providerType = ProviderType.ANTHROPIC_COMPAT;
 	}
 }

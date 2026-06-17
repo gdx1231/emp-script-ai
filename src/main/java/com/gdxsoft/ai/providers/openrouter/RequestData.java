@@ -1,28 +1,20 @@
 package com.gdxsoft.ai.providers.openrouter;
 
 import org.json.JSONObject;
-
 import com.gdxsoft.ai.request.IRequestData;
 import com.gdxsoft.ai.request.ProviderType;
-import com.gdxsoft.ai.request.RequestDataBase;
+import com.gdxsoft.ai.request.style.OpenAiRequestData;
 
 /**
- * 用于构建发送到 OpenRouter Chat Completions API 的请求体
- * OpenRouter 使用 OpenAI 兼容接口
+ * OpenRouter 请求体。
+ * reasoning 参数格式不同于标准 OpenAI。
  */
-public class RequestData extends RequestDataBase {
-	public static String DEFAULT_MODEL_NAME = "openai/gpt-4o";
-
+public class RequestData extends OpenAiRequestData {
 	public RequestData() {
-		super(DEFAULT_MODEL_NAME);
+		super("openai/gpt-4o");
 		this.providerType = ProviderType.OPENROUTER;
 	}
 
-	/**
-	 * OpenRouter 的 reasoning 参数格式
-	 * 启用: {"reasoning": {"enabled": true}}
-	 * 禁用: 不包含此字段
-	 */
 	@Override
 	public IRequestData thinking(boolean thinking) {
 		if (thinking) {
@@ -33,16 +25,5 @@ public class RequestData extends RequestDataBase {
 			parameters.remove("reasoning");
 		}
 		return this;
-	}
-
-	/**
-	 * 构建 OpenRouter 请求体（OpenAI 兼容格式）
-	 */
-	@Override
-	public JSONObject build() {
-		JSONObject requestData = new JSONObject(parameters.toString());
-		requestData.put("model", this.model);
-		requestData.put("messages", messages);
-		return requestData;
 	}
 }

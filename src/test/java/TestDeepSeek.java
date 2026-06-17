@@ -50,7 +50,7 @@ public class TestDeepSeek {
 
 		// 创建请求实例
 		IRequestAI req = new RequestAI();
-		req.initUrlAndKey(RequestAI.DEFAULT_URL, apiKey);
+		req.initUrlAndKey(TestAiSettings.get("DEEPSEEK").optString("api_url"), apiKey);
 
 		try {
 			String response = req.doPost(reqData);
@@ -81,7 +81,7 @@ public class TestDeepSeek {
 
 		// 创建请求实例
 		IRequestAI req = new RequestAI();
-		req.initUrlAndKey(RequestAI.DEFAULT_URL, apiKey);
+		req.initUrlAndKey(TestAiSettings.get("DEEPSEEK").optString("api_url"), apiKey);
 
 		// 输出流
 		StringWriter sw = new StringWriter();
@@ -114,7 +114,7 @@ public class TestDeepSeek {
 
 		// 创建请求实例
 		IRequestAI req = new RequestAI();
-		req.initUrlAndKey(RequestAI.DEFAULT_URL, apiKey);
+		req.initUrlAndKey(TestAiSettings.get("DEEPSEEK").optString("api_url"), apiKey);
 
 		try {
 			String response = req.doPost(reqData);

@@ -49,9 +49,9 @@ public class RequestAIFactory {
 		case ANTHROPIC:
 			return new com.gdxsoft.ai.providers.anthropic.RequestAI();
 		case OPENAI_COMPAT:
-			return new com.gdxsoft.ai.providers.openai_compat.RequestAI();
+			return new com.gdxsoft.ai.providers.openaiCompat.RequestAI();
 		case ANTHROPIC_COMPAT:
-			return new com.gdxsoft.ai.providers.anthropic_compat.RequestAI();
+			return new com.gdxsoft.ai.providers.anthropicCompat.RequestAI();
 		default:
 			throw new IllegalArgumentException("不支持的AI提供商类型: " + type);
 		}

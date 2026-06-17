@@ -1,48 +1,25 @@
 package com.gdxsoft.ai.providers.qwen;
 
 import org.json.JSONObject;
-
+import com.gdxsoft.ai.request.IRequestData;
 import com.gdxsoft.ai.request.ProviderType;
-import com.gdxsoft.ai.request.RequestDataBase;
+import com.gdxsoft.ai.request.style.OpenAiRequestData;
 
 /**
- * 用于构建发送到 Qwen（通义千问）API 的请求体
+ * 通义千问（Qwen）请求体。
+ * thinking 参数需要 object 格式。
  */
-public class RequestData extends RequestDataBase {
-	public static String DEFAULT_MODEL_NAME = "qwen-plus";
-
+public class RequestData extends OpenAiRequestData {
 	public RequestData() {
-		super(DEFAULT_MODEL_NAME); // 默认模型
+		super("qwen-plus");
 		this.providerType = ProviderType.QWEN;
 	}
 
-	/**
-	 * 设置模型是否为深度思考
-	 * Qwen API 要求 thinking 参数为对象格式，非布尔值
-	 * 启用: {"thinking": {"type": "enabled"}}
-	 * 禁用: {"thinking": {"type": "disabled"}}（必须显式禁用，否则推理模型默认启用）
-	 *
-	 * @param thinking
-	 * @return
-	 */
 	@Override
-	public RequestData thinking(boolean thinking) {
+	public IRequestData thinking(boolean thinking) {
 		JSONObject thinkingObj = new JSONObject();
 		thinkingObj.put("type", thinking ? "enabled" : "disabled");
 		parameters.put("thinking", thinkingObj);
 		return this;
-	}
-
-	/**
-	 * 构建最终的请求 JSON 对象 Qwen API 的请求体格式
-	 * 
-	 * @return 返回构建好的 JSON 对象
-	 */
-	@Override
-	public JSONObject build() {
-		JSONObject requestData = new JSONObject(parameters.toString());
-		requestData.put("model", this.model);
-		requestData.put("messages", messages);
-		return requestData;
 	}
 }

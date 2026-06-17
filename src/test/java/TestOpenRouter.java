@@ -51,7 +51,7 @@ public class TestOpenRouter {
 
 		// 创建请求实例
 		IRequestAI req = new RequestAI();
-		req.initUrlAndKey(RequestAI.DEFAULT_URL, apiKey);
+		req.initUrlAndKey(TestAiSettings.get("OPENROUTER").optString("api_url"), apiKey);
 
 		try {
 			String response = req.doPost(reqData);
@@ -81,7 +81,7 @@ public class TestOpenRouter {
 
 		// 创建请求实例
 		IRequestAI req = new RequestAI();
-		req.initUrlAndKey(RequestAI.DEFAULT_URL, apiKey);
+		req.initUrlAndKey(TestAiSettings.get("OPENROUTER").optString("api_url"), apiKey);
 
 		StringWriter sw = new StringWriter();
 		PrintWriter writer = new PrintWriter(sw);
@@ -113,7 +113,7 @@ public class TestOpenRouter {
 
 		// 创建请求实例
 		IRequestAI req = new RequestAI();
-		req.initUrlAndKey(RequestAI.DEFAULT_URL, apiKey);
+		req.initUrlAndKey(TestAiSettings.get("OPENROUTER").optString("api_url"), apiKey);
 
 		try {
 			String response = req.doPost(reqData);
