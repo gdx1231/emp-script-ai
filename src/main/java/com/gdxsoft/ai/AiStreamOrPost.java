@@ -139,86 +139,108 @@ public class AiStreamOrPost {
 		return true;
 	}
 
+	/**
+	 * 处理 innerCall 步骤返回结果
+	 * <p>
+	 * 三类分支：
+	 * <ul>
+	 * <li>RST=false 且有 message → 推送 SSE 给前端，返回 message 作为哨兵，processRequest 据此跳过主步骤</li>
+	 * <li>RST=true 但 validateParams 缺参 → 推送 "请确认：…？" SSE，返回 msg 作为哨兵</li>
+	 * <li>校验通过 → 提取 params 注入 RequestValue + 写入 AI_CHAT_PARAMS，返回 null 让主步骤继续</li>
+	 * </ul>
+	 *
+	 * @param innerCallResult innerCall 步骤的 AI 返回内容（JSON 字符串）
+	 * @return 非 null 表示校验失败/缺参数（已推送 SSE，processRequest 应停止）；null 表示校验通过
+	 */
 	private String handleInnerCallResult(String innerCallResult) {
-		org.json.JSONObject innerJson = new org.json.JSONObject(innerCallResult);
-		return innerJson.toString();
-//		// 优先信任 AI 的明确判断：如果返回了 message 字段
-//		if (innerJson.has("message")) {
-//			if (!innerJson.optBoolean("RST")) {
-//				// AI 明确判断参数不完整或不是旅游请求
-//				String message = innerJson.optString("message", "");
-//				if (!message.isEmpty()) {
-//					chatManager.outEvent(message);
-//					return message;
-//				}
-//			} else {
-//				// AI 认为参数完整，用 validateParams 兜底检查
-//				String missing = checkMissingParams(innerJson, chatManager.getMode());
-//				if (!missing.isEmpty()) {
-//					String msg = "请确认：" + missing + "？";
-//					chatManager.outEvent(msg);
-//					return msg;
-//				}
-//				// 参数确实完整，提取并保存
-//			}
-//		} else {
-//			// AI 返回格式不对（可能是工具原始结果），用 validateParams 检查
-//			String missing = checkMissingParams(innerJson, chatManager.getMode());
-//			if (!missing.isEmpty()) {
-//				String msg = "请确认：" + missing + "？";
-//				chatManager.outEvent(msg);
-//				return msg;
-//			}
-//		}
-//
-//		// 参数校验通过，提取 params 并注入到 RequestValue 供后续 step 使用
-//		// 可能嵌套在 "params" 中，也可能是顶层字段（工具原始结果）
-//		org.json.JSONObject paramsObj = null;
-//		if (innerJson.has("params") && innerJson.getJSONObject("params").length() > 0) {
-//			paramsObj = innerJson.getJSONObject("params");
-//		} else if (innerJson.has("people") || innerJson.has("departure_date") || innerJson.has("cities")) {
-//			// 工具原始结果，直接用顶层对象
-//			paramsObj = innerJson;
-//		}
-//
-//		if (paramsObj != null) {
-//			// 提取顶层键值对
-//			for (String key : paramsObj.keySet()) {
-//				String val = paramsObj.optString(key, "");
-//				if (val != null && !val.isEmpty()) {
-//					chatManager.getRv().addOrUpdateValue(key, val);
-//				}
-//			}
-//			// 提取嵌套的 "people" 对象
-//			if (paramsObj.has("people")) {
-//				org.json.JSONObject people = paramsObj.optJSONObject("people");
-//				if (people != null) {
-//					for (String key : people.keySet()) {
-//						String val = people.optString(key, "");
-//						if (val != null && !val.isEmpty()) {
-//							chatManager.getRv().addOrUpdateValue(key, val);
-//						}
-//					}
-//				}
-//			}
-//			// 保存参数到 AI_CHAT_PARAMS 表，供后续轮次的 checkparamsapi 读取
-//			try {
-//				long aiId = chatManager.getAiId();
-//				if (aiId > 0) {
-//					for (String saveKey : paramsObj.keySet()) {
-//						String saveVal = paramsObj.optString(saveKey, "");
-//						if (saveVal != null && !saveVal.isEmpty() && !saveVal.startsWith("{")) {
-//							String sql = "insert into AI_CHAT_PARAMS (AI_ID, AIM_ID, AIP_NAME, AIP_VAL, AIP_TYPE) "
-//									+ "values (" + aiId + ", 0, '" + saveKey.replace("'", "''") + "', '"
-//									+ saveVal.replace("'", "''") + "', 'validate')";
-//							com.gdxsoft.easyweb.data.DTTable.getJdbcTable(sql, chatManager.getRv());
-//						}
-//					}
-//				}
-//			} catch (Exception saveEx) {
-//				System.out.println("保存 innerCall 参数到 AI_CHAT_PARAMS 失败: " + saveEx.getMessage());
-//			}
-//		}
+		if (innerCallResult == null) {
+			return null;
+		}
+		try {
+			org.json.JSONObject innerJson = new org.json.JSONObject(innerCallResult);
+
+			// 1. 优先信任 AI 的明确判断：如果返回了 message 字段
+			if (innerJson.has("message")) {
+				if (!innerJson.optBoolean("RST")) {
+					// AI 明确判断参数不完整或不是旅游请求
+					String message = innerJson.optString("message", "");
+					if (!message.isEmpty()) {
+						chatManager.outEvent(message);
+						return message;
+					}
+				} else {
+					// AI 认为参数完整，用 validateParams 兜底检查
+					String missing = checkMissingParams(innerJson, chatManager.getMode());
+					if (!missing.isEmpty()) {
+						String msg = "请确认：" + missing + "？";
+						chatManager.outEvent(msg);
+						return msg;
+					}
+					// 参数确实完整，提取并保存
+				}
+			} else {
+				// AI 返回格式不对（可能是工具原始结果），用 validateParams 检查
+				String missing = checkMissingParams(innerJson, chatManager.getMode());
+				if (!missing.isEmpty()) {
+					String msg = "请确认：" + missing + "？";
+					chatManager.outEvent(msg);
+					return msg;
+				}
+			}
+
+			// 2. 参数校验通过，提取 params 并注入到 RequestValue 供后续 step 使用
+			// 可能嵌套在 "params" 中，也可能是顶层字段（工具原始结果）
+			org.json.JSONObject paramsObj = null;
+			if (innerJson.has("params") && innerJson.getJSONObject("params").length() > 0) {
+				paramsObj = innerJson.getJSONObject("params");
+			} else if (innerJson.has("people") || innerJson.has("departure_date") || innerJson.has("cities")) {
+				// 工具原始结果，直接用顶层对象
+				paramsObj = innerJson;
+			}
+
+			if (paramsObj != null) {
+				// 提取顶层键值对
+				for (String key : paramsObj.keySet()) {
+					String val = paramsObj.optString(key, "");
+					if (val != null && !val.isEmpty()) {
+						chatManager.getRv().addOrUpdateValue(key, val);
+					}
+				}
+				// 提取嵌套的 "people" 对象
+				if (paramsObj.has("people")) {
+					org.json.JSONObject people = paramsObj.optJSONObject("people");
+					if (people != null) {
+						for (String key : people.keySet()) {
+							String val = people.optString(key, "");
+							if (val != null && !val.isEmpty()) {
+								chatManager.getRv().addOrUpdateValue(key, val);
+							}
+						}
+					}
+				}
+				// 保存参数到 AI_CHAT_PARAMS 表，供后续轮次的 checkparamsapi 读取
+				try {
+					long aiId = chatManager.getAiId();
+					if (aiId > 0) {
+						for (String saveKey : paramsObj.keySet()) {
+							String saveVal = paramsObj.optString(saveKey, "");
+							if (saveVal != null && !saveVal.isEmpty() && !saveVal.startsWith("{")) {
+								String sql = "insert into AI_CHAT_PARAMS (AI_ID, AIM_ID, AIP_NAME, AIP_VAL, AIP_TYPE) "
+										+ "values (" + aiId + ", 0, '" + saveKey.replace("'", "''") + "', '"
+										+ saveVal.replace("'", "''") + "', 'validate')";
+								com.gdxsoft.easyweb.data.DTTable.getJdbcTable(sql, chatManager.getRv());
+							}
+						}
+					}
+				} catch (Exception saveEx) {
+					System.out.println("保存 innerCall 参数到 AI_CHAT_PARAMS 失败: " + saveEx.getMessage());
+				}
+			}
+		} catch (Exception e) {
+			// 不是 JSON，忽略，让主步骤继续
+			LOGGER.debug("innerCall result is not JSON, skip: {}", e.getMessage());
+		}
+		return null;
 	}
 
 	/**
@@ -231,7 +253,13 @@ public class AiStreamOrPost {
 			String innerCallResult = processInnerCallIfAny();
 			if (innerCallResult != null) {
 				LOGGER.info("Inner call result: {}", innerCallResult);
-				handleInnerCallResult(innerCallResult);
+				String earlyReturn = handleInnerCallResult(innerCallResult);
+				if (earlyReturn != null) {
+					// innerCall 校验失败或参数缺失：SSE 已推送给前端，主步骤不再执行
+					return earlyReturn;
+				}
+				// innerCall 校验通过，切换到第一个非 innerCall 步骤进行主流程 SSE 输出
+				switchToMainStep();
 			}
 
 			// 处理无提示词的情况
@@ -244,9 +272,7 @@ public class AiStreamOrPost {
 			if (reqData == null) {
 				return null;
 			}
-			if (innerCallResult != null) {
-				reqData.assistantMessage(innerCallResult);
-			}
+			// innerCall 结果已通过 appendPreviousMessages 加载到历史消息中，无需重复添加
 			// 执行AI请求并处理结果
 			String fullText = executeAiRequest(reqData);
 			return fullText;
@@ -254,6 +280,27 @@ public class AiStreamOrPost {
 			handleGlobalException(e);
 			return null;
 		}
+	}
+
+	/**
+	 * innerCall 完成后，切换到 mode 中第一个非 innerCall 的主步骤。
+	 * <p>
+	 * 如果当前步骤不是 innerCall 步骤，或没有其他步骤，则不切换。
+	 */
+	private void switchToMainStep() {
+		com.gdxsoft.ai.modes.Mode mode = chatManager.getMode();
+		if (mode == null || mode.getSteps() == null) {
+			return;
+		}
+		// 查找第一个非 innerCall 步骤
+		for (com.gdxsoft.ai.modes.Step s : mode.getSteps()) {
+			if (!s.isInnerCall() && s.getPrompts() != null && !s.getPrompts().isEmpty()) {
+				LOGGER.info("切换到主步骤: {} -> {}", chatManager.getStepName(), s.getName());
+				chatManager.switchStep(s.getName(), s);
+				return;
+			}
+		}
+		LOGGER.warn("未找到非 innerCall 的主步骤，保持当前步骤: {}", chatManager.getStepName());
 	}
 
 	/**

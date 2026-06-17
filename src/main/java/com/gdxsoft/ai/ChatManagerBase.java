@@ -1583,6 +1583,35 @@ public class ChatManagerBase {
 		return step;
 	}
 
+	/**
+	 * 切换到指定的步骤（用于 innerCall 完成后切换到主步骤）
+	 *
+	 * @param stepName 目标步骤名称
+	 * @param step     目标步骤对象
+	 */
+	public void switchStep(String stepName, Step step) {
+		this.stepName = stepName;
+		this.step = step;
+		this.rv.addOrUpdateValue("AIM_STEP", stepName);
+		// 更新数据库中的 AI_CUR_STEP，确保后续请求使用正确的步骤
+		try {
+			if (this.aiId > 0) {
+				this.rv.addOrUpdateValue("ai_id", this.aiId, "bigint", 100);
+				String sqlUpdate = "update AI_CHAT set AI_CUR_STEP=@AIM_STEP, AI_MDATE=@sys_date where AI_ID=@ai_id";
+				com.gdxsoft.easyweb.datasource.DataConnection.updateAndClose(sqlUpdate, dbConfigName, rv);
+			}
+		} catch (Exception e) {
+			LOGGER.warn("Failed to update AI_CUR_STEP in database: {}", e.getMessage());
+		}
+		// 清除旧的 action 引用
+		this.stepAction = null;
+		this.actionName = null;
+		this.action = null;
+		this.actionClassName = null;
+		// 重新加载 action（如果新步骤有 action）
+		this.loadAction();
+	}
+
 	public IAction getStepAction() {
 		return stepAction;
 	}

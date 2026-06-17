@@ -370,8 +370,15 @@ public abstract class RequestAIBase implements IRequestAI {
 		int messageCount = messageCountAdd();
 		// System.out.println(messageCount + "." + line);
 		json.put("IDX", messageCount);
-		if (json.has("content")) {
-			this.getFullText().append(json.optString("content"));
+		String content = json.optString("content", null);
+		if (content != null && !content.isEmpty()) {
+			this.getFullText().append(content);
+		} else if (json.has("reasoning_content")) {
+			// Qwen3/DeepSeek: thinking content field (fallback when content is absent)
+			String reasoning = json.optString("reasoning_content", "");
+			if (!reasoning.isEmpty()) {
+				this.getFullText().append(reasoning);
+			}
 		}
 
 		IOutEvents oe = this.getOutEvents();
