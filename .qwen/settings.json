@@ -7,7 +7,13 @@
       "Bash(git stash *)",
       "Bash(git add *)",
       "Bash(git commit *)",
-      "Bash(git push)"
+      "Bash(git push)",
+      "Skill(sqlserver-query)",
+      "Bash(./sqlserver-query.sh *)",
+      "Bash(source *)",
+      "Bash(which *)",
+      "Bash(find *)",
+      "Bash(sqlcmd *)"
     ]
   },
   "$version": 4
