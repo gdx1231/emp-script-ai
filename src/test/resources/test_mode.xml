@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<modes>
+    <!-- 集成测试用 Mode -->
+    <mode name="test_mode">
+        <steps>
+            <step name="chat" stream="true">
+                <prompts>
+                    <prompt name="system" type="text">你是一个友好的AI助手。</prompt>
+                </prompts>
+            </step>
+        </steps>
+    </mode>
+</modes>

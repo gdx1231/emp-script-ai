@@ -1,0 +1,165 @@
+---
+name: integration-test-hsqldb
+description: Setting up integrationTest framework with HSQLDB in-memory database and real AI APIs for emp-script-ai
+source: auto-skill
+extracted_at: '2026-06-18T01:16:29.007Z'
+---
+
+# Integration Test Framework with HSQLDB and Real AI APIs
+
+When building integration tests for AI provider libraries that need database persistence and real API calls, use HSQLDB in-memory database configured via `ewa_conf.xml` (not hardcoded connection pools).
+
+## Architecture
+
+```
+IntegrationTest.java
+    ↓
+TestDatabase.java (HSQLDB schema + provider config from ai_settings.json)
+    ↓
+ewa_conf.xml (database connection config — BOTH SQL Server and HSQLDB)
+    ↓
+ConnectionConfigs.instance() (emp-script framework auto-loads ewa_conf.xml)
+    ↓
+AI_CHAT, AI_CHAT_MSG, AI_CHAT_PARAMS tables (HSQLDB)
+```
+
+## Key Components
+
+### 1. ewa_conf.xml — Database Configuration
+
+Both databases defined in one file. SQL Server for reading production config, HSQLDB for test execution:
+
+```xml
+<databases>
+    <!-- SQL Server: for GenerateAiSettings reading AI_PROVIDER* config -->
+    <database name="test" type="MSSQL" connectionString="jdbc/test" schemaName="dbo">
+        <pool username="sa"
+            password="file:///path/to/password.txt"
+            driverClassName="com.microsoft.sqlserver.jdbc.SQLServerDriver"
+            url="jdbc:sqlserver://localhost:1433;DatabaseName=OneWorld;trustServerCertificate=true">
+        </pool>
+    </database>
+
+    <!-- HSQLDB: for integration test execution -->
+    <database name="test_hsqldb" type="HSQLDB" connectionString="jdbc/test_hsqldb" schemaName="PUBLIC">
+        <pool username="SA" password=""
+            driverClassName="org.hsqldb.jdbc.JDBCDriver"
+            url="jdbc:hsqldb:mem:testdb;DB_CLOSE_DELAY=-1"
+            poolType="HikariCP">
+        </pool>
+    </database>
+</databases>
+```
+
+The framework automatically loads `ewa_conf.xml` from classpath via `UPath.initPath()`. **Do NOT hardcode connection pool creation in TestDatabase** — just reference the config name.
+
+### 2. TestDatabase.java
+
+Uses ewa_conf.xml config, creates schema, loads provider config from ai_settings.json:
+
+```java
+public class TestDatabase {
+    // Must match ewa_conf.xml database name
+    public static final String DB_CONFIG_NAME = "test_hsqldb";
+
+    public static void init() throws Exception {
+        // 1. Trigger framework to load ewa_conf.xml
+        ConnectionConfigs configs = ConnectionConfigs.instance();
+
+        // 2. Create tables via DataConnection (not raw JDBC)
+        createTables();
+
+        // 3. Load ai_settings.json and insert provider configs
+        loadSettings();
+        insertProviderConfigs();
+
+        // 4. Load test Mode XML
+        loadTestModes();
+    }
+
+    private static void createTables() throws Exception {
+        DataConnection cnn = new DataConnection(DB_CONFIG_NAME, null);
+        try {
+            cnn.executeUpdateNoParameter("CREATE TABLE AI_CHAT (...)");
+            // ... more tables
+        } finally {
+            cnn.close();
+        }
+    }
+
+    public static RequestValue createRequestValue() {
+        RequestValue rv = new RequestValue();
+        // MUST initialize httpHeaders via reflection — ChatManagerBase.appendPrompts() calls rv.getHttpHeaders().keySet()
+        try {
+            java.lang.reflect.Field field = RequestValue.class.getDeclaredField("httpHeaders");
+            field.setAccessible(true);
+            field.set(rv, new java.util.HashMap<String, String>());
+        } catch (Exception e) { /* log warning */ }
+        return rv;
+    }
+}
+```
+
+### 3. GenerateAiSettings Tool
+
+Reads AI_PROVIDER* tables from SQL Server, generates ai_settings.json with **full API keys**:
+
+```bash
+mvn exec:java \
+  -Dexec.mainClass="com.gdxsoft.ai.test.GenerateAiSettings" \
+  -Dexec.args="test src/test/resources/ai_settings.json" \
+  -Dexec.classpathScope=test
+```
+
+### 4. test_mode.xml — Mode Configuration for Tests
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<modes>
+    <mode name="test_mode">
+        <steps>
+            <step name="chat" stream="true">
+                <prompts>
+                    <prompt name="system" type="text">你是一个友好的AI助手。</prompt>
+                </prompts>
+            </step>
+        </steps>
+    </mode>
+</modes>
+```
+
+Loaded in TestDatabase.init() via `new Modes().loadModes(xml)`.
+
+## Maven Dependencies
+
+```xml
+<dependency>
+    <groupId>org.hsqldb</groupId>
+    <artifactId>hsqldb</artifactId>
+    <version>2.7.2</version>
+    <scope>test</scope>
+</dependency>
+<dependency>
+    <groupId>com.microsoft.sqlserver</groupId>
+    <artifactId>mssql-jdbc</artifactId>
+    <version>12.6.1.jre11</version>
+    <scope>test</scope>
+</dependency>
+<dependency>
+    <groupId>javax.servlet</groupId>
+    <artifactId>javax.servlet-api</artifactId>
+    <version>4.0.1</version>
+    <scope>test</scope>
+</dependency>
+```
+
+## Common Pitfalls
+
+1. **HSQLDB vs SQL Server syntax**: Use `GENERATED BY DEFAULT AS IDENTITY` instead of `IDENTITY(1,1)`
+2. **HSQLDB MERGE syntax differs**: Use `DELETE + INSERT` instead of `MERGE INTO ... KEY(...) VALUES ...`
+3. **Provider codes must be lowercase**: The framework queries `WHERE ap_code=@ai_provider` with lowercase values from `rv.s("ai_provider")`. Store provider codes in lowercase in test database.
+4. **RequestValue httpHeaders**: Must initialize via reflection — `ChatManagerBase.appendPrompts()` calls `rv.getHttpHeaders().keySet()` which throws NPE if null
+5. **javax.servlet-api required**: `RequestValue` class references `HttpServletRequest` — tests fail with `NoClassDefFoundError` without servlet API on classpath
+6. **ewa_conf.xml not hardcoded**: Define HSQLDB in ewa_conf.xml, NOT by manually creating `ConnectionConfig` objects in code
+7. **ai_settings.json in .gitignore**: Contains full API keys, must never be committed
+8. **Password files**: Use `file://` prefix in ewa_conf.xml — `ConnectionConfig.getPasswordFromFile()` reads the file automatically

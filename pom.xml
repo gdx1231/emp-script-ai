@@ -157,12 +157,12 @@
 		<dependency>
 			<groupId>com.gdxsoft.easyweb</groupId>
 			<artifactId>emp-script-utils</artifactId>
-			<version>[1.1.10,]</version>
+			<version>[1.1.10, 1.99.99]</version>
 		</dependency>
 		<dependency>
 			<groupId>com.gdxsoft.easyweb</groupId>
 			<artifactId>emp-script</artifactId>
-			<version>[1.1.10,]</version>
+			<version>[1.1.10, 1.99.99]</version>
 		</dependency>
 
 		<!-- https://mvnrepository.com/artifact/org.slf4j/slf4j-api -->
@@ -186,6 +186,29 @@
 			<scope>test</scope>
 		</dependency>
 
+		<!-- HSQLDB for integration tests -->
+		<dependency>
+			<groupId>org.hsqldb</groupId>
+			<artifactId>hsqldb</artifactId>
+			<version>2.7.2</version>
+			<scope>test</scope>
+		</dependency>
+
+		<!-- SQL Server JDBC Driver -->
+		<dependency>
+			<groupId>com.microsoft.sqlserver</groupId>
+			<artifactId>mssql-jdbc</artifactId>
+			<version>12.6.1.jre11</version>
+			<scope>test</scope>
+		</dependency>
+
+		<!-- Servlet API for RequestValue -->
+		<dependency>
+			<groupId>javax.servlet</groupId>
+			<artifactId>javax.servlet-api</artifactId>
+			<version>4.0.1</version>
+			<scope>test</scope>
+		</dependency>
 
 	</dependencies>
 

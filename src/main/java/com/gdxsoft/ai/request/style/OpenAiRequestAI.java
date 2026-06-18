@@ -56,9 +56,10 @@ public abstract class OpenAiRequestAI extends RequestAIBase {
 			JSONObject json = new JSONObject(jsonData);
 
 			// 保存 usage 信息（非流式响应和流式结束帧都可能有）
-			if (json.has("usage")) {
-				JSONObject usage = json.getJSONObject("usage");
-				this.setTokensUsage(usage);
+			// 使用 optJSONObject 避免 usage:null 时抛异常（Qwen/DeepSeek 等 SSE chunk 中 usage 常为 null）
+			JSONObject usageObj = json.optJSONObject("usage");
+			if (usageObj != null) {
+				this.setTokensUsage(usageObj);
 			}
 
 			JSONArray choices = json.optJSONArray("choices");

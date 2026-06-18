@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  集成测试数据库配置示例
+  
+  使用方法：
+  1. 复制此文件为 ewa_conf.xml（不带 _console 后缀）
+  2. 修改数据库连接信息（url、username、password）
+  3. 运行 GenerateAiSettings 工具
+  
+  运行命令：
+  mvn test-compile
+  mvn exec:java -Dexec.mainClass="com.gdxsoft.ai.test.GenerateAiSettings" -Dexec.classpathScope=test
+-->
+<ewa_confs>
+    <define allow="true" />
+    
+    <scriptPaths>
+        <scriptPath name="ewa" path="resources:/define.xml" />
+    </scriptPaths>
+    
+    <requestValuesGlobal>
+        <rv name="rv_ewa_style_path" value="/EmpScriptV2/" />
+    </requestValuesGlobal>
+    
+    <paths>
+        <path name="cached_path" value="/tmp/ewa/cached" />
+        <path name="script_path" value="jdbc:test" />
+    </paths>
+    
+    <!-- 数据库连接池 -->
+    <databases>
+        <!-- SQL Server 配置（默认） -->
+        <database name="sqlserver" type="MSSQL" connectionString="jdbc/test" schemaName="dbo">
+            <pool
+                username="sa"
+                password="file:///Users/admin/java/com.gdxsoft/database.pwss.txt"
+                maxActive="10"
+                maxIdle="50"
+                maxWait="5000"
+                poolType="druid"
+                driverClassName="com.microsoft.sqlserver.jdbc.SQLServerDriver"
+                url="jdbc:sqlserver://localhost:1433;DatabaseName=OneWorld;applicationName=test;trustServerCertificate=true">
+            </pool>
+        </database>
+        
+        <!-- MySQL 配置（可选） -->
+        <!--
+        <database name="mysql" type="MYSQL" connectionString="jdbc/mysql" schemaName="your_db">
+            <pool
+                username="root"
+                password="your_password"
+                maxActive="10"
+                poolType="HikariCP"
+                driverClassName="com.mysql.cj.jdbc.Driver"
+                url="jdbc:mysql://localhost:3306/your_db?serverTimezone=GMT%2B8&amp;autoReconnect=true&amp;useUnicode=true&amp;characterEncoding=utf-8">
+            </pool>
+        </database>
+        -->
+        
+        <!-- HSQLDB 内存数据库（用于测试） -->
+        <!--
+        <database name="hsqldb" type="HSQLDB" connectionString="jdbc/hsqldb" schemaName="PUBLIC">
+            <pool
+                username="SA"
+                password=""
+                driverClassName="org.hsqldb.jdbc.JDBCDriver"
+                url="jdbc:hsqldb:mem:testdb"
+                poolType="HikariCP">
+            </pool>
+        </database>
+        -->
+    </databases>
+</ewa_confs>
