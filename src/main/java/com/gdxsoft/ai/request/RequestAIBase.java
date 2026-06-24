@@ -531,4 +531,19 @@ public abstract class RequestAIBase implements IRequestAI {
 	public JSONObject getTokensUsage() {
 		return tokensUsage;
 	}
+
+	/**
+	 * 列出可用的 AI 模型（默认实现，子类可覆盖）。
+	 * <p>
+	 * List available AI models (default implementation, subclasses may override).
+	 * 
+	 * @return JSON 格式的模型列表| Model list in JSON format
+	 * @throws IOException          IO异常
+	 * @throws URISyntaxException   URL 语法错误
+	 * @throws InterruptedException 线程中断
+	 */
+	public JSONObject listModels() throws IOException, URISyntaxException, InterruptedException {
+		// 默认实现返回不支持的消息
+		return UJSon.rstFalse("当前 Provider 不支持列出模型");
+	}
 }

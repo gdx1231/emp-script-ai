@@ -143,4 +143,14 @@ public interface IRequestAI {
 	 * @param apiKey API访问密钥 | The API access key
 	 */
 	void setApiKey(String apiKey);
+	
+	/**
+	 * 列出可用的 AI 模型| List available AI models.
+	 * 
+	 * @return JSON 格式的模型列表| Model list in JSON format
+	 * @throws IOException          IO异常
+	 * @throws URISyntaxException   URL 语法错误
+	 * @throws InterruptedException 线程中断
+	 */
+	org.json.JSONObject listModels() throws IOException, URISyntaxException, InterruptedException;
 }

@@ -1,9 +1,17 @@
 package com.gdxsoft.ai.request.style;
 
+import java.io.IOException;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import com.gdxsoft.ai.HttpUtils;
 import com.gdxsoft.ai.request.IRequestData;
+import com.gdxsoft.ai.request.ProviderType;
 import com.gdxsoft.ai.request.RequestAIBase;
 import com.gdxsoft.easyweb.utils.UJSon;
 
@@ -112,5 +120,79 @@ public abstract class GeminiRequestAI extends RequestAIBase {
 			return null;
 		}
 		return line.substring(5).trim();
+	}
+
+	/**
+	 * 列出可用的 AI 模型（Gemini 风格）。
+	 * <p>
+	 * List available AI models (Gemini style).
+	 * 
+	 * @return JSON 格式的模型列表| Model list in JSON format
+	 * @throws IOException          IO异常
+	 * @throws URISyntaxException   URL 语法错误
+	 * @throws InterruptedException 线程中断
+	 */
+	@Override
+	public JSONObject listModels() throws IOException, URISyntaxException, InterruptedException {
+		String apiUrl = super.getApiUrl();
+		if (apiUrl == null || apiUrl.isEmpty()) {
+			return UJSon.rstFalse("API URL 未设置");
+		}
+
+		// 构建 models 路径
+		String modelsUrl;
+		if (apiUrl.endsWith("/")) {
+			modelsUrl = apiUrl + "models";
+		} else {
+			modelsUrl = apiUrl + "/models";
+		}
+
+		// 创建 HTTP 请求
+		HttpRequest.Builder builder = HttpRequest.newBuilder().uri(new URI(modelsUrl))
+				.header("Content-Type", "application/json");
+
+		// 添加认证头
+		if (super.getApiKey() != null && !super.getApiKey().isEmpty()) {
+			builder.header("x-goog-api-key", super.getApiKey());
+		}
+
+		HttpRequest request = builder.GET().build();
+
+		// 发送请求
+		var client = HttpUtils.createHttpClient();
+		HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+		int statusCode = response.statusCode();
+		if (statusCode == 200) {
+			try {
+				JSONObject json = new JSONObject(response.body());
+				JSONArray models = json.optJSONArray("models");
+				if (models != null) {
+					// 转换为标准格式
+					JSONArray modelList = new JSONArray();
+					for (int i = 0; i < models.length(); i++) {
+						JSONObject model = models.getJSONObject(i);
+						JSONObject item = new JSONObject();
+						item.put("id", model.optString("name"));
+						item.put("object", "model");
+						item.put("displayName", model.optString("displayName"));
+						item.put("description", model.optString("description"));
+						item.put("version", model.optString("version"));
+						modelList.put(item);
+					}
+					JSONObject result = new JSONObject();
+					result.put("data", modelList);
+					result.put("object", "list");
+					UJSon.rstSetTrue(result, null);
+					return result;
+				} else {
+					return UJSon.rstFalse("无效的响应格式，未找到 models 数组");
+				}
+			} catch (Exception e) {
+				return UJSon.rstFalse("解析响应失败: " + e.getMessage());
+			}
+		} else {
+			return UJSon.rstFalse("请求失败，状态码: " + statusCode + ", 响应: " + response.body());
+		}
 	}
 }
