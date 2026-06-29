@@ -21,7 +21,16 @@
       "Agent(Explore)",
       "Read(//Users/admin/java/com.gdxsoft/emp-script/**)",
       "Read(//Users/admin/java/com.gdxsoft/emp-script-utils/src/main/java/com/gdxsoft/easyweb/utils/**)",
-      "Bash(mvn *)"
+      "Bash(mvn *)",
+      "Read(//Users/admin/java/com.gdxsoft/acewithai/**)",
+      "Read(//Users/admin/java/gyap.org/travelagent/**)",
+      "Read(//Users/admin/java/gyap.org/pf2023/**)",
+      "Read(//Users/admin/java/gyap.org/**)",
+      "Read(//Users/admin/java/guolei/fit/sql/**)",
+      "Bash(./bin/start.sh *)",
+      "Bash(pkill *)",
+      "Bash(sleep *)",
+      "Bash(codex *)"
     ]
   },
   "$version": 4

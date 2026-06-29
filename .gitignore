@@ -4,6 +4,7 @@
 /build/
 *.class
 /target/
+/target17/
 *.log
 /src/test/*.*
 /src/test/resources/ai_settings.json

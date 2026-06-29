@@ -1,6 +1,6 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0"
-		xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-		xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
 	<modelVersion>4.0.0</modelVersion>
 	<groupId>com.gdxsoft.easyweb</groupId>
 	<artifactId>emp-script-ai</artifactId>
@@ -15,7 +15,7 @@
 			<email>guolei@gdxsoft.com</email>
 		</developer>
 		<developer>
-			<id>jinzhaopeng</id>
+			<id>jinzhappeng</id>
 			<name>靳朝鹏</name>
 			<email>jinzhaopeng@126.com</email>
 		</developer>
@@ -169,20 +169,20 @@
 		<dependency>
 			<groupId>org.slf4j</groupId>
 			<artifactId>slf4j-api</artifactId>
-			<version>2.0.16</version>
+			<version>1.7.36</version>
 		</dependency>
 
 		<dependency>
-			<groupId>ch.qos.logback</groupId>
-			<artifactId>logback-classic</artifactId>
-			<version>1.5.12</version>
+			<groupId>org.slf4j</groupId>
+			<artifactId>slf4j-jdk14</artifactId>
+			<version>1.7.32</version>
 			<scope>test</scope>
 		</dependency>
 		<!-- https://mvnrepository.com/artifact/org.junit.jupiter/junit-jupiter-api -->
 		<dependency>
 			<groupId>org.junit.jupiter</groupId>
 			<artifactId>junit-jupiter-api</artifactId>
-			<version>5.11.3</version>
+			<version>5.7.1</version>
 			<scope>test</scope>
 		</dependency>
 
@@ -190,7 +190,7 @@
 		<dependency>
 			<groupId>org.hsqldb</groupId>
 			<artifactId>hsqldb</artifactId>
-			<version>2.7.4</version>
+			<version>2.7.2</version>
 			<scope>test</scope>
 		</dependency>
 
@@ -198,24 +198,85 @@
 		<dependency>
 			<groupId>com.microsoft.sqlserver</groupId>
 			<artifactId>mssql-jdbc</artifactId>
-			<version>12.8.2.jre11</version>
+			<version>12.6.1.jre11</version>
 			<scope>test</scope>
 		</dependency>
 
 	</dependencies>
 
 	<profiles>
-		<!-- javax.servlet-api (Tomcat 8/9) — 默认 -->
+		<!-- jakarta.servlet-api (Tomcat 10+) — 默认 -->
 		<profile>
-			<id>javax</id>
+			<id>jakarta</id>
 			<activation>
 				<activeByDefault>true</activeByDefault>
 			</activation>
+			<build>
+				<directory>target17</directory>
+				<finalName>emp-script-ai-jdk17-${project.version}</finalName>
+				<plugins>
+					<!-- last jar 带 jdk17 后缀 -->
+					<plugin>
+						<groupId>com.coderplus.maven.plugins</groupId>
+						<artifactId>copy-rename-maven-plugin</artifactId>
+						<executions>
+							<execution>
+								<id>copy-file</id>
+								<configuration>
+									<destinationFile>${project.build.directory}/${project.artifactId}-jdk17-last.jar</destinationFile>
+								</configuration>
+							</execution>
+						</executions>
+					</plugin>
+					<!-- 复制 emp-script / emp-script-utils 依赖 JAR 到 target17 -->
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-dependency-plugin</artifactId>
+						<version>3.6.0</version>
+						<executions>
+							<execution>
+								<id>copy-dep-emp</id>
+								<phase>package</phase>
+								<goals><goal>copy-dependencies</goal></goals>
+								<configuration>
+									<outputDirectory>${project.build.directory}</outputDirectory>
+									<includeArtifactIds>emp-script,emp-script-utils</includeArtifactIds>
+									<excludeTransitive>true</excludeTransitive>
+								</configuration>
+							</execution>
+						</executions>
+					</plugin>
+					<!-- 重命名为 *-jdk17-<version>.jar -->
+					<plugin>
+						<artifactId>maven-antrun-plugin</artifactId>
+						<executions>
+							<execution>
+								<id>rename-dep-emp-jdk17</id>
+								<phase>package</phase>
+								<configuration>
+									<target>
+										<move todir="${project.build.directory}" verbose="true">
+											<fileset dir="${project.build.directory}">
+												<include name="emp-script-*.jar" />
+												<include name="emp-script-utils-*.jar" />
+												<exclude name="${project.build.finalName}.jar" />
+												<exclude name="*-last.jar" />
+											</fileset>
+											<mapper type="regexp" from="^(emp-script(?:-utils)?)-(\d+\.\d+\.\d+.*?)(?:-jdk17)?\.jar$$" to="\1-jdk17-\2.jar" />
+										</move>
+									</target>
+								</configuration>
+								<goals><goal>run</goal></goals>
+							</execution>
+						</executions>
+					</plugin>
+				</plugins>
+			</build>
 			<dependencies>
 				<dependency>
-					<groupId>javax.servlet</groupId>
-					<artifactId>javax.servlet-api</artifactId>
-					<version>4.0.1</version>
+					<groupId>jakarta.servlet</groupId>
+					<artifactId>jakarta.servlet-api</artifactId>
+					<version>6.0.0</version>
 					<scope>provided</scope>
 				</dependency>
 			</dependencies>
