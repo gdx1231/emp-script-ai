@@ -289,16 +289,11 @@ public class HandleAiChatImpl implements Runnable, IHandleMsg {
 		aiRv.addOrUpdateValue("CHAT_ROOM_ID", roomId);
 
 		// 5. 创建 WebSocket Writer + PrintWriter
-		WebSocketSseWriter wsWriter = new WebSocketSseWriter(this.socket_, requestId);
+		boolean isPrivate = "true".equalsIgnoreCase(this.command_.optString("isPrivate"));
+		WebSocketSseWriter wsWriter = new WebSocketSseWriter(this.socket_, requestId, Long.parseLong(roomId), isPrivate);
 		PrintWriter pw = new PrintWriter(wsWriter);
 
-		// 5.1 用户提问落库
-		Object chtUsrIdObj = getSession().getUserProperties().get("cht_usr_id");
-		String chatUserId = chtUsrIdObj != null ? chtUsrIdObj.toString() : null;
-		if (chatUserId != null && !chatUserId.isEmpty()) {
-			saveUserQuestionToTopic(roomId, chatUserId, msg, rv);
-		}
-
+		// 用户提问已由 HandleChatImpl 落库，此处不重复保存
 		// 6. 初始化并执行 AiStreamOrPost
 		AiStreamOrPost handle = new AiStreamOrPost();
 		if (!handle.init(aiRv, "chat", pw)) {
@@ -326,14 +321,14 @@ public class HandleAiChatImpl implements Runnable, IHandleMsg {
 		// 7. AI 回答落库到 chat_topic + chat_cnt
 		String aiReply = wsWriter.getFullText();
 		if (aiReply != null && !aiReply.isEmpty()) {
-			saveAiReplyToTopic(roomId, botUserId, aiReply, rv);
+			saveAiReplyToTopic(roomId, botUserId, aiReply, rv, isPrivate);
 		}
 	}
 
 	/**
 	 * 将 AI 回答保存到 chat_topic + chat_cnt（通过 ClientSdk 调用 RESTful API）
 	 */
-	private void saveAiReplyToTopic(String roomId, String botUserId, String content, RequestValue rv) {
+	private void saveAiReplyToTopic(String roomId, String botUserId, String content, RequestValue rv, boolean isPrivate) {
 		try {
 			// 从 WebSocket 握手时提取的 sup_id
 			Object supIdObj = getSession().getUserProperties().get("sup_id");
@@ -368,7 +363,13 @@ public class HandleAiChatImpl implements Runnable, IHandleMsg {
 			body.put("cht_cnt", content);
 			body.put("cht_cnt_txt", content);
 			body.put("cht_type", "text");
-
+				// 私密模式下记录 AI 回复目标用户
+				if (isPrivate) {
+					Object chtUsrIdObj = getSession().getUserProperties().get("cht_usr_id");
+					if (chtUsrIdObj != null) {
+						body.put("cht_to_usr_id", chtUsrIdObj);
+					}
+				}
 			JSONObject msg = new JSONObject();
 			msg.put("body", body);
 
@@ -388,62 +389,6 @@ public class HandleAiChatImpl implements Runnable, IHandleMsg {
 
 	private Session getSession() {
 		return this.socket_.getSession();
-	}
-
-	/**
-	 * 将用户提问保存到 chat_topic + chat_cnt（通过 ClientSdk 调用 RESTful API）
-	 */
-	private void saveUserQuestionToTopic(String roomId, String userId, String content, RequestValue rv) {
-		try {
-			// 从 WebSocket 握手时提取的 sup_id
-			Object supIdObj = getSession().getUserProperties().get("sup_id");
-			int supId = supIdObj instanceof Integer ? (Integer) supIdObj : 0;
-			if (supId <= 0) {
-				LOGGER.warn("sup_id 不可用，无法创建用户 JWT token");
-				return;
-			}
-
-			// 为用户创建 JWT token
-			Auth auth = new Auth();
-			long userIdLong = Long.parseLong(userId);
-			if (!auth.createJwtTokenUser(supId, userIdLong)) {
-				LOGGER.warn("创建用户 JWT token 失败: {}", auth.getErrorMessage());
-				return;
-			}
-			String jwtToken = auth.getJwtToken();
-
-			// RESTful API 根路径
-			String apiRoot = com.gdxsoft.easyweb.utils.UPath.getInitPara("chat_restful_root");
-			if (apiRoot == null || apiRoot.isEmpty()) {
-				LOGGER.warn("ewa_conf.xml 中未配置 chat_restful_root");
-				return;
-			}
-
-			// 创建 ClientSdk
-			ClientSdk sdk = new ClientSdk(apiRoot, jwtToken);
-			sdk.setChatUserId(userIdLong);
-
-			// 构建消息
-			JSONObject body = new JSONObject();
-			body.put("cht_cnt", content);
-			body.put("cht_cnt_txt", content);
-			body.put("cht_type", "text");
-
-			JSONObject msg = new JSONObject();
-			msg.put("body", body);
-
-			// 调用 newMessage
-			long roomIdLong = Long.parseLong(roomId);
-			com.gdxsoft.easyweb.script.restful.RestfulResult<Object> result = sdk.newMessage(roomIdLong, msg);
-
-			if (result.isSuccess()) {
-				LOGGER.info("用户提问已落库: roomId={}, userId={}, length={}", roomId, userId, content.length());
-			} else {
-				LOGGER.warn("用户提问落库失败: code={}, message={}", result.getCode(), result.getMessage());
-			}
-		} catch (Exception e) {
-			LOGGER.error("用户提问落库失败: {}", e.getMessage(), e);
-		}
 	}
 
 	/**

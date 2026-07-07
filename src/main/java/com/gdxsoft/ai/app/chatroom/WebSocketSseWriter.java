@@ -1,12 +1,15 @@
 package com.gdxsoft.ai.app.chatroom;
 
 import java.io.Writer;
+import java.util.Iterator;
+import java.util.Map;
 
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.gdxsoft.easyweb.websocket.EwaWebSocketBus;
+import com.gdxsoft.easyweb.websocket.EwaWebSocketContainer;
 
 
 /**
@@ -21,10 +24,14 @@ public class WebSocketSseWriter extends Writer {
     private final StringBuilder fullText = new StringBuilder();
     private boolean streamStarted;
     private final String requestId;
+    private final long chatRoomId;
+    private final boolean isPrivate;
 
-    public WebSocketSseWriter(EwaWebSocketBus socket, String requestId) {
+    public WebSocketSseWriter(EwaWebSocketBus socket, String requestId, long chatRoomId, boolean isPrivate) {
         this.socket = socket;
         this.requestId = requestId;
+        this.chatRoomId = chatRoomId;
+        this.isPrivate = isPrivate;
     }
 
     @Override
@@ -102,13 +109,34 @@ public class WebSocketSseWriter extends Writer {
         try {
             JSONObject msg = new JSONObject();
             msg.put("BROADCAST_ID", broadcastId);
+            msg.put("CHAT_ROOM_ID", String.valueOf(this.chatRoomId));
             if (requestId != null) {
                 msg.put("REQUEST_ID", requestId);
             }
             if (text != null) {
                 msg.put("TEXT", text);
             }
-            this.socket.sendToClient(msg.toString());
+            if (this.isPrivate) {
+                // 私密：只发给请求者
+                this.socket.sendToClient(msg.toString());
+            } else {
+                // 公开：广播给聊天室所有在线用户
+                Map<String, Boolean> group = ClientChatUserGroup.getGroup(this.chatRoomId);
+                if (group != null && !group.isEmpty()) {
+                    String payload = msg.toString();
+                    for (Iterator<String> it = group.keySet().iterator(); it.hasNext();) {
+                        String unid = it.next();
+                        EwaWebSocketBus ws = EwaWebSocketContainer.getSocketByUnid(unid);
+                        if (ws == null) {
+                            it.remove();
+                            continue;
+                        }
+                        ws.sendToClient(payload);
+                    }
+                } else {
+                    this.socket.sendToClient(msg.toString());
+                }
+            }
         } catch (Exception e) {
             LOGGER.warn("AI broadcast failed: {}", e.getMessage());
         }

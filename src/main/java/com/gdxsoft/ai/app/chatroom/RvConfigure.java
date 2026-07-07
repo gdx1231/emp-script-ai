@@ -58,12 +58,12 @@ public class RvConfigure extends Configurator {
 		String token = rv.s("token");
 		if (token != null && !token.trim().isEmpty()) {
 			validateAndExtract(token.trim(), sec, rv);
+		} else {
+			LOGGER.debug("WebSocket 连接未携带 token，消息层将按需鉴权");
 		}
-
-		// 强制身份验证：未认证用户拒绝 WebSocket 连接
-		if (sec.getUserProperties().get("cht_usr_id") == null) {
-			throw new RuntimeException("WebSocket 连接被拒绝：未通过身份验证");
-		}
+		// 注意：不在此处强制拦截。
+		// HandleChatImpl / HandleAiChatImpl 等消息处理器各自做鉴权，
+		// 未认证用户会在发送消息时收到 "Unauthorized" 响应，而非直接断连。
 	}
 
 	/**

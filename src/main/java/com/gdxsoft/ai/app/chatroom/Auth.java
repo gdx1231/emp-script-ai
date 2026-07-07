@@ -1,6 +1,8 @@
 package com.gdxsoft.ai.app.chatroom;
 
 import java.util.Date;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 import org.json.JSONObject;
 
@@ -12,6 +14,61 @@ import com.gdxsoft.easyweb.utils.UJwt.JwtToken;
 public class Auth {
 	private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger(Auth.class);
 	private static final long DEF_LIFE_SECONDS = 7200; // 默认两个小时
+
+	// ==================== 缓存 ====================
+
+	/**
+	 * 缓存条目：数据 + 过期时间
+	 */
+	private static class CacheEntry<T> {
+		final T data;
+		final long expireAt;
+
+		CacheEntry(T data) {
+			this.data = data;
+			this.expireAt = System.currentTimeMillis() + CACHE_TTL_MS;
+		}
+
+		boolean isValid() {
+			return System.currentTimeMillis() < expireAt;
+		}
+	}
+
+	/** sup_main 缓存，key=sup_id */
+	private static final ConcurrentHashMap<Integer, CacheEntry<JSONObject>> SUP_CACHE = new ConcurrentHashMap<>();
+
+	/** api_main 缓存，key=sup_unid */
+	private static final ConcurrentHashMap<String, CacheEntry<JSONObject>> API_CACHE = new ConcurrentHashMap<>();
+
+	/** 缓存 TTL，默认 5 分钟（sup/api 信息属于配置类数据，很少变动） */
+	private static volatile long CACHE_TTL_MS = TimeUnit.MINUTES.toMillis(5);
+
+	/**
+	 * 设置缓存有效期（毫秒），0 表示禁用缓存
+	 */
+	public static void setCacheTtlMs(long ttlMs) {
+		CACHE_TTL_MS = ttlMs;
+		if (ttlMs <= 0) {
+			clearCache();
+		}
+	}
+
+	/**
+	 * 清空所有缓存
+	 */
+	public static void clearCache() {
+		SUP_CACHE.clear();
+		API_CACHE.clear();
+		LOGGER.info("Auth 缓存已清空");
+	}
+
+	/**
+	 * 获取缓存统计信息
+	 */
+	public static String getCacheStats() {
+		return String.format("sup=%d, api=%d, ttl=%dms", SUP_CACHE.size(), API_CACHE.size(), CACHE_TTL_MS);
+	}
+
 	private static String DEF_DatabaseName;
 
 	/**
@@ -219,6 +276,19 @@ public class Auth {
 	}
 
 	private boolean loadApiMain(String supUnid) {
+		// 检查缓存
+		if (CACHE_TTL_MS > 0) {
+			CacheEntry<JSONObject> entry = API_CACHE.get(supUnid);
+			if (entry != null && entry.isValid()) {
+				this.apiMain = entry.data;
+				return true;
+			}
+			// 过期或不存在 → 移除过期条目后查库
+			if (entry != null) {
+				API_CACHE.remove(supUnid);
+			}
+		}
+
 		RequestValue rv1 = new RequestValue();
 		rv1.addOrUpdateValue("sup_unid", supUnid);
 		String sqlApiMain = "select api_key, api_sign_code from api_main where sup_unid=@sup_unid";
@@ -230,10 +300,28 @@ public class Auth {
 		}
 		this.apiMain = tbApi.toJSONArray().getJSONObject(0);
 
+		// 写入缓存
+		if (CACHE_TTL_MS > 0) {
+			API_CACHE.put(supUnid, new CacheEntry<>(this.apiMain));
+		}
+
 		return true;
 	}
 
 	private boolean loadSup(int supId) {
+		// 检查缓存
+		if (CACHE_TTL_MS > 0) {
+			CacheEntry<JSONObject> entry = SUP_CACHE.get(supId);
+			if (entry != null && entry.isValid()) {
+				this.supMain = entry.data;
+				return true;
+			}
+			// 过期或不存在 → 移除过期条目后查库
+			if (entry != null) {
+				SUP_CACHE.remove(supId);
+			}
+		}
+
 		RequestValue rv1 = new RequestValue();
 		rv1.addOrUpdateValue("g_sup_id", supId);
 		String sqlSupMain = "select sup_id, sup_name, sup_unid, sup_state from sup_main where sup_id=@g_sup_id";
@@ -249,6 +337,11 @@ public class Auth {
 				|| "CRM_S_DEL".equalsIgnoreCase(this.supMain.optString("sup_state"))) {
 			errorMessage = "The supmain has deleted";
 			return false;
+		}
+
+		// 写入缓存
+		if (CACHE_TTL_MS > 0) {
+			SUP_CACHE.put(supId, new CacheEntry<>(this.supMain));
 		}
 
 		return true;

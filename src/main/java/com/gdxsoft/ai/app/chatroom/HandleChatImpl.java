@@ -153,36 +153,34 @@ public class HandleChatImpl implements Runnable, IHandleMsg {
 	// ==================== Action 路由 ====================
 
 	private JSONObject doAction() {
-		String userToken = command.optString("userToken");
-
-		if (StringUtils.isBlank(userToken)) {
-			RestfulResult<Object> rst = ClientSdk.createErrorResult("need_user_token", 0, 401);
-			return rst.toJson();
-		}
-
 		String restfulRoot = UPath.getInitPara("chat_restful_root");
 		if (StringUtils.isBlank(restfulRoot)) {
 			return UJSon.rstFalse("请在 ewa_conf.xml的 initPara中设置 chat_restful_root参数（访问restful的网址和前缀）");
 		}
 
-		this.client = new ClientSdk(restfulRoot, userToken);
+		// 从 WebSocket 握手状态获取 cht_usr_id 和 sup_id（由 RvConfigure 从 ?token= JWT 提取）
+		String userIdStr = this.socket.getRv().s("cht_usr_id");
+		Object supIdObj = this.socket.getSession().getUserProperties().get("sup_id");
+		int supId = supIdObj instanceof Integer ? (Integer) supIdObj : 0;
+
+		if (StringUtils.isBlank(userIdStr) || supId <= 0) {
+			RestfulResult<Object> rst = ClientSdk.createErrorResult("need_user_token", 0, 401);
+			return rst.toJson();
+		}
+
+		// 从握手状态生成 JWT，不再需要前端每条消息传 userToken
+		Auth auth = new Auth();
+		long resolvedUserId = Long.parseLong(userIdStr);
+		if (!auth.createJwtTokenUser(supId, resolvedUserId)) {
+			RestfulResult<Object> rst = ClientSdk.createErrorResult(auth.getErrorMessage(), 0, 401);
+			return rst.toJson();
+		}
+		String jwtToken = auth.getJwtToken();
+
+		this.client = new ClientSdk(restfulRoot, jwtToken);
 		this.client.setFromIp(this.socket.getRv().s("SYS_REMOTEIP"));
 		this.client.setFromUserAgent(this.socket.getRv().s("SYS_USER_AGENT"));
-
-		long resolvedUserId = 0;
-		String userIdStr = this.socket.getRv().s("cht_usr_id");
-		if (userIdStr != null && !userIdStr.isEmpty()) {
-			try {
-				resolvedUserId = Long.parseLong(userIdStr);
-			} catch (NumberFormatException e) {
-				LOGGER.warn("Invalid cht_usr_id: {}", userIdStr);
-			}
-		}
-		LOGGER.info("WebSocket action={}, cht_usr_id={}, resolvedUserId={}",
-				this.action, userIdStr, resolvedUserId);
-		if (resolvedUserId > 0) {
-			this.client.setChatUserId(resolvedUserId);
-		}
+		this.client.setChatUserId(resolvedUserId);
 
 		if (command.has("parameters")) {
 			client.setParames(command.optString("parameters"));
@@ -424,7 +422,8 @@ public class HandleChatImpl implements Runnable, IHandleMsg {
 			}
 		}
 
-		if (fullData != null) {
+		boolean isPrivate = "true".equalsIgnoreCase(command.optString("isPrivate"));
+		if (fullData != null && !isPrivate) {
 			this.boradRoomMessage(fullData, CHAT_BROAD_MSG_ID, false);
 		}
 

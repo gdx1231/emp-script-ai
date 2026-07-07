@@ -10,7 +10,10 @@ import com.gdxsoft.easyweb.utils.UNet;
 import com.gdxsoft.easyweb.utils.UUrl;
 import com.gdxsoft.easyweb.utils.Utils;
 
-public class ClientSdk {
+public class ClientSdk extends SdkBase {
+
+	private static final Logger LOGGER = LoggerFactory.getLogger(ClientSdk.class);
+
 	/**
 	 * 创建 错误提示信息
 	 * 
@@ -19,28 +22,11 @@ public class ClientSdk {
 	 * @return
 	 */
 	public static RestfulResult<Object> createErrorResult(String errorMsg, int errorCode, int httpStatusCode) {
-		RestfulResult<Object> rr = new RestfulResult<>();
-		rr.setCode(errorCode);
-		rr.setHttpStatusCode(httpStatusCode);
-		rr.setSuccess(false);
-		rr.setMessage(errorMsg);
-		rr.setRawData(rr.toJson());
-		rr.setData(rr.toJson());
-
-		return rr;
+		return SdkBase.createErrorResult(errorMsg, errorCode, httpStatusCode);
 	}
 
-	private static final Logger LOGGER = LoggerFactory.getLogger(ClientSdk.class);
-
-	private String restfulRoot;
-	private String userToken;
-	private String parames;
-	private String fromIp; // 客户端来源地址 ipv4/ipv6
-	private String fromUserAgent; // 客户端浏览器UA
-	private long chatUserId; // JWT 认证时传递 chat user id
-
-	public ClientSdk(String restfulRoot, String userToken) {
-		this.restfulRoot = restfulRoot;
+	public ClientSdk(String apiRoot, String userToken) {
+		this.apiRoot = apiRoot;
 		this.userToken = userToken;
 	}
 
@@ -54,12 +40,7 @@ public class ClientSdk {
 		String url = this.createUrl(path);
 		url = this.attacheParameters(url);
 
-		UNet net = this.createNet();
-		String rst = net.doGet(url);
-		this.logNon200Warning(net, "GET", url, null);
-
-		RestfulResult<Object> rr = new RestfulResult<>();
-		rr.parse(rst);
+		RestfulResult<Object> rr = super.apiGet(url, null);
 
 		return rr;
 	}
@@ -482,111 +463,8 @@ public class ClientSdk {
 		return rr;
 	}
 
-	/**
-	 * 当 HTTP 状态码不为 200 时，输出 WARN 日志和对应的 curl 命令
-	 *
-	 * @param net    UNet 实例
-	 * @param method HTTP 方法 (GET/POST/PUT/DELETE)
-	 * @param url    请求 URL
-	 * @param body   请求体（可为 null）
-	 */
-	private void logNon200Warning(UNet net, String method, String url, String body) {
-		int statusCode = net.getLastStatusCode();
-		if (statusCode >= 200 && statusCode < 300) {
-			return;
-		}
-		LOGGER.warn("HTTP status code {} for {} {}", statusCode, method, url);
+ 
 
-		java.util.List<String> parts = new java.util.ArrayList<>();
-		parts.add("curl -X " + method + " '" + url + "'");
 
-		if (StringUtils.isNotBlank(this.userToken)) {
-			parts.add("  -H 'Authorization: " + this.userToken + "'");
-		}
-		if (StringUtils.isNotBlank(fromIp)) {
-			parts.add("  -H 'X-Forwarded-For: " + fromIp + "'");
-		}
-		if (StringUtils.isNotBlank(this.fromUserAgent)) {
-			parts.add("  -H 'User-Agent: " + this.fromUserAgent + "'");
-		}
-		if (StringUtils.isNotBlank(body)) {
-			// 转义 body 中的单引号，安全拼接
-			String escaped = body.replace("'", "'\\''");
-			parts.add("  -d '" + escaped + "'");
-		}
-
-		String curlStr = String.join(" \\\n", parts);
-		LOGGER.warn("Curl:\n{}", curlStr);
-	}
-
-	private String createUrl(String path) {
-		String url = this.restfulRoot + path;
-		return url;
-	}
-
-	public UNet createNet() {
-		UNet net = new UNet();
-		net.addHeader("Authorization", this.userToken);
-		net.setIsShowLog(false);
-		if (StringUtils.isNotBlank(fromIp)) { // 客户端来源地址
-			net.addHeader("X-Forwarded-For", fromIp);
-		}
-		if (StringUtils.isNotBlank(this.fromUserAgent)) { // 客户端浏览器UA
-			net.setUserAgent(fromUserAgent);
-		}
-		return net;
-	}
-
-	public String getParames() {
-		return parames;
-	}
-
-	public void setParames(String parames) {
-		this.parames = parames;
-	}
-
-	/**
-	 * 客户端来源地址 ipv4/ipv6
-	 * 
-	 * @return IP地址 (ipv4/ipv6)
-	 */
-	public String getFromIp() {
-		return fromIp;
-	}
-
-	/**
-	 * 客户端来源地址 ipv4/ipv6
-	 * 
-	 * @param fromIp IP地址 (ipv4/ipv6)
-	 */
-	public void setFromIp(String fromIp) {
-		this.fromIp = fromIp;
-	}
-
-	/**
-	 * 客户端浏览器UA
-	 * 
-	 * @return UserAgent
-	 */
-	public String getFromUserAgent() {
-		return fromUserAgent;
-	}
-
-	/**
-	 * 客户端浏览器UA
-	 * 
-	 * @param fromUserAgent 览器UserAgent
-	 */
-	public void setFromUserAgent(String fromUserAgent) {
-		this.fromUserAgent = fromUserAgent;
-	}
-
-	public long getChatUserId() {
-		return chatUserId;
-	}
-
-	public void setChatUserId(long chatUserId) {
-		this.chatUserId = chatUserId;
-	}
 
 }
