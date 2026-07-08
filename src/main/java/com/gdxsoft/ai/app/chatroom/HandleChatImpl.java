@@ -23,12 +23,10 @@ import com.gdxsoft.easyweb.utils.UJSon;
 import com.gdxsoft.easyweb.utils.UPath;
 import com.gdxsoft.easyweb.websocket.*;
 
-
 /**
  * WebSocket 聊天消息处理器 — 合并 pool 调度 + 业务逻辑
  *
- * 线程池针对 I/O 密集型场景（RESTful API 调用 + WebSocket 广播）进行优化，
- * 100 并发下可立即处理，避免长时间排队。
+ * 线程池针对 I/O 密集型场景（RESTful API 调用 + WebSocket 广播）进行优化， 100 并发下可立即处理，避免长时间排队。
  */
 public class HandleChatImpl implements Runnable, IHandleMsg {
 	private static final Logger LOGGER = LoggerFactory.getLogger(HandleChatImpl.class);
@@ -47,14 +45,9 @@ public class HandleChatImpl implements Runnable, IHandleMsg {
 		return t;
 	};
 
-	private static final ThreadPoolExecutor POOL = new ThreadPoolExecutor(
-			CORE_POOL_SIZE,
-			MAX_POOL_SIZE,
-			KEEP_ALIVE_SECONDS, TimeUnit.SECONDS,
-			new LinkedBlockingQueue<>(QUEUE_CAPACITY),
-			THREAD_FACTORY,
-			new ThreadPoolExecutor.CallerRunsPolicy()
-	);
+	private static final ThreadPoolExecutor POOL = new ThreadPoolExecutor(CORE_POOL_SIZE, MAX_POOL_SIZE,
+			KEEP_ALIVE_SECONDS, TimeUnit.SECONDS, new LinkedBlockingQueue<>(QUEUE_CAPACITY), THREAD_FACTORY,
+			new ThreadPoolExecutor.CallerRunsPolicy());
 
 	static {
 		Runtime.getRuntime().addShutdownHook(new Thread(() -> {
@@ -136,8 +129,8 @@ public class HandleChatImpl implements Runnable, IHandleMsg {
 			result = this.doAction();
 		} catch (Exception err) {
 			LOGGER.error("Execute action {} error {}", this.command, err.getMessage(), err);
-			RestfulResult<Object> rst = ClientSdk.createErrorResult(
-					err.getMessage() != null ? err.getMessage() : "Internal error", 500, 500);
+			RestfulResult<Object> rst = ClientSdk
+					.createErrorResult(err.getMessage() != null ? err.getMessage() : "Internal error", 500, 500);
 			result = rst.toJson();
 		}
 
@@ -178,6 +171,9 @@ public class HandleChatImpl implements Runnable, IHandleMsg {
 		String jwtToken = auth.getJwtToken();
 
 		this.client = new ClientSdk(restfulRoot, jwtToken);
+
+		this.client.setShowCurl(true);
+
 		this.client.setFromIp(this.socket.getRv().s("SYS_REMOTEIP"));
 		this.client.setFromUserAgent(this.socket.getRv().s("SYS_USER_AGENT"));
 		this.client.setChatUserId(resolvedUserId);
@@ -405,8 +401,8 @@ public class HandleChatImpl implements Runnable, IHandleMsg {
 		if (!rst.isSuccess()) {
 			return rst.toJson();
 		}
-
-		JSONObject postResult = new JSONObject(rst.getRawData().toString());
+		JSONArray msgs = (JSONArray) rst.getRawData();
+		JSONObject postResult = msgs.getJSONObject(0);
 		long newTopicId = postResult.optLong("swid");
 
 		RestfulResult<Object> topicsRst = client.getChatRoomTopics(chatRoomId, null);
@@ -515,8 +511,8 @@ public class HandleChatImpl implements Runnable, IHandleMsg {
 	}
 
 	private JSONObject notImplementsAction() {
-		RestfulResult<Object> rst = ClientSdk.createErrorResult(
-				"Not implements action: (" + this.action + ")", 405, 405);
+		RestfulResult<Object> rst = ClientSdk.createErrorResult("Not implements action: (" + this.action + ")", 405,
+				405);
 		return rst.toJson();
 	}
 

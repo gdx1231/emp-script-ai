@@ -42,6 +42,8 @@ public class AuthUser {
 		} else {
 			rv1.addOrUpdateValue("useragent", "");
 		}
+		// 先删除该用户的旧 token，避免并发时 PK 冲突
+		DataConnection.updateAndClose("DELETE FROM chat_user_token WHERE cht_usr_id=@userId", "", rv1);
 		DataConnection.updateAndClose(SQL_SAVE_TOKEN, "", rv1);
 	}
 

@@ -87,10 +87,6 @@ public class HandleAiChatImpl implements Runnable, IHandleMsg {
 	private JSONObject command_;
 	private String action_;
 
-	public String getDefaultXmlName() {
-		return "/aichatroom/chat/chat.xml";
-	}
-
 	public HandleAiChatImpl(EwaWebSocketBus socket, JSONObject command) {
 		this.socket_ = socket;
 		this.command_ = command;
@@ -210,11 +206,13 @@ public class HandleAiChatImpl implements Runnable, IHandleMsg {
 		try {
 			RequestValue qr = rv.clone();
 			qr.addOrUpdateValue("room_id", roomId);
-			DTTable botTable = DTTable.getJdbcTable(
-					"SELECT u.cht_usr_id, u.cht_usr_name, u.cht_ai_model_id" + " FROM chat_user u"
-							+ " JOIN chat_acl a ON a.cht_usr_id = u.cht_usr_id" + " WHERE a.cht_rom_id=@room_id"
-							+ " AND u.cht_usr_ref IN ('ai_bot','chat_ai_model') AND u.cht_usr_status='USED'",
-					"chat", qr);
+			DTTable botTable = DTTable.getJdbcTable("""
+					SELECT u.cht_usr_id, u.cht_usr_name, u.cht_ai_model_id FROM chat_user u
+						JOIN chat_acl a ON a.cht_usr_id = u.cht_usr_id
+					WHERE a.cht_rom_id=@room_id
+						AND u.cht_usr_ref IN ('ai_bot','chat_ai_model')
+						AND u.cht_usr_status='USED'
+					""", "chat", qr);
 			if (botTable.getCount() == 0) {
 				JSONObject err = createErrorResult("No bot found in room: " + roomId);
 				this.socket_.sendToClient(err.toString());
@@ -232,8 +230,12 @@ public class HandleAiChatImpl implements Runnable, IHandleMsg {
 				// 3. 通过 cht_ai_model_id 查 chat_ai_model 获取模型配置
 				RequestValue mr = rv.clone();
 				mr.addOrUpdateValue("ai_model_id", aiModelId);
-				DTTable modelTable = DTTable.getJdbcTable("SELECT xml_path, provider, model, mode_name, thinking"
-						+ " FROM chat_ai_model WHERE id=@ai_model_id AND enabled=1", "chat", mr);
+				DTTable modelTable = DTTable.getJdbcTable("""
+						SELECT xml_path, provider, model, mode_name, thinking
+						FROM chat_ai_model 
+						WHERE id=@ai_model_id 
+							AND enabled=1
+						""", "chat", mr);
 				if (modelTable.getCount() > 0) {
 					if (modelTable.getCell(0, "xml_path") != null) {
 						xmlPath = modelTable.getCell(0, "xml_path").toString();
@@ -290,7 +292,8 @@ public class HandleAiChatImpl implements Runnable, IHandleMsg {
 
 		// 5. 创建 WebSocket Writer + PrintWriter
 		boolean isPrivate = "true".equalsIgnoreCase(this.command_.optString("isPrivate"));
-		WebSocketSseWriter wsWriter = new WebSocketSseWriter(this.socket_, requestId, Long.parseLong(roomId), isPrivate);
+		WebSocketSseWriter wsWriter = new WebSocketSseWriter(this.socket_, requestId, Long.parseLong(roomId),
+				isPrivate);
 		PrintWriter pw = new PrintWriter(wsWriter);
 
 		// 用户提问已由 HandleChatImpl 落库，此处不重复保存
@@ -328,7 +331,8 @@ public class HandleAiChatImpl implements Runnable, IHandleMsg {
 	/**
 	 * 将 AI 回答保存到 chat_topic + chat_cnt（通过 ClientSdk 调用 RESTful API）
 	 */
-	private void saveAiReplyToTopic(String roomId, String botUserId, String content, RequestValue rv, boolean isPrivate) {
+	private void saveAiReplyToTopic(String roomId, String botUserId, String content, RequestValue rv,
+			boolean isPrivate) {
 		try {
 			// 从 WebSocket 握手时提取的 sup_id
 			Object supIdObj = getSession().getUserProperties().get("sup_id");
@@ -363,13 +367,13 @@ public class HandleAiChatImpl implements Runnable, IHandleMsg {
 			body.put("cht_cnt", content);
 			body.put("cht_cnt_txt", content);
 			body.put("cht_type", "text");
-				// 私密模式下记录 AI 回复目标用户
-				if (isPrivate) {
-					Object chtUsrIdObj = getSession().getUserProperties().get("cht_usr_id");
-					if (chtUsrIdObj != null) {
-						body.put("cht_to_usr_id", chtUsrIdObj);
-					}
+			// 私密模式下记录 AI 回复目标用户
+			if (isPrivate) {
+				Object chtUsrIdObj = getSession().getUserProperties().get("cht_usr_id");
+				if (chtUsrIdObj != null) {
+					body.put("cht_to_usr_id", chtUsrIdObj);
 				}
+			}
 			JSONObject msg = new JSONObject();
 			msg.put("body", body);
 

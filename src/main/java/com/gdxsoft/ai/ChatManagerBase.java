@@ -66,6 +66,8 @@ package com.gdxsoft.ai;
 
 import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
@@ -138,14 +140,32 @@ public class ChatManagerBase {
 
 	/**
 	 * 加载AI模式配置
-	 * 
-	 * @param path 配置文件路径
-	 * @throws Exception 加载失败时抛出异常
+	 * <p>
+	 * 解析顺序（<b>文件优先</b>）：
+	 * <ol>
+	 * <li>如果 {@code path} 指向一个存在的<b>文件系统</b>文件（绝对路径或 JVM 工作目录下的相对路径）， 直接读取该文件 — 用于
+	 * IDE 源码布局下的 {@code src/main/resources/...} 直读， 以及运维侧对打包配置的临时覆盖。</li>
+	 * <li>否则按<b>类路径</b>资源查找 — 适用于打包到 JAR 内的 XML
+	 * （{@code classpath:ai_chat_room_group.xml} 或
+	 * {@code ai_chat_room_group.xml}）。</li>
+	 * </ol>
+	 * 也就是说：当文件系统和类路径同时存在同名资源时，<b>文件优先</b>。
+	 *
+	 * @param path        配置文件路径（绝对/相对文件系统路径，或类路径相对名）
+	 * @param classLoader 用于类路径资源查找的 ClassLoader
+	 * @throws Exception 文件与类路径都找不到时抛出
 	 */
 	public static void loadModes(String path, final ClassLoader classLoader) throws Exception {
-		// 从资源文件中读取AI模式配置
-		String xml = IOUtils.resourceToString(path, StandardCharsets.UTF_8, classLoader);
-		// .getResourceContent(path);
+		String xml = null;
+		// 1) 文件优先：path 指向一个真实存在的常规文件时直接读
+		if (path != null && Files.isRegularFile(Paths.get(path))) {
+			xml = Files.readString(Paths.get(path), StandardCharsets.UTF_8);
+			LOGGER.info("loadModes: 从文件系统读取 '{}'", path);
+		}
+		// 2) 回退到类路径资源（保持原有打包到 JAR 时的行为）
+		if (xml == null) {
+			xml = IOUtils.resourceToString(path, StandardCharsets.UTF_8, classLoader);
+		}
 		com.gdxsoft.ai.modes.Modes modes = new com.gdxsoft.ai.modes.Modes();
 		modes.loadModes(xml);
 	}
@@ -415,12 +435,16 @@ public class ChatManagerBase {
 				return;
 			}
 		}
-		Map<String, String> refHeaders = this.rv.getHttpHeaders();
-		for (String name : refHeaders.keySet()) {
-			String value = refHeaders.get(name);
-			refHeaders.put(name, value);
+		Map<String, String> refHeaders ;
+		if (this.rv.getHttpHeaders() != null) {// websocket的header是空的
+			refHeaders = this.rv.getHttpHeaders();
+			for (String name : refHeaders.keySet()) {
+				String value = refHeaders.get(name);
+				refHeaders.put(name, value);
+			}
+		} else {
+			refHeaders = new HashMap<>();
 		}
-
 		// 指定的提示词
 		String prompts = rv.s("prompts");
 		Set<String> promptSet = new HashSet<>();
@@ -738,8 +762,7 @@ public class ChatManagerBase {
 	}
 
 	/**
-	 * 估算文本的 token 数量
-	 * 中文/日文/韩文按 1.5 char/token，其他按 4 char/token 估算
+	 * 估算文本的 token 数量 中文/日文/韩文按 1.5 char/token，其他按 4 char/token 估算
 	 */
 	private int estimateTokens(String text) {
 		int cjk = 0, other = 0;
@@ -762,7 +785,8 @@ public class ChatManagerBase {
 	 * 根据 token 限制截断消息列表，从最早的消息开始删除
 	 */
 	private List<org.json.JSONObject> truncateByTokens(List<org.json.JSONObject> messages, int maxTokens) {
-		if (maxTokens <= 0) return messages;
+		if (maxTokens <= 0)
+			return messages;
 
 		int totalTokens = 0;
 		for (org.json.JSONObject msg : messages) {
@@ -932,8 +956,7 @@ public class ChatManagerBase {
 	}
 
 	/**
-	 * 检查输入参数是否满足当前模式的paramChecks定义
-	 * 从AI_CHAT_PARAMS表加载已保存的参数，与paramChecks定义进行校验
+	 * 检查输入参数是否满足当前模式的paramChecks定义 从AI_CHAT_PARAMS表加载已保存的参数，与paramChecks定义进行校验
 	 * 
 	 * @return 校验结果JSON：{RST:true/false, params:{...}, missing:[...], invalid:[...]}
 	 */
@@ -1014,8 +1037,7 @@ public class ChatManagerBase {
 	}
 
 	/**
-	 * 从用户请求中提取参数并保存到AI_CHAT_PARAMS表
-	 * 使用AI从对话上下文中提取结构化参数（出发城市、目的地、天数等）
+	 * 从用户请求中提取参数并保存到AI_CHAT_PARAMS表 使用AI从对话上下文中提取结构化参数（出发城市、目的地、天数等）
 	 * 
 	 * @return 保存结果JSON：{RST:true/false, params:{...}}
 	 */
@@ -1051,10 +1073,8 @@ public class ChatManagerBase {
 		try {
 			rv.addOrUpdateValue("ai_id", this.aiId, "bigint", 100);
 			String sql = "select top 30 AIM_ROLE, AIM_MSG from AI_CHAT_MSG m "
-					+ "inner join AI_CHAT c on m.AI_ID = c.AI_ID "
-					+ "where c.AI_ID = @ai_id "
-					+ "and isnull(m.AIM_SKIP_APPEND, 0) = 0 "
-					+ "order by m.AIM_ID desc";
+					+ "inner join AI_CHAT c on m.AI_ID = c.AI_ID " + "where c.AI_ID = @ai_id "
+					+ "and isnull(m.AIM_SKIP_APPEND, 0) = 0 " + "order by m.AIM_ID desc";
 			DTTable tb = DTTable.getJdbcTable(sql, dbConfigName, rv);
 			StringBuilder sb = new StringBuilder();
 			for (int i = tb.getCount() - 1; i >= 0; i--) {
@@ -1096,7 +1116,8 @@ public class ChatManagerBase {
 		sb.append("{");
 		boolean first = true;
 		for (ParamCheck pc : paramChecks) {
-			if (!first) sb.append(",");
+			if (!first)
+				sb.append(",");
 			sb.append("\"").append(pc.getName()).append("\": \"提取到的值或null\"");
 			first = false;
 		}
@@ -1394,8 +1415,8 @@ public class ChatManagerBase {
 	}
 
 	/**
-	 * 处理 innerCall 步骤：内部调用，输出不返回给用户
-	 * 使用现有的 apisCheck 机制调用 API（通过 UNet），AI 响应直接返回
+	 * 处理 innerCall 步骤：内部调用，输出不返回给用户 使用现有的 apisCheck 机制调用 API（通过 UNet），AI 响应直接返回
+	 * 
 	 * @return AI 返回的内容，如果无 innerCall 步骤或失败返回 null
 	 */
 	public String processInnerCallStep(Step innerStep) {
@@ -1421,17 +1442,57 @@ public class ChatManagerBase {
 			final StringBuilder capturedOutput = new StringBuilder();
 			this.outEvents = new com.gdxsoft.ai.request.IOutEvents() {
 				private int messageCount = 0;
-				@Override public void outEvent(String msg, java.io.PrintWriter w) { capturedOutput.append(msg).append("\n"); }
-				@Override public int getMessageCount() { return messageCount; }
-				@Override public void setMessageCount(int c) { this.messageCount = c; }
-				@Override public String getLine() { return null; }
-				@Override public void setLine(String l) {}
-				@Override public org.json.JSONObject getContenJson() { return null; }
-				@Override public void setContenJson(org.json.JSONObject j) {}
-				@Override public String getName() { return null; }
-				@Override public void setName(String n) {}
-				@Override public String getLang() { return "zhcn"; }
-				@Override public void setLang(String l) {}
+
+				@Override
+				public void outEvent(String msg, java.io.PrintWriter w) {
+					capturedOutput.append(msg).append("\n");
+				}
+
+				@Override
+				public int getMessageCount() {
+					return messageCount;
+				}
+
+				@Override
+				public void setMessageCount(int c) {
+					this.messageCount = c;
+				}
+
+				@Override
+				public String getLine() {
+					return null;
+				}
+
+				@Override
+				public void setLine(String l) {
+				}
+
+				@Override
+				public org.json.JSONObject getContenJson() {
+					return null;
+				}
+
+				@Override
+				public void setContenJson(org.json.JSONObject j) {
+				}
+
+				@Override
+				public String getName() {
+					return null;
+				}
+
+				@Override
+				public void setName(String n) {
+				}
+
+				@Override
+				public String getLang() {
+					return "zhcn";
+				}
+
+				@Override
+				public void setLang(String l) {
+				}
 			};
 
 			// 创建新的 AI 会话记录 innerCall（AI_PID 会自动关联到父 chat）
@@ -1443,14 +1504,14 @@ public class ChatManagerBase {
 			this.setAiStream(false);
 			IRequestData reqData = createRequestData();
 			this.setAiStream(settingStream);
-			
+
 			appendPrompts(reqData);
 			reqData.userMessage(this.prompt);
 			addAiChatMsg(this.prompt, "user", false, true);
 
 			// 调用 AI
 			IRequestAI req = createRequestAI();
-			
+
 			String fullText = req.doPost(reqData);
 			JSONObject json = req.extraceJson(fullText, true);
 			String content = json != null && json.has("content") ? json.getString("content") : fullText;
@@ -1460,7 +1521,8 @@ public class ChatManagerBase {
 
 			return content;
 		} catch (Exception e) {
-			LOGGER.error("processInnerCallStep failed for step: {}", innerStep != null ? innerStep.getName() : "null", e);
+			LOGGER.error("processInnerCallStep failed for step: {}", innerStep != null ? innerStep.getName() : "null",
+					e);
 			return null;
 		} finally {
 			// 恢复原步骤和输出事件
@@ -1472,7 +1534,8 @@ public class ChatManagerBase {
 	}
 
 	public String getResolvedPrompt() {
-		if (prompt == null) return null;
+		if (prompt == null)
+			return null;
 		if (step == null || !step.isMultiOnlyUserMsg()) {
 			return prompt;
 		}
@@ -1481,22 +1544,24 @@ public class ChatManagerBase {
 			rv.addOrUpdateValue("ai_id", this.aiId, "bigint", 100);
 			String sql = "select AI_PID from AI_CHAT where AI_ID=@ai_id";
 			DTTable pidTb = DTTable.getJdbcTable(sql, dbConfigName, rv);
-			if (pidTb.getCount() == 0) return prompt;
+			if (pidTb.getCount() == 0)
+				return prompt;
 			Double pidObj = pidTb.getCell(0, "AI_PID").toDouble();
-			if (pidObj == null) return prompt;
+			if (pidObj == null)
+				return prompt;
 			long parentAiId = pidObj.longValue();
 
-			if (parentAiId <= 0) return prompt;
+			if (parentAiId <= 0)
+				return prompt;
 
 			// 提取父 chat 和所有子 chat 中 AIM_BY_USER=1 的用户消息
 			rv.addOrUpdateValue("parent_ai_id", parentAiId, "bigint", 100);
-			String msgSql = "select AIM_MSG from AI_CHAT_MSG m "
-				+ "where m.AIM_BY_USER = 1 and m.AIM_ROLE = 'user' "
-				+ "and m.AI_ID in ("
-				+ "  select AI_ID from AI_CHAT where AI_PID = @parent_ai_id"
-				+ ") order by m.AIM_ID";
+			String msgSql = "select AIM_MSG from AI_CHAT_MSG m " + "where m.AIM_BY_USER = 1 and m.AIM_ROLE = 'user' "
+					+ "and m.AI_ID in (" + "  select AI_ID from AI_CHAT where AI_PID = @parent_ai_id"
+					+ ") order by m.AIM_ID";
 			DTTable msgTb = DTTable.getJdbcTable(msgSql, dbConfigName, rv);
-			if (msgTb.getCount() == 0) return prompt;
+			if (msgTb.getCount() == 0)
+				return prompt;
 
 			StringBuilder sb = new StringBuilder();
 			sb.append("【历史对话】\n");
@@ -1654,9 +1719,10 @@ public class ChatManagerBase {
 	 * 自动加载历史对话、保存用户消息和 AI 响应到数据库，支持多轮对话。
 	 *
 	 * <h3>使用示例</h3>
+	 * 
 	 * <pre>
 	 * ChatManagerBase manager = new ChatManagerBase(rv, dbConfig, writer);
-	 * manager.checkParams();  // 初始化 provider/model/apiUrl/apiKey/aiId
+	 * manager.checkParams(); // 初始化 provider/model/apiUrl/apiKey/aiId
 	 *
 	 * // 第一轮
 	 * JSONObject result = manager.callAI("你好");
@@ -1668,8 +1734,8 @@ public class ChatManagerBase {
 	 * </pre>
 	 *
 	 * @param prompt 用户输入内容
-	 * @return 包含 content（回复内容）和 usage（Token 用量）的 JSONObject
-	 *         失败时返回 {RST:false, error:错误信息}
+	 * @return 包含 content（回复内容）和 usage（Token 用量）的 JSONObject 失败时返回 {RST:false,
+	 *         error:错误信息}
 	 */
 	public JSONObject callAI(String prompt) {
 		return callAI(prompt, null);
@@ -1753,21 +1819,20 @@ public class ChatManagerBase {
 	/**
 	 * 直接调用 AI 并返回结果（非流式、同步调用）。
 	 * <p>
-	 * 最简用法：传入 provider、model、apiUrl、apiKey 和 prompt 即可返回 AI 响应。
-	 * 无需初始化 ChatManagerBase，无需数据库配置，无需 RequestValue。
-	 * 此为静态工具方法，不支持多轮对话（每次调用为独立会话）。
+	 * 最简用法：传入 provider、model、apiUrl、apiKey 和 prompt 即可返回 AI 响应。 无需初始化
+	 * ChatManagerBase，无需数据库配置，无需 RequestValue。 此为静态工具方法，不支持多轮对话（每次调用为独立会话）。
 	 *
 	 * <h3>使用示例</h3>
+	 * 
 	 * <pre>
 	 * // 一次性调用（无历史上下文）
-	 * JSONObject result = ChatManagerBase.callAI("openai", "gpt-4o",
-	 *     "https://api.openai.com/v1/chat/completions", "sk-xxx...", "你好");
+	 * JSONObject result = ChatManagerBase.callAI("openai", "gpt-4o", "https://api.openai.com/v1/chat/completions",
+	 * 		"sk-xxx...", "你好");
 	 * String content = result.getString("content");
 	 *
 	 * // 带系统提示词
-	 * JSONObject result = ChatManagerBase.callAI("qwen", "qwen-max",
-	 *     apiUrl, apiKey, "请翻译以下内容：Hello World",
-	 *     "你是一个专业的翻译助手");
+	 * JSONObject result = ChatManagerBase.callAI("qwen", "qwen-max", apiUrl, apiKey, "请翻译以下内容：Hello World",
+	 * 		"你是一个专业的翻译助手");
 	 *
 	 * // 查看 Token 使用情况
 	 * JSONObject usage = result.optJSONObject("usage");
@@ -1779,8 +1844,8 @@ public class ChatManagerBase {
 	 * @param apiUrl   AI API 地址
 	 * @param apiKey   API 密钥
 	 * @param prompt   用户输入内容
-	 * @return 包含 content（回复内容）和 usage（Token 用量）的 JSONObject
-	 *         失败时返回 {RST:false, error:错误信息}
+	 * @return 包含 content（回复内容）和 usage（Token 用量）的 JSONObject 失败时返回 {RST:false,
+	 *         error:错误信息}
 	 */
 	public static JSONObject callAI(String provider, String model, String apiUrl, String apiKey, String prompt) {
 		return callAI(provider, model, apiUrl, apiKey, prompt, null);
@@ -1799,8 +1864,8 @@ public class ChatManagerBase {
 	 * @param systemMsg 系统提示词（可选，传 null 表示无系统提示）
 	 * @return 包含 content 和 usage 的 JSONObject
 	 */
-	public static JSONObject callAI(String provider, String model, String apiUrl, String apiKey,
-			String prompt, String systemMsg) {
+	public static JSONObject callAI(String provider, String model, String apiUrl, String apiKey, String prompt,
+			String systemMsg) {
 		return callAI(provider, model, apiUrl, apiKey, prompt, systemMsg, null);
 	}
 
@@ -1818,8 +1883,8 @@ public class ChatManagerBase {
 	 * @param tools     工具列表（可选，传 null 表示不使用工具）
 	 * @return 包含 content 和 usage 的 JSONObject
 	 */
-	public static JSONObject callAI(String provider, String model, String apiUrl, String apiKey,
-			String prompt, String systemMsg, com.gdxsoft.ai.request.AiTool... tools) {
+	public static JSONObject callAI(String provider, String model, String apiUrl, String apiKey, String prompt,
+			String systemMsg, com.gdxsoft.ai.request.AiTool... tools) {
 		try {
 			IRequestAI req = RequestAIFactory.createRequestAI(provider);
 			req.initUrlAndKey(apiUrl, apiKey);

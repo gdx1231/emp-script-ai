@@ -11,6 +11,7 @@ import org.slf4j.LoggerFactory;
 
 import com.gdxsoft.easyweb.data.DTTable;
 import com.gdxsoft.easyweb.script.restful.RestfulResult;
+import com.gdxsoft.easyweb.script.restful.SdkBase;
 import com.gdxsoft.easyweb.utils.UJSon;
 import com.gdxsoft.easyweb.utils.UNet;
 import com.gdxsoft.easyweb.utils.UPath;
@@ -35,7 +36,8 @@ public class ServerSdk extends SdkBase {
 		String key = supId + "///" + restfulRoot;
 		Auth auth = null;
 		ServerSdk server = new ServerSdk(restfulRoot);
-
+		server.setSupId(supId);
+		
 		if (AUTHS.containsKey(key)) {
 			auth = AUTHS.get(key);
 			if (auth.getEndTime() > System.currentTimeMillis()) { // 未过期
@@ -55,6 +57,9 @@ public class ServerSdk extends SdkBase {
 		}
 
 	}
+	
+	private int supId;
+	
 
 	public ServerSdk(String apiRoot) {
 		this.apiRoot = apiRoot;
@@ -126,12 +131,27 @@ public class ServerSdk extends SdkBase {
 			return null;
 		}
 
-		JSONObject obj = (JSONObject) rr.getRawData();
+		JSONArray obj = (JSONArray) rr.getRawData();
 
-		return obj.optString("cht_token");
+		return obj.getJSONObject(0).optString("cht_token");
 
 	}
-	
+
+	/**
+	 * 批量创建聊天用户
+	 * 
+	 * @param users JSONArray 聊天用户信息数组，每个元素为一个JSONObject，包含以下字段：<br>
+	 *              - cht_usr_id: 聊天用户ID（必填）<br>
+	 *              - cht_usr_ref: 用户引用类型（必填）<br>
+	 *              - cht_usr_ref_id: 用户引用ID（必填）<br>
+	 *              - cht_usr_name: 聊天用户名称（必填）<br>
+	 *              - cht_usr_gender: 聊 天用户性别（可选，默认值为 "U"）<br>
+	 *              - cht_usr_mobile: 聊天用户手机号（可选）<br>
+	 * @return JSONObject 创建结果，包含以下字段：<br>
+	 *         - success: 是否创建成功<br>
+	 *         - data: 创建成功的聊天用户信息数组
+	 * 
+	 */
 	public JSONObject createChatUsers(JSONArray users) {
 		String[] userids = new String[users.length()];
 		String[] refs = new String[users.length()];
@@ -139,38 +159,39 @@ public class ServerSdk extends SdkBase {
 		String[] names = new String[users.length()];
 		String[] genders = new String[users.length()];
 		String[] mobiles = new String[users.length()];
-		
-		for(int i=0;i<users.length();i++) {
+
+		for (int i = 0; i < users.length(); i++) {
 			JSONObject user = users.getJSONObject(i);
-			if (!user.has("cht_usr_id") || !user.has("cht_usr_ref") || !user.has("cht_usr_ref_id")) {
+			if (!user.has("cht_usr_name") || !user.has("cht_usr_id") || !user.has("cht_usr_ref")
+					|| !user.has("cht_usr_ref_id")) {
 				this.errorMessage = "Missing required fields: cht_usr_id or cht_usr_ref or cht_usr_ref_id";
 				LOGGER.warn(this.errorMessage);
 				return UJSon.rstFalse(errorMessage);
 			}
-			String userId = user.optString("cht_usr_id");
+			String userId = user.optString("cht_usr_id").replace(",", "");
 			userids[i] = userId;
-			String ref = user.optString("cht_usr_ref");
+			String ref = user.optString("cht_usr_ref").replace(",", "");
 			refs[i] = ref;
-			String refId = user.optString("cht_usr_ref_id");
+			String refId = user.optString("cht_usr_ref_id").replace(",", "");
 			refIds[i] = refId;
-			String name = user.optString("cht_usr_name");
+			String name = user.optString("cht_usr_name").replace(",", "");
 			names[i] = name;
-			String gender = user.optString("cht_usr_gender", "U");
+			String gender = user.optString("cht_usr_gender", "U").replace(",", "");
 			genders[i] = gender;
-			String mobile = user.optString("cht_usr_mobile");
+			String mobile = user.optString("cht_usr_mobile").replace(",", "");
 			mobiles[i] = mobile;
 		}
-		
+
 		JSONObject body = new JSONObject();
 		body.put("userIds", Utils.arrayJoin(userids, ","));
-		body.put("refs",  Utils.arrayJoin(refs, ","));
+		body.put("refs", Utils.arrayJoin(refs, ","));
 		body.put("refIds", Utils.arrayJoin(refIds, ","));
 		body.put("names", Utils.arrayJoin(names, ","));
 		body.put("genders", Utils.arrayJoin(genders, ","));
 		body.put("mobiles", Utils.arrayJoin(mobiles, ","));
 		body.put("bat", "yes");
 		RestfulResult<Object> rr = super.apiPost("chatUsers", body.toString());
-		
+
 		if (!rr.isSuccess()) {
 			this.errorMessage = rr.getMessage();
 			LOGGER.warn("Failed to create chat users: {}", rr.getMessage());
@@ -179,10 +200,10 @@ public class ServerSdk extends SdkBase {
 		JSONObject rst = new JSONObject();
 		UJSon.rstSetTrue(rst, null);
 		rst.put("data", rr.getRawData());
-		return  rst;
-		
+		return rst;
+
 	}
-	
+
 	public long addChatUser(String ref, String refId, JSONObject userInfo) {
 		long chatUserId = checkChatUser(ref, refId);
 		if (chatUserId > 0) {
@@ -190,18 +211,17 @@ public class ServerSdk extends SdkBase {
 		}
 		String body = userInfo.toString();
 		RestfulResult<Object> rr = super.apiPost("chatUsers", body);
-		
-		
+
 		if (!rr.isSuccess()) {
 			this.errorMessage = rr.getMessage();
 			LOGGER.warn("Failed to add user to server: {}", rr.getMessage());
 			return -1;
 		}
-		JSONObject d = (JSONObject) rr.getRawData();
+		JSONArray d = (JSONArray) rr.getRawData();
 
-		return d.optLong("cht_usr_id", -1);
+		return d.getJSONObject(0).optLong("cht_usr_id", -1);
 	}
-		 
+
 	public long addChatUser(String ref, String refId, String userName, String gender, String mobile) {
 		JSONObject chatUser = new JSONObject();
 		if (gender == null) {
@@ -212,7 +232,7 @@ public class ServerSdk extends SdkBase {
 		chatUser.put("cht_usr_mobile", mobile);
 		chatUser.put("cht_usr_ref", ref);
 		chatUser.put("cht_usr_ref_id", refId);
-		
+
 		return addChatUser(ref, refId, chatUser);
 	}
 
@@ -230,13 +250,13 @@ public class ServerSdk extends SdkBase {
 		}
 		try {
 			String gender = tbWebUser.getCell(0, "usr_sex").toString();
-			if (gender == null || gender .equals("")) {
+			if (gender == null || gender.equals("")) {
 				gender = "U";
 			}
 			chatUser.put("cht_usr_name", tbWebUser.getCell(0, "usr_name").toString());
 			chatUser.put("cht_usr_gender", gender);
 			chatUser.put("cht_usr_mobile", tbWebUser.getCell(0, "usr_mobile").toString());
-			
+
 		} catch (Exception e) {
 			return -1;
 		}
@@ -245,7 +265,7 @@ public class ServerSdk extends SdkBase {
 		chatUser.put("cht_usr_ref_id", userId + "");
 
 		return addChatUser("web_user.usr_id", String.valueOf(userId), chatUser);
-		 
+
 	}
 
 	/**
@@ -257,7 +277,7 @@ public class ServerSdk extends SdkBase {
 	public long checkChatUser(int userId) {
 		return checkChatUser("web_user.usr_id", String.valueOf(userId));
 	}
-	
+
 	/**
 	 * 检查聊天用户是否存在
 	 * 
@@ -266,9 +286,9 @@ public class ServerSdk extends SdkBase {
 	 * @return 聊天用户ID，未找到返回0，失败返回-1
 	 */
 	public long checkChatUser(String ref, String refId) {
-		String queryString = "?cht_usr_ref="+ref+"&cht_usr_ref_id=" + refId;
+		String queryString = "cht_usr_ref=" + ref + "&cht_usr_ref_id=" + refId;
 
-		RestfulResult<Object> rr =super.apiGet("chatUsers", queryString);
+		RestfulResult<Object> rr = super.apiGet("chatUsers", queryString);
 
 		if (!rr.isSuccess()) {
 			this.errorMessage = rr.getMessage();
@@ -285,6 +305,7 @@ public class ServerSdk extends SdkBase {
 
 		return user.optLong("cht_usr_id");
 	}
+
 	/**
 	 * 创建聊天室请求体
 	 * 
@@ -384,9 +405,9 @@ public class ServerSdk extends SdkBase {
 			return -1;
 		}
 
-		JSONObject obj = (JSONObject) rr.getRawData();
+		JSONArray obj = (JSONArray) rr.getRawData();
 
-		return obj.getLong("cht_rom_id");
+		return obj.getJSONObject(0).getLong("cht_rom_id");
 	}
 
 	public long checkRoomSystem(long chatUserId, String roomType) {
@@ -419,7 +440,7 @@ public class ServerSdk extends SdkBase {
 
 		return room.optLong("cht_rom_id");
 	}
- 
+
 	/**
 	 * 通过 room_ref 和 room_ref_id 查询聊天室
 	 *
@@ -459,5 +480,12 @@ public class ServerSdk extends SdkBase {
 		return room.optLong("cht_rom_id");
 	}
 
-	 
+	public int getSupId() {
+		return supId;
+	}
+
+	public void setSupId(int supId) {
+		this.supId = supId;
+	}
+
 }

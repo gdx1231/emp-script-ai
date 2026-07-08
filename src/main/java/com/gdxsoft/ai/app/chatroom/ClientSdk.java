@@ -6,6 +6,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.gdxsoft.easyweb.script.restful.RestfulResult;
+import com.gdxsoft.easyweb.script.restful.SdkBase;
 import com.gdxsoft.easyweb.utils.UNet;
 import com.gdxsoft.easyweb.utils.UUrl;
 import com.gdxsoft.easyweb.utils.Utils;
@@ -37,10 +38,8 @@ public class ClientSdk extends SdkBase {
 	 */
 	public RestfulResult<Object> getUnreadCounts() {
 		String path = "/unreads";
-		String url = this.createUrl(path);
-		url = this.attacheParameters(url);
 
-		RestfulResult<Object> rr = super.apiGet(url, null);
+		RestfulResult<Object> rr = super.apiGet(path, null);
 
 		return rr;
 	}
