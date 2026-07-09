@@ -412,8 +412,13 @@ public class ServerSdk extends SdkBase {
 
 	public long checkRoomSystem(long chatUserId, String roomType) {
 		UNet net = getNet();
-		String url = getApiPath("chatRooms");
-		url += "?EWA_IS_SPLIT_PAGE=no&ref=" + roomType + "&ref_id=" + chatUserId + "&cht_usr_id=" + chatUserId;
+		String baseUrl = getApiPath("chatRooms");
+		UUrl uu = new UUrl(baseUrl + "?x=1");
+		uu.add("EWA_IS_SPLIT_PAGE", "no");
+		uu.add("ref", roomType);
+		uu.add("ref_id", chatUserId);
+		uu.add("cht_usr_id", chatUserId);
+		String url = baseUrl + "?" + uu.getParameters();
 
 		String result = net.doGet(url);
 		this.logNon200Warning(net, "GET", url, null);

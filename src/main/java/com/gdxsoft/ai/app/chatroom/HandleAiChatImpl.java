@@ -1,6 +1,8 @@
 package com.gdxsoft.ai.app.chatroom;
 
 import java.io.PrintWriter;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.ThreadFactory;
@@ -45,23 +47,38 @@ public class HandleAiChatImpl implements Runnable, IHandleMsg {
 		return t;
 	};
 
-	private static final ThreadPoolExecutor POOL = new ThreadPoolExecutor(CORE_POOL_SIZE, MAX_POOL_SIZE,
-			KEEP_ALIVE_SECONDS, TimeUnit.SECONDS, new LinkedBlockingQueue<>(QUEUE_CAPACITY), THREAD_FACTORY,
-			new ThreadPoolExecutor.CallerRunsPolicy());
+	// 自适应执行器：JDK 21+ 使用虚拟线程，否则使用传统线程池
+	private static final Executor EXECUTOR = createExecutor();
 
-	static {
-		Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-			LOGGER.info("正在关闭 AI 聊天线程池...");
-			POOL.shutdown();
-			try {
-				if (!POOL.awaitTermination(10, TimeUnit.SECONDS)) {
-					POOL.shutdownNow();
+	private static Executor createExecutor() {
+		try {
+			// 尝试检测 JDK 21+ 的虚拟线程支持
+			Class<?> executorsClass = Executors.class;
+			java.lang.reflect.Method method = executorsClass.getMethod("newVirtualThreadPerTaskExecutor");
+			LOGGER.info("检测到 JDK 21+，启用虚拟线程支持（AI聊天）");
+			return (Executor) method.invoke(null);
+		} catch (Exception e) {
+			// JDK < 21，回退到传统线程池
+			LOGGER.info("使用传统线程池（AI聊天，JDK 版本低于 21）");
+			ThreadPoolExecutor pool = new ThreadPoolExecutor(CORE_POOL_SIZE, MAX_POOL_SIZE,
+					KEEP_ALIVE_SECONDS, TimeUnit.SECONDS, new LinkedBlockingQueue<>(QUEUE_CAPACITY), THREAD_FACTORY,
+					new ThreadPoolExecutor.CallerRunsPolicy());
+
+			Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+				LOGGER.info("正在关闭 AI 聊天线程池...");
+				pool.shutdown();
+				try {
+					if (!pool.awaitTermination(10, TimeUnit.SECONDS)) {
+						pool.shutdownNow();
+					}
+				} catch (InterruptedException ie) {
+					pool.shutdownNow();
+					Thread.currentThread().interrupt();
 				}
-			} catch (InterruptedException e) {
-				POOL.shutdownNow();
-				Thread.currentThread().interrupt();
-			}
-		}, "ai-chat-pool-shutdown"));
+			}, "ai-chat-pool-shutdown"));
+
+			return pool;
+		}
 	}
 
 	/** 限制同时调用 LLM API 的数量，防止打爆第三方 API 限流 */
@@ -107,19 +124,27 @@ public class HandleAiChatImpl implements Runnable, IHandleMsg {
 	 * 当前排队的任务数，用于监控
 	 */
 	public static int getQueueSize() {
-		return POOL.getQueue().size();
+		if (EXECUTOR instanceof ThreadPoolExecutor) {
+			return ((ThreadPoolExecutor) EXECUTOR).getQueue().size();
+		}
+		// 虚拟线程执行器没有队列大小概念
+		return 0;
 	}
 
 	/**
 	 * 当前活跃线程数，用于监控
 	 */
 	public static int getActiveCount() {
-		return POOL.getActiveCount();
+		if (EXECUTOR instanceof ThreadPoolExecutor) {
+			return ((ThreadPoolExecutor) EXECUTOR).getActiveCount();
+		}
+		// 虚拟线程执行器没有活跃线程计数
+		return -1;
 	}
 
 	@Override
 	public void start() {
-		POOL.execute(this);
+		EXECUTOR.execute(this);
 	}
 
 	@Override
@@ -161,8 +186,6 @@ public class HandleAiChatImpl implements Runnable, IHandleMsg {
 
 		result.put("RST", false);
 		result.put("ERR", "Unknown action: " + this.action_);
-		this.socket_.sendToClient(result.toString());
-
 		this.socket_.sendToClient(result.toString());
 	}
 

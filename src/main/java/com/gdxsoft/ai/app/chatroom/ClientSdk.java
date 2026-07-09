@@ -54,7 +54,9 @@ public class ClientSdk extends SdkBase {
 		String path = "/friends";
 		String url = this.createUrl(path);
 		if (relativeRoomId != null) {
-			url += "?relativeRoomId=" + relativeRoomId;
+			UUrl uu = new UUrl(url);
+			uu.add("relativeRoomId", relativeRoomId);
+			url = uu.getUrlWithDomain();
 		}
 		url = this.attacheParameters(url);
 
@@ -164,7 +166,9 @@ public class ClientSdk extends SdkBase {
 		String path = "/chatRooms/" + chatRomId + "/topics";
 		String url = this.createUrl(path);
 		if (lastTopicId != null) {
-			url += "?lastTopicId=" + lastTopicId;
+			UUrl uu = new UUrl(url);
+			uu.add("lastTopicId", lastTopicId);
+			url = uu.getUrlWithDomain();
 		}
 
 		url = this.attacheParameters(url);
@@ -183,7 +187,9 @@ public class ClientSdk extends SdkBase {
 		String path = "/chatRooms/" + chatRomId + "/members";
 		String url = this.createUrl(path);
 		if (limits != null && limits > 0) {
-			url += "?ewa_pagesize=" + limits;
+			UUrl uu = new UUrl(url);
+			uu.add("ewa_pagesize", limits);
+			url = uu.getUrlWithDomain();
 		}
 		// members 端点不附加 cht_usr_id，否则 SQL 只返回自己
 		url = this.attacheParametersWithoutUserId(url);
@@ -220,15 +226,15 @@ public class ClientSdk extends SdkBase {
 	}
 
 	public RestfulResult<Object> notification(long chatRomId, String msg) {
-		JSONObject notication = new JSONObject();
+		JSONObject notification = new JSONObject();
 		// cht_cnt: "notification"
 		// cht_rom_id: "64748967224672256"
 		// cht_type: "text"
 		// cht_usr_id
-		notication.append("cht_cnt", msg);
-		notication.append("cht_type", "notication");
+		notification.append("cht_cnt", msg);
+		notification.append("cht_type", "notification");
 
-		return this.newMessage(chatRomId, notication);
+		return this.newMessage(chatRomId, notification);
 	}
 
 	/**
@@ -429,7 +435,10 @@ public class ClientSdk extends SdkBase {
 	public RestfulResult<Object> getChatRoomTopicUploaded(long chatRomId, String uploadRef, String uploadRefId) {
 		String path = "/chatRooms/" + chatRomId + "/topics";
 		String url = this.createUrl(path);
-		url += "?ref=" + uploadRef + "&Ref_Id=" + uploadRefId;
+		UUrl uu = new UUrl(url);
+		uu.add("ref", uploadRef);
+		uu.add("Ref_Id", uploadRefId);
+		url = uu.getUrlWithDomain();
 		url = this.attacheParameters(url);
 
 		UNet net = this.createNet();
