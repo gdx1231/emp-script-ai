@@ -26,6 +26,8 @@ public class Step {
     private boolean multiOnlyUserMsg = false;
     // comma-separated required parameter names for validation (e.g., "people_num,departure_date")
     private String validateParams;
+    // cache seconds for prompts, 0 means no cache
+    private int cachedSeconds = 0;
 
     /** Create a step without action. */
     public Step(String name, String description, List<Prompt> prompts) {
@@ -171,5 +173,21 @@ public class Step {
      */
     public void setValidateParams(String validateParams) {
         this.validateParams = validateParams;
+    }
+
+    /**
+     * 获取缓存秒数
+     * @return cachedSeconds
+     */
+    public int getCachedSeconds() {
+        return cachedSeconds;
+    }
+
+    /**
+     * 设置缓存秒数
+     * @param cachedSeconds 缓存秒数
+     */
+    public void setCachedSeconds(int cachedSeconds) {
+        this.cachedSeconds = cachedSeconds;
     }
 }

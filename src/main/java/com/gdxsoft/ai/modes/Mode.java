@@ -352,7 +352,7 @@ public class Mode {
 		} else {
 			result = net.doGet(url);
 		}
-		String apiCurl = createCurlOfPromptApi(prompt, rv, refHeaders);
+		String apiCurl = net.createLastCurl();
 		prompt.setApiCurl(apiCurl);
 
 		if (net.getLastStatusCode() != 200) {
@@ -365,73 +365,7 @@ public class Mode {
 		return true;
 	}
 
-	/**
-	 * 根据API创建cURL命令字符串
-	 * 
-	 * @param prompt     提示对象
-	 * @param rv         请求参数容器
-	 * @param refHeaders 引用的Http headers
-	 * @return cURL命令字符串，如果没有API配置则返回null
-	 */
-	public String createCurlOfPromptApi(Prompt prompt, RequestValue rv, Map<String, String> refHeaders)
-			throws Exception {
-		String apiName = prompt.getApi();
-		if (StringUtils.isBlank(apiName)) {
-			return null;
-		}
-		Api api = this.getApi(apiName);
-		if (api == null) {
-			return null;
-		}
-
-		String url = this.createApiUrl(api, rv);
-		StringBuilder curl = new StringBuilder();
-		curl.append("curl -X ").append(api.getMethod().toUpperCase()).append(" '").append(url).append("'");
-
-		// 添加引用的请求头
-		if (api.isRefRequest() && refHeaders != null) {
-			for (String key : refHeaders.keySet()) {
-				if ("content-length".equalsIgnoreCase(key) || "origin".equalsIgnoreCase(key)
-						|| "host".equalsIgnoreCase(key) || "connection".equalsIgnoreCase(key)) {
-					continue; // 跳过这些头部
-				}
-				curl.append(" \\\n  -H '").append(key).append(": ").append(refHeaders.get(key)).append("'");
-			}
-		}
-
-		// 添加API配置的请求头
-		for (int i = 0; i < api.getHeaders().size(); i++) {
-			ApiHeader field = api.getHeaders().get(i);
-			String headerValue = rv.replaceParameters(field.getValue());
-			curl.append(" \\\n  -H '").append(field.getName()).append(": ").append(headerValue).append("'");
-		}
-
-		// 处理请求体或表单数据
-		String body = api.getBody();
-		boolean hasBody = body != null && body.trim().length() > 0;
-
-		if (hasBody) {
-			// 如果有请求体，直接添加
-			String processedBody = rv.replaceParameters(body);
-			curl.append(" \\\n  -d '").append(processedBody.replace("'", "\\'")).append("'");
-		} else if (!api.getForm().isEmpty()) {
-			// 如果有表单字段，构建表单数据
-			if (api.getMethod().equalsIgnoreCase("GET")) {
-				// GET请求的表单数据已经在URL中了，不需要额外处理
-			} else {
-				// POST/PUT等请求的表单数据
-				for (int i = 0; i < api.getForm().size(); i++) {
-					ApiField field = api.getForm().get(i);
-					String fieldValue = rv.replaceParameters(field.getValue());
-					curl.append(" \\\n  -d '").append(field.getName()).append("=")
-							.append(fieldValue.replace("'", "\\'")).append("'");
-				}
-			}
-		}
-
-		return curl.toString();
-	}
-
+	 
 	/**
 	 * 根据名称查找 SQL 查询定义
 	 *

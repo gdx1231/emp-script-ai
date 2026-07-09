@@ -87,6 +87,7 @@ import com.gdxsoft.ai.ChatManagerI18nConstants.LogMessages;
 import com.gdxsoft.ai.ChatManagerI18nConstants.StatusMessages;
 import com.gdxsoft.ai.export.IAction;
 import com.gdxsoft.ai.modes.*;
+import com.gdxsoft.ai.request.AiTool;
 import com.gdxsoft.ai.request.DefaultOutEvents;
 import com.gdxsoft.ai.request.IOutEvents;
 import com.gdxsoft.ai.request.IRequestAI;
@@ -194,6 +195,12 @@ public class ChatManagerBase {
 	/** 上一步的步骤名称 */
 	private String aiStepPrev;
 
+	/** 关联引用类型 */
+	private String aiRef;
+
+	/** 关联引用ID */
+	private String aiRefId;
+
 	/** AI模式名称 */
 	private String modeName;
 	/** AI模式对象 */
@@ -241,11 +248,47 @@ public class ChatManagerBase {
 
 	/**
 	 * 设置是否开启流式输出
-	 * 
+	 *
 	 * @param aiStream
 	 */
 	public void setAiStream(boolean aiStream) {
 		this.aiStream = aiStream;
+	}
+
+	/**
+	 * 获取关联引用类型
+	 *
+	 * @return 关联引用类型
+	 */
+	public String getAiRef() {
+		return aiRef;
+	}
+
+	/**
+	 * 设置关联引用类型
+	 *
+	 * @param aiRef 关联引用类型
+	 */
+	public void setAiRef(String aiRef) {
+		this.aiRef = aiRef;
+	}
+
+	/**
+	 * 获取关联引用ID
+	 *
+	 * @return 关联引用ID
+	 */
+	public String getAiRefId() {
+		return aiRefId;
+	}
+
+	/**
+	 * 设置关联引用ID
+	 *
+	 * @param aiRefId 关联引用ID
+	 */
+	public void setAiRefId(String aiRefId) {
+		this.aiRefId = aiRefId;
 	}
 
 	/**
@@ -431,8 +474,45 @@ public class ChatManagerBase {
 			this.appendPreviousMessages(reqData, existsMessages);
 
 			if (step.getName().equals(aiStepPrev) && StringUtils.isBlank(actionName)) {
-				// 当前step和上次的step相同，且没有action，action不附加到以前的消息里
-				return;
+				// Check if cachedSeconds is set and if we need to regenerate
+				if (step.getCachedSeconds() <= 0) {
+					// No cache, return
+					return;
+				}
+				// Check if the last message for this step is within the cachedSeconds
+				boolean needRegenerate = false;
+				try {
+					// Query the last message time for this step
+					rv.addOrUpdateValue("ai_id", this.aiId, "bigint", 100);
+					rv.addOrUpdateValue("aim_step", this.stepName);
+					String sql = "select top 1 AIM_TIME_BEGIN from AI_CHAT_MSG where AI_ID=@ai_id and AIM_STEP=@aim_step order by AIM_ID desc";
+					DTTable tb = DTTable.getJdbcTable(sql, dbConfigName, rv);
+					if (tb.getCount() > 0) {
+						Object timeObj = tb.getCell(0, "AIM_TIME_BEGIN");
+						if (timeObj != null) {
+							Date lastTime = (Date) timeObj;
+							long diffSeconds = (System.currentTimeMillis() - lastTime.getTime()) / 1000;
+							if (diffSeconds > step.getCachedSeconds()) {
+								// Cache expired, need to regenerate
+								LOGGER.info("Step {} cache expired ({}s > {}s), regenerating prompts",
+										this.stepName, diffSeconds, step.getCachedSeconds());
+								needRegenerate = true;
+							} else {
+								LOGGER.info("Step {} cache valid ({}s <= {}s), using existing prompts",
+										this.stepName, diffSeconds, step.getCachedSeconds());
+								return;
+							}
+						}
+					} else {
+						needRegenerate = true;
+					}
+				} catch (Exception e) {
+					LOGGER.warn("Failed to check step {} cache time, regenerating prompts", this.stepName, e);
+					needRegenerate = true;
+				}
+				if (!needRegenerate) {
+					return;
+				}
 			}
 		}
 		Map<String, String> refHeaders ;
@@ -604,9 +684,7 @@ public class ChatManagerBase {
 		apiPrompt.setDescription(toolName + " API调用");
 		apiPrompt.setApi(toolName);
 
-		String apiCallCurl = mode.createCurlOfPromptApi(apiPrompt, rv, refHeaders);
-		// 添加一条 curl 命令记录
-		this.addAiChatMsg(apiCallCurl, "api_call_curl", true);
+		
 
 		// 根据 debugOutput 开关决定是否输出调试信息
 		if (mode.isDebugOutput()) {
@@ -617,6 +695,9 @@ public class ChatManagerBase {
 
 		mode.createStepPromptByApi(apiPrompt, rv, refHeaders);
 		String calledContent = apiPrompt.getContent();
+		String apiCallCurl = apiPrompt.getApiCurl();
+		// 添加一条 curl 命令记录
+		this.addAiChatMsg(apiCallCurl, "api_call_curl", true);
 		// 记录api调用的结果
 		this.addAiChatMsg(calledContent, "api_call_content", true);
 
@@ -1291,7 +1372,7 @@ public class ChatManagerBase {
 	 * @return 聊天记录
 	 */
 	public JSONObject getOrNewAiChat() {
-		String sql = "select AI_ID, AI_CUR_STEP as AI_STEP_PREV, AI_UID from ai_chat where ai_uid=@request_id";
+		String sql = "select AI_ID, AI_CUR_STEP as AI_STEP_PREV, AI_UID, AI_REF, AI_REF_ID from ai_chat where ai_uid=@request_id";
 		DTTable tb = DTTable.getJdbcTable(sql, dbConfigName, rv);
 		if (tb.getCount() > 0) {
 			JSONObject chat = tb.getRow(0).toJson();
@@ -1305,6 +1386,8 @@ public class ChatManagerBase {
 			this.isNew = false;
 			this.aiId = chat.optLong("AI_ID");
 			this.aiStepPrev = chat.optString("AI_STEP_PREV");
+			this.aiRef = chat.optString("AI_REF");
+			this.aiRefId = chat.optString("AI_REF_ID");
 			return chat;
 		}
 
@@ -1312,10 +1395,12 @@ public class ChatManagerBase {
 		sbIns.append("INSERT INTO AI_CHAT (\n");
 		sbIns.append("    AI_UID, AI_PID, AI_PROVIDER, AI_MODEL, AI_THINKING, AI_STREAM, AI_CUR_STEP\n");
 		sbIns.append("  , AI_MODE, AI_MAX_TOKEN, AI_CDATE, AI_MDATE, ADM_ID, USR_ID, SUP_ID\n");
+		sbIns.append("  , AI_REF, AI_REF_ID\n");
 		sbIns.append(") VALUES(\n");
 		sbIns.append("    @request_id, @p_ai_pid, @AI_PROVIDER, @AI_MODEL, " + (this.aiThinking ? 1 : 0) + ", "
 				+ (this.aiStream ? 1 : 0) + ", @AIM_STEP\n");
 		sbIns.append("  , @MODE, @AI_MAX_TOKEN, @sys_DATE, @sys_DATE, @g_ADM_ID, @G_WEB_USR_ID, @g_SUP_ID\n");
+		sbIns.append("  , @AI_REF, @AI_REF_ID\n");
 		sbIns.append(")");
 
 		DataConnection.insertAndReturnAutoIdLong(sbIns.toString(), dbConfigName, rv);
@@ -1743,7 +1828,8 @@ public class ChatManagerBase {
 	 *         error:错误信息}
 	 */
 	public JSONObject callAI(String prompt) {
-		return callAI(prompt, null);
+		AiTool[] nulltools = null;
+		return callAI(prompt, nulltools);
 	}
 
 	/**
@@ -1755,7 +1841,7 @@ public class ChatManagerBase {
 	 * @param tools  工具列表（可选，传 null 表示不使用工具）
 	 * @return 包含 content 和 usage 的 JSONObject
 	 */
-	public JSONObject callAI(String prompt, com.gdxsoft.ai.request.AiTool... tools) {
+	public JSONObject callAI(String prompt, AiTool... tools) {
 		try {
 			// 创建请求实例
 			IRequestAI req = createRequestAI();
@@ -1784,7 +1870,7 @@ public class ChatManagerBase {
 			}
 
 			// 保存用户消息到数据库
-			long userMsgId = addAiChatMsg(prompt, "user", false, true);
+			addAiChatMsg(prompt, "user", false, true);
 
 			// 创建 AI 响应占位消息
 			long aimId = addAiChatMsg("", "assistant", true);
@@ -1871,7 +1957,8 @@ public class ChatManagerBase {
 	 */
 	public static JSONObject callAI(String provider, String model, String apiUrl, String apiKey, String prompt,
 			String systemMsg) {
-		return callAI(provider, model, apiUrl, apiKey, prompt, systemMsg, null);
+		AiTool[] nulltools = null;
+		return callAI(provider, model, apiUrl, apiKey, prompt, systemMsg, nulltools);
 	}
 
 	/**
@@ -1889,7 +1976,7 @@ public class ChatManagerBase {
 	 * @return 包含 content 和 usage 的 JSONObject
 	 */
 	public static JSONObject callAI(String provider, String model, String apiUrl, String apiKey, String prompt,
-			String systemMsg, com.gdxsoft.ai.request.AiTool... tools) {
+			String systemMsg, AiTool... tools) {
 		try {
 			IRequestAI req = RequestAIFactory.createRequestAI(provider);
 			req.initUrlAndKey(apiUrl, apiKey);

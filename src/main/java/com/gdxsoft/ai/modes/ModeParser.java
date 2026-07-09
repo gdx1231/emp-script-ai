@@ -50,6 +50,8 @@ public class ModeParser {
 			String innerCallAttr = stepElement.getAttribute("innerCall");
 			String multiOnlyUserMsgAttr = stepElement.getAttribute("multiOnlyUserMsg");
 			String stepStreamAttr = stepElement.getAttribute("stream");
+			String cachedSecondsAttr = stepElement.getAttribute("cachedSeconds");
+			String cachedSecendsAttr = stepElement.getAttribute("cachedSecends"); // Typo tolerance
 			boolean stepStream = true; // default true
 			if (stepStreamAttr != null && stepStreamAttr.trim().length() > 0) {
 				stepStream = Boolean.parseBoolean(stepStreamAttr.trim());
@@ -59,6 +61,16 @@ public class ModeParser {
 			boolean stepMultiOnlyUserMsg = multiOnlyUserMsgAttr != null && multiOnlyUserMsgAttr.trim().length() > 0
 					&& Boolean.parseBoolean(multiOnlyUserMsgAttr.trim());
 			String validateParamsAttr = stepElement.getAttribute("validateParams");
+			int stepCachedSeconds = 0; // default 0 (no cache)
+			String cachedAttr = (cachedSecondsAttr != null && !cachedSecondsAttr.trim().isEmpty())
+				? cachedSecondsAttr : cachedSecendsAttr;
+			if (cachedAttr != null && !cachedAttr.trim().isEmpty()) {
+				try {
+					stepCachedSeconds = Integer.parseInt(cachedAttr.trim());
+				} catch (NumberFormatException ex) {
+					LOGGER.warn("Invalid cachedSeconds/cachedSecends attribute: {}", cachedAttr);
+				}
+			}
 
 			// Parse prompts within step
 			List<Prompt> prompts = new ArrayList<>();
@@ -86,6 +98,7 @@ public class ModeParser {
 			if (validateParamsAttr != null && validateParamsAttr.trim().length() > 0) {
 				step.setValidateParams(validateParamsAttr.trim());
 			}
+			step.setCachedSeconds(stepCachedSeconds);
 			steps.add(step);
 		}
 
