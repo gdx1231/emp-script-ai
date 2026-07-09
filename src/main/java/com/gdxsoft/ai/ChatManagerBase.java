@@ -649,6 +649,11 @@ public class ChatManagerBase {
 			return;
 		}
 		mode.createStepPrompt(p, "", rv, refHeaders);
+		// 如果这个 prompt 是 API 调用并且有 curl 记录，就保存到数据库
+		if (p.getApi() != null && p.getApiCurl() != null) {
+			rv.addOrUpdateValue("AIM_PROMPT_NAME", p.getName() + "_curl");
+			addAiChatMsg(p.getApiCurl(), "api_call_curl", true);
+		}
 		String role = p.getRole();
 		if (StringUtils.isBlank(role)) {
 			role = "user";

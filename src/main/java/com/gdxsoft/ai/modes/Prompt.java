@@ -24,6 +24,8 @@ public class Prompt {
     private String api;
     // Whether to check APIs
     private boolean apisCheck = false;
+    // API curl command
+    private String apiCurl;
 
     public Prompt() {
         // Default constructor
@@ -169,5 +171,13 @@ public class Prompt {
      */
     public void setApisCheck(boolean apisCheck) {
         this.apisCheck = apisCheck;
+    }
+
+    public String getApiCurl() {
+        return apiCurl;
+    }
+
+    public void setApiCurl(String apiCurl) {
+        this.apiCurl = apiCurl;
     }
 }

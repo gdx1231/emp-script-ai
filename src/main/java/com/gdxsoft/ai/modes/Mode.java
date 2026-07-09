@@ -352,6 +352,9 @@ public class Mode {
 		} else {
 			result = net.doGet(url);
 		}
+		String apiCurl = createCurlOfPromptApi(prompt, rv, refHeaders);
+		prompt.setApiCurl(apiCurl);
+
 		if (net.getLastStatusCode() != 200) {
 			result = UJSon.rstFalse(net.getLastErr()).put("HTTP_CODE", net.getLastStatusCode()).toString();
 		}
