@@ -60,8 +60,8 @@ public class HandleAiChatImpl implements Runnable, IHandleMsg {
 		} catch (Exception e) {
 			// JDK < 21，回退到传统线程池
 			LOGGER.info("使用传统线程池（AI聊天，JDK 版本低于 21）");
-			ThreadPoolExecutor pool = new ThreadPoolExecutor(CORE_POOL_SIZE, MAX_POOL_SIZE,
-					KEEP_ALIVE_SECONDS, TimeUnit.SECONDS, new LinkedBlockingQueue<>(QUEUE_CAPACITY), THREAD_FACTORY,
+			ThreadPoolExecutor pool = new ThreadPoolExecutor(CORE_POOL_SIZE, MAX_POOL_SIZE, KEEP_ALIVE_SECONDS,
+					TimeUnit.SECONDS, new LinkedBlockingQueue<>(QUEUE_CAPACITY), THREAD_FACTORY,
 					new ThreadPoolExecutor.CallerRunsPolicy());
 
 			Runtime.getRuntime().addShutdownHook(new Thread(() -> {
@@ -189,6 +189,18 @@ public class HandleAiChatImpl implements Runnable, IHandleMsg {
 		this.socket_.sendToClient(result.toString());
 	}
 
+	private String checkChatRoomStatus(RequestValue rv) {
+		DTTable tb = DTTable.getJdbcTable("SELECT cht_rom_status FROM chat_room WHERE cht_rom_id=@cht_rom_id", "chat",
+				rv);
+		if (tb.getCount() == 0) {
+			return "Then room not exists";
+		}
+		if (!"USED".equalsIgnoreCase(tb.getCell(0, 0).toString())) {
+			return "The room is deleted";
+		}
+		return null;
+	}
+
 	/**
 	 * AI 提问 — 流式接入 emp-script-ai
 	 */
@@ -203,19 +215,14 @@ public class HandleAiChatImpl implements Runnable, IHandleMsg {
 		}
 
 		RequestValue rv = this.socket_.getRv();
+		rv.addOrUpdateValue("cht_rom_id", roomId);
+		// 1. 查房间
 
-		// 1. 查房间 UUID
-		String roomUnid = null;
-		try {
-			RequestValue qr = rv.clone();
-			qr.addOrUpdateValue("cht_rom_id", roomId);
-			DTTable tb = DTTable.getJdbcTable("SELECT cht_rom_unid FROM chat_room WHERE cht_rom_id=@cht_rom_id", "chat",
-					qr);
-			if (tb.getCount() > 0 && tb.getCell(0, "cht_rom_unid") != null) {
-				roomUnid = tb.getCell(0, "cht_rom_unid").toString();
-			}
-		} catch (Exception e) {
-			LOGGER.warn("查询房间信息失败, roomId={}: {}", roomId, e.getMessage());
+		String checkRoomResult = this.checkChatRoomStatus(rv);
+		if (checkRoomResult != null) {
+			JSONObject err = createErrorResult(checkRoomResult);
+			this.socket_.sendToClient(err.toString());
+			return;
 		}
 
 		// 2. 通过 roomId 查房间内的 bot 用户 → 获取关联的 AI 模型 ID
@@ -226,65 +233,55 @@ public class HandleAiChatImpl implements Runnable, IHandleMsg {
 		boolean thinking = false;
 		String botUserId = null;
 		String botName = null;
+		DTTable botTable = DTTable.getJdbcTable("""
+				SELECT u.cht_usr_id, u.cht_usr_name, u.cht_ai_model_id FROM chat_user u
+					JOIN chat_acl a ON a.cht_usr_id = u.cht_usr_id
+				WHERE a.cht_rom_id=@cht_rom_id
+					AND u.cht_usr_ref IN ('ai_bot','chat_ai_model')
+					AND u.cht_usr_status='USED'
+				""", "chat", rv);
+		if (botTable.getCount() == 0) {
+			JSONObject err = createErrorResult("No bot found in room: " + roomId);
+			this.socket_.sendToClient(err.toString());
+			return;
+		}
 		try {
-			RequestValue qr = rv.clone();
-			qr.addOrUpdateValue("room_id", roomId);
-			DTTable botTable = DTTable.getJdbcTable("""
-					SELECT u.cht_usr_id, u.cht_usr_name, u.cht_ai_model_id FROM chat_user u
-						JOIN chat_acl a ON a.cht_usr_id = u.cht_usr_id
-					WHERE a.cht_rom_id=@room_id
-						AND u.cht_usr_ref IN ('ai_bot','chat_ai_model')
-						AND u.cht_usr_status='USED'
-					""", "chat", qr);
-			if (botTable.getCount() == 0) {
-				JSONObject err = createErrorResult("No bot found in room: " + roomId);
-				this.socket_.sendToClient(err.toString());
-				return;
-			}
-			if (botTable.getCell(0, "cht_usr_id") != null) {
+			if (botTable.getCell(0, "cht_usr_id").getValue() != null) {
 				botUserId = botTable.getCell(0, "cht_usr_id").toString();
 			}
 			if (botTable.getCell(0, "cht_usr_name") != null) {
 				botName = botTable.getCell(0, "cht_usr_name").toString();
 			}
-			Object aiModelIdObj = botTable.getCell(0, "cht_ai_model_id");
-			if (aiModelIdObj != null) {
-				String aiModelId = aiModelIdObj.toString();
-				// 3. 通过 cht_ai_model_id 查 chat_ai_model 获取模型配置
-				RequestValue mr = rv.clone();
-				mr.addOrUpdateValue("ai_model_id", aiModelId);
-				DTTable modelTable = DTTable.getJdbcTable("""
-						SELECT xml_path, provider, model, mode_name, thinking
-						FROM chat_ai_model 
-						WHERE id=@ai_model_id 
-							AND enabled=1
-						""", "chat", mr);
-				if (modelTable.getCount() > 0) {
-					if (modelTable.getCell(0, "xml_path") != null) {
-						xmlPath = modelTable.getCell(0, "xml_path").toString();
-					}
-					if (modelTable.getCell(0, "provider") != null) {
-						provider = modelTable.getCell(0, "provider").toString();
-					}
-					if (modelTable.getCell(0, "model") != null) {
-						model = modelTable.getCell(0, "model").toString();
-					}
-					if (modelTable.getCell(0, "mode_name") != null) {
-						modeName = modelTable.getCell(0, "mode_name").toString();
-					}
-					if (modelTable.getCell(0, "thinking") != null) {
-						thinking = "1".equals(modelTable.getCell(0, "thinking").toString());
-					}
-				} else {
-					JSONObject err = createErrorResult("Bot 关联的 model id=" + aiModelId + " 未启用或不存在");
-					this.socket_.sendToClient(err.toString());
-					return;
-				}
-			} else {
+
+			String aiModelId = botTable.getCell(0, "cht_ai_model_id").toString();
+			if (aiModelId == null) {
 				JSONObject err = createErrorResult("Bot 未关联 model");
 				this.socket_.sendToClient(err.toString());
 				return;
 			}
+			// 3. 通过 cht_ai_model_id 查 chat_ai_model 获取模型配置
+			rv.addOrUpdateValue("ai_model_id", aiModelId);
+			DTTable modelTable = DTTable.getJdbcTable("""
+					SELECT xml_path, provider, model, mode_name, thinking
+					FROM chat_ai_model
+					WHERE id=@ai_model_id
+						AND enabled=1
+					""", "chat", rv);
+			if (modelTable.getCount() == 0) {
+				JSONObject err = createErrorResult("Bot 关联的 model id=" + aiModelId + " 未启用或不存在");
+				this.socket_.sendToClient(err.toString());
+				return;
+			}
+			xmlPath = modelTable.getCell(0, "xml_path").toString();
+			if(xmlPath == null) {
+				JSONObject err = createErrorResult("Bot 关联的 model id=" + aiModelId + " xmlPath 不存在");
+				this.socket_.sendToClient(err.toString());
+				return;
+			}
+			provider = modelTable.getCell(0, "provider").toString();
+			model = modelTable.getCell(0, "model").toString();
+			modeName = modelTable.getCell(0, "mode_name").toString();
+			thinking = "1".equals(modelTable.getCell(0, "thinking").toString());
 		} catch (Exception e) {
 			LOGGER.warn("查询 bot/model 配置失败, roomId={}: {}", roomId, e.getMessage());
 		}
@@ -302,8 +299,25 @@ public class HandleAiChatImpl implements Runnable, IHandleMsg {
 			return;
 		}
 
-		// 4. 构建 RequestValue
-		String requestId = (roomUnid != null && !roomUnid.isEmpty()) ? roomUnid : Utils.getGuid();
+		// 4. 构建 RequestValue - 先查找 ai_chat 表中 ai_ref='chat_room' 的记录
+		String chtUsrId = this.socket_.getSession().getUserProperties().get("cht_usr_id").toString();
+		String aiRefId = roomId + "." + chtUsrId;
+		String requestId = null;
+
+		rv.addOrUpdateValue("ai_ref", "chat_room");
+		rv.addOrUpdateValue("ai_ref_id", aiRefId);
+		DTTable tb = DTTable.getJdbcTable("SELECT AI_UID FROM AI_CHAT WHERE AI_REF=@ai_ref AND AI_REF_ID=@ai_ref_id",
+				"chat", rv);
+		if (tb.getCount() > 0 && !tb.getCell(0, 0).isNull()) {
+			requestId = tb.getCell(0, 0).toString();
+			LOGGER.info("找到已有的 AI_CHAT 记录: AI_UID={}, AI_REF_ID={}", requestId, aiRefId);
+		}
+
+		if (requestId == null || requestId.isEmpty()) {
+			requestId = Utils.getGuid();
+			LOGGER.info("未找到已有 AI_CHAT 记录，生成新的 requestId: {}", requestId);
+		}
+
 		RequestValue aiRv = rv.clone();
 		aiRv.addOrUpdateValue("request_id", requestId);
 		aiRv.addOrUpdateValue("ai_provider", provider);
@@ -312,6 +326,8 @@ public class HandleAiChatImpl implements Runnable, IHandleMsg {
 		aiRv.addOrUpdateValue("prompt", msg);
 		aiRv.addOrUpdateValue("ai_thinking", thinking ? "true" : "false");
 		aiRv.addOrUpdateValue("CHAT_ROOM_ID", roomId);
+		aiRv.addOrUpdateValue("AI_REF", "chat_room");
+		aiRv.addOrUpdateValue("AI_REF_ID", aiRefId);
 
 		// 5. 创建 WebSocket Writer + PrintWriter
 		boolean isPrivate = "true".equalsIgnoreCase(this.command_.optString("isPrivate"));

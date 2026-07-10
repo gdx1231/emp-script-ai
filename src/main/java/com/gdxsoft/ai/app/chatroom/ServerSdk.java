@@ -485,6 +485,83 @@ public class ServerSdk extends SdkBase {
 		return room.optLong("cht_rom_id");
 	}
 
+	/**
+	 * 根据 roomType 查询可用的 AI 模型列表
+	 *
+	 * @param roomType 聊天室类型
+	 * @return 模型列表 JSONArray，失败返回 null
+	 */
+	public JSONArray checkChatAiModel(String roomType) {
+		String queryString = "room_type=" + roomType + "&enabled=1";
+		RestfulResult<Object> rr = super.apiGet("aiModels", queryString);
+
+		if (!rr.isSuccess()) {
+			this.errorMessage = rr.getMessage();
+			LOGGER.warn("Failed to check chat AI models: {}", rr.getMessage());
+			return null;
+		}
+
+		return (JSONArray) rr.getRawData();
+	}
+
+	/**
+	 * 通过 ID 获取单个 AI 模型配置
+	 *
+	 * @param id 模型 ID
+	 * @return 模型配置 JSONObject，失败返回 null
+	 */
+	public JSONObject getChatAiModel(long id) {
+		RestfulResult<Object> rr = super.apiGet("aiModels/" + id, null);
+
+		if (!rr.isSuccess()) {
+			this.errorMessage = rr.getMessage();
+			LOGGER.warn("Failed to get chat AI model: {}", rr.getMessage());
+			return null;
+		}
+
+		if (rr.getRecordCount() == 0) {
+			return null;
+		}
+
+		JSONArray arr = (JSONArray) rr.getRawData();
+		return arr.getJSONObject(0);
+	}
+
+	/**
+	 * 添加 AI 模型配置
+	 *
+	 * @param xmlPath  XML 配置文件路径
+	 * @param provider AI 提供商代码
+	 * @param model    模型名称
+	 * @param modeName 模式名称
+	 * @param thinking 是否开启思考模式 (1/0)
+	 * @param enabled  是否启用 (1/0)
+	 * @param roomType 聊天室类型
+	 * @return 新创建的模型 ID，失败返回 -1
+	 */
+	public long addChatAiModel(String xmlPath, String provider, String model, String modeName,
+			int thinking, int enabled, String roomType) {
+		JSONObject body = new JSONObject();
+		body.put("xml_path", xmlPath);
+		body.put("provider", provider);
+		body.put("model", model);
+		body.put("mode_name", modeName);
+		body.put("thinking", thinking);
+		body.put("enabled", enabled);
+		body.put("room_type", roomType);
+
+		RestfulResult<Object> rr = super.apiPost("aiModels", body.toString());
+
+		if (!rr.isSuccess()) {
+			this.errorMessage = rr.getMessage();
+			LOGGER.warn("Failed to add chat AI model: {}", rr.getMessage());
+			return -1;
+		}
+
+		JSONArray arr = (JSONArray) rr.getRawData();
+		return arr.getJSONObject(0).optLong("id", -1);
+	}
+
 	public int getSupId() {
 		return supId;
 	}

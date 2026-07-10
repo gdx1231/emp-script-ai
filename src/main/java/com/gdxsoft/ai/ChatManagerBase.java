@@ -237,6 +237,12 @@ public class ChatManagerBase {
 	/** 是否使用英文 */
 	private boolean en;
 
+	/** 交互次数 **/
+	private short aimNumberOfInteractions = 0;
+
+	/** API工具检查结果缓存 (promptName -> apiResult)，避免修改共享Prompt对象 */
+	private Map<String, String> apiCheckResults = new HashMap<>();
+
 	/**
 	 * 获取是否开启流式输出
 	 * 
@@ -473,49 +479,8 @@ public class ChatManagerBase {
 			// 会排除action 的消息
 			this.appendPreviousMessages(reqData, existsMessages);
 
-			if (step.getName().equals(aiStepPrev) && StringUtils.isBlank(actionName)) {
-				// Check if cachedSeconds is set and if we need to regenerate
-				if (step.getCachedSeconds() <= 0) {
-					// No cache, return
-					return;
-				}
-				// Check if the last message for this step is within the cachedSeconds
-				boolean needRegenerate = false;
-				try {
-					// Query the last message time for this step
-					rv.addOrUpdateValue("ai_id", this.aiId, "bigint", 100);
-					rv.addOrUpdateValue("aim_step", this.stepName);
-					String sql = "select top 1 AIM_TIME_BEGIN from AI_CHAT_MSG where AI_ID=@ai_id and AIM_STEP=@aim_step order by AIM_ID desc";
-					DTTable tb = DTTable.getJdbcTable(sql, dbConfigName, rv);
-					if (tb.getCount() > 0) {
-						Object timeObj = tb.getCell(0, "AIM_TIME_BEGIN");
-						if (timeObj != null) {
-							Date lastTime = (Date) timeObj;
-							long diffSeconds = (System.currentTimeMillis() - lastTime.getTime()) / 1000;
-							if (diffSeconds > step.getCachedSeconds()) {
-								// Cache expired, need to regenerate
-								LOGGER.info("Step {} cache expired ({}s > {}s), regenerating prompts",
-										this.stepName, diffSeconds, step.getCachedSeconds());
-								needRegenerate = true;
-							} else {
-								LOGGER.info("Step {} cache valid ({}s <= {}s), using existing prompts",
-										this.stepName, diffSeconds, step.getCachedSeconds());
-								return;
-							}
-						}
-					} else {
-						needRegenerate = true;
-					}
-				} catch (Exception e) {
-					LOGGER.warn("Failed to check step {} cache time, regenerating prompts", this.stepName, e);
-					needRegenerate = true;
-				}
-				if (!needRegenerate) {
-					return;
-				}
-			}
 		}
-		Map<String, String> refHeaders ;
+		Map<String, String> refHeaders;
 		if (this.rv.getHttpHeaders() != null) {// websocket的header是空的
 			refHeaders = this.rv.getHttpHeaders();
 			for (String name : refHeaders.keySet()) {
@@ -570,7 +535,8 @@ public class ChatManagerBase {
 			Prompt p = prompts.get(i);
 			String apiResult = apiToolsCheck(p, totalApiResult.toString(), refHeaders);
 
-			p.setContent(apiResult);
+			// 存储结果到独立map，避免修改共享的Prompt对象（共享Prompt会被多次调用）
+			this.apiCheckResults.put(p.getName(), apiResult);
 			if (totalApiResult.length() > 0) {
 				totalApiResult.append(",\n");
 			}
@@ -684,8 +650,6 @@ public class ChatManagerBase {
 		apiPrompt.setDescription(toolName + " API调用");
 		apiPrompt.setApi(toolName);
 
-		
-
 		// 根据 debugOutput 开关决定是否输出调试信息
 		if (mode.isDebugOutput()) {
 			JSONObject msg = UJSon.rstTrue("");
@@ -739,7 +703,14 @@ public class ChatManagerBase {
 		if (StringUtils.isBlank(role)) {
 			role = "user";
 		}
-		String promptContent = p.getContent();
+		String promptContent;
+		// 对于 apisCheck 的 prompt，使用 apiToolsChecks 中已存储的 API 调用结果，
+		// 而不是从共享 Prompt 对象中读取（避免因 setContent 导致的跨请求状态污染）
+		if (p.isApisCheck() && this.apiCheckResults.containsKey(p.getName())) {
+			promptContent = this.apiCheckResults.get(p.getName());
+		} else {
+			promptContent = p.getContent();
+		}
 		if (StringUtils.isBlank(promptContent)) {
 			// 为空则跳过
 			return;
@@ -767,6 +738,27 @@ public class ChatManagerBase {
 
 	}
 
+	private boolean checkPreviousOverTime() {
+		if (this.step.getCachedSeconds() <= 0) {
+			return false;
+		}
+		String existsSql = "select AIM_TIME_BEGIN from AI_CHAT_MSG where ai_id=@ai_id and AIM_ROLE='system' order by AIM_ID desc";
+		// 使用 DTTable 分页方法限制返回条数，兼容所有数据库
+		DTTable tbMsg = DTTable.getJdbcTable(existsSql, "AIM_ID", 1, 1, "", rv);
+		if (tbMsg.getCount() == 0) {
+			return true;
+		}
+		if (tbMsg.getCell(0, 0).isNull()) {
+			return true;
+		}
+		long overTime = System.currentTimeMillis() + step.getCachedSeconds() * 1000;
+		if (tbMsg.getCell(0, 0).toTime() < overTime) {
+			return true;
+		}
+
+		return false;
+	}
+
 	/**
 	 * 添加历史消息到请求数据中
 	 *
@@ -779,6 +771,12 @@ public class ChatManagerBase {
 		if (this.mode != null) {
 			maxMsgCount = this.mode.getMaxHistoryMessages();
 		}
+		boolean isOverTime = checkPreviousOverTime();
+
+		String existsSystemSql = "select * from AI_CHAT_MSG where ai_id=@ai_id and AIM_ACTION is null \n"
+				+ " and AIM_ROLE in ('system') \n"
+				+ " and case when AIM_SKIP_APPEND is null then 0 else AIM_SKIP_APPEND end = 0 order by AIM_ID desc";
+		DTTable tbSystemMsg = DTTable.getJdbcTable(existsSystemSql, "AIM_ID", 1, 1, "", rv);
 
 		String existsSql = "select * from AI_CHAT_MSG where ai_id=@ai_id and AIM_ACTION is null \n"
 				+ " and AIM_ROLE in ('user', 'system', 'assistant') \n"
@@ -836,7 +834,7 @@ public class ChatManagerBase {
 			if (StringUtils.isBlank(role)) {
 				role = "user";
 			}
-			String promptContent = p.getContent();
+			String promptContent = this.apiCheckResults.get(p.getName());
 			if (StringUtils.isBlank(promptContent)) {
 				continue;
 			}
@@ -1388,6 +1386,16 @@ public class ChatManagerBase {
 			this.aiStepPrev = chat.optString("AI_STEP_PREV");
 			this.aiRef = chat.optString("AI_REF");
 			this.aiRefId = chat.optString("AI_REF_ID");
+
+			this.aimNumberOfInteractions = 1;
+
+			// 当前的交互轮次
+			String aimNOISql = "select max(AIM_NOI) a from ai_chat_msg where ai_id=" + this.aiId;
+			DTTable tbAimNOI = DTTable.getJdbcTable(aimNOISql);
+			if (tbAimNOI.getCount() > 0 && !tbAimNOI.getCell(0, 0).isNull()) {
+				this.aimNumberOfInteractions = Short.parseShort(tbAimNOI.getCell(0, 0).toString());
+				this.aimNumberOfInteractions++;
+			}
 			return chat;
 		}
 
@@ -1437,9 +1445,10 @@ public class ChatManagerBase {
 			rv.addOrUpdateValue("AIM_TIME_END", new Date(), "date", 100);
 		}
 		rv.addOrUpdateValue("AIM_BY_USER", byUser ? 1 : 0);
-
-		String sql = "INSERT INTO AI_CHAT_MSG( AI_ID, AIM_MSG, AIM_ROLE, AIM_BY_USER, AIM_TIME_BEGIN, AIM_TIME_END, AIM_STEP, AIM_ACTION, AIM_ACTION_CLASS, AIM_PROMPT_NAME, AIM_SKIP_APPEND)"
-				+ " VALUES(@ai_id, @AIM_MSG, @AIM_ROLE, @AIM_BY_USER, @sys_date, @AIM_TIME_END, @AIM_STEP, @AIM_ACTION, @AIM_ACTION_CLASS, @AIM_PROMPT_NAME, "
+		// 交互次数
+		rv.addOrUpdateValue("AIM_NOI", this.aimNumberOfInteractions);
+		String sql = "INSERT INTO AI_CHAT_MSG( AI_ID, AIM_NOI, AIM_MSG, AIM_ROLE, AIM_BY_USER, AIM_TIME_BEGIN, AIM_TIME_END, AIM_STEP, AIM_ACTION, AIM_ACTION_CLASS, AIM_PROMPT_NAME, AIM_SKIP_APPEND)"
+				+ " VALUES(@ai_id, @AIM_NOI, @AIM_MSG, @AIM_ROLE, @AIM_BY_USER, @sys_date, @AIM_TIME_END, @AIM_STEP, @AIM_ACTION, @AIM_ACTION_CLASS, @AIM_PROMPT_NAME, "
 				+ (isSkipAppend ? 1 : 0) + ")";
 
 		long aimId = DataConnection.insertAndReturnAutoIdLong(sql, dbConfigName, rv);
@@ -1473,8 +1482,16 @@ public class ChatManagerBase {
 		long totalTokens = usage.optLong("total_tokens");
 		long completionTokens = usage.optLong("completion_tokens");
 		long promptTokens = usage.optLong("prompt_tokens");
+		long cachedTokens = 0;
+		// 提取 cached_tokens（来自 prompt_tokens_details）
+		if (usage.has("prompt_tokens_details")) {
+			JSONObject details = usage.optJSONObject("prompt_tokens_details");
+			if (details != null) {
+				cachedTokens = details.optLong("cached_tokens");
+			}
+		}
 
-		this.updateAiChatMsgTokens(aimId, totalTokens, completionTokens, promptTokens);
+		this.updateAiChatMsgTokens(aimId, totalTokens, completionTokens, promptTokens, cachedTokens);
 	}
 
 	/**
@@ -1486,8 +1503,23 @@ public class ChatManagerBase {
 	 * @param promptTokens     提示词Token数
 	 */
 	public void updateAiChatMsgTokens(long aimId, long totalTokens, long completionTokens, long promptTokens) {
+		this.updateAiChatMsgTokens(aimId, totalTokens, completionTokens, promptTokens, 0);
+	}
+
+	/**
+	 * 更新AI聊天消息的Token使用情况（含缓存Token）
+	 *
+	 * @param aimId            消息ID
+	 * @param totalTokens      总Token数
+	 * @param completionTokens 完成Token数
+	 * @param promptTokens     提示词Token数
+	 * @param cachedTokens     缓存命中Token数（prompt_tokens_details.cached_tokens）
+	 */
+	public void updateAiChatMsgTokens(long aimId, long totalTokens, long completionTokens, long promptTokens,
+			long cachedTokens) {
 		String sql = "update AI_CHAT_MSG set AIM_TOTAL_TOKENS = " + totalTokens + ", AIM_COMPLETION_TOKENS= "
-				+ completionTokens + ", AIM_PROMPT_TOKENS = " + promptTokens + " where AIM_ID = " + aimId;
+				+ completionTokens + ", AIM_PROMPT_TOKENS = " + promptTokens + ", AIM_CACHED_TOKENS = " + cachedTokens
+				+ " where AIM_ID = " + aimId;
 
 		DataConnection.updateAndClose(sql, dbConfigName, rv);
 	}

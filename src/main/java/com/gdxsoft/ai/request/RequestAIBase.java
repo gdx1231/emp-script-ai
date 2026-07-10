@@ -104,8 +104,9 @@ public abstract class RequestAIBase implements IRequestAI {
 		if (statusCode == 200) {
 			return response.body();
 		} else {
-			LOGGER.error("HTTP error code: {}, Response: {}", statusCode, response.body());
-			throw new IOException("HTTP error code: " + statusCode + ", Response: " + response.body());
+			String curlCmd = this.curl(reqData);
+			LOGGER.error("HTTP error code: {}, Response: {}\nCURL: {}", statusCode, response.body(), curlCmd);
+			throw new IOException("HTTP error code: " + statusCode + ", Response: " + response.body() + "\nCURL: " + curlCmd);
 		}
 	}
 
@@ -163,8 +164,9 @@ public abstract class RequestAIBase implements IRequestAI {
 			try (Stream<String> lines = response.body()) {
 				lines.forEach(line -> errorResponse.append(line).append("\n"));
 			}
-			LOGGER.error("HTTP error code: {}, Response: {}", statusCode, errorResponse.toString());
-			throw new IOException("HTTP error code: " + statusCode + ", Response: " + errorResponse.toString());
+			String curlCmd = this.curl(reqData);
+			LOGGER.error("HTTP error code: {}, Response: {}\nCURL: {}", statusCode, errorResponse.toString(), curlCmd);
+			throw new IOException("HTTP error code: " + statusCode + ", Response: " + errorResponse.toString() + "\nCURL: " + curlCmd);
 		}
 	}
 
@@ -293,6 +295,15 @@ public abstract class RequestAIBase implements IRequestAI {
 
 		try {
 			JSONObject json = new JSONObject(jsonData);
+
+			// 先提取 usage（非流式完整响应中，usage 和 choices 并存）
+			if (json.has("usage")) {
+				// "usage":{"prompt_tokens":29,"completion_tokens":68,"total_tokens":97,"prompt_tokens_details":{"cached_tokens":0}}
+				JSONObject usage = json.getJSONObject("usage");
+				UJSon.rstSetTrue(usage, null);
+				this.tokensUsage = usage;
+			}
+
 			JSONArray choices = json.getJSONArray("choices");
 			if (choices.length() > 0) {
 				JSONObject choice = choices.getJSONObject(0);
@@ -304,7 +315,7 @@ public abstract class RequestAIBase implements IRequestAI {
 					return delta;
 
 				} else if (choice.has("message")) {
-					// 如果有 message 字段，返回 message.delta
+					// 如果有 message 字段，返回 message 对象（非流式响应）
 					JSONObject message = choice.getJSONObject("message");
 					UJSon.rstSetTrue(message, null);
 					return message;
@@ -312,12 +323,10 @@ public abstract class RequestAIBase implements IRequestAI {
 					// 如果没有 delta 和 message 字段，返回整个 choice 对象
 					return UJSon.rstFalse("无效数据，choice 中没有 delta 或 message 字段，" + jsonText);
 				}
-			} else if (json.has("usage")) {
-				// "usage":{"prompt_tokens":29,"completion_tokens":68,"total_tokens":97,"prompt_tokens_details":{"cached_tokens":0}}
-				JSONObject usage = json.getJSONObject("usage");
-				UJSon.rstSetTrue(usage, null);
-				this.tokensUsage = usage;
-				return usage;
+			}
+			// 流式响应中，最后一个 chunk 只有 usage 没有 choices
+			if (this.tokensUsage != null) {
+				return this.tokensUsage;
 			}
 			return UJSon.rstFalse("无效数据，choices.length() = 0" + jsonText);
 		} catch (Exception e) {
