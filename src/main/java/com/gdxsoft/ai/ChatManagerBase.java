@@ -1373,7 +1373,7 @@ public class ChatManagerBase {
 		String sql = "select AI_ID, AI_CUR_STEP as AI_STEP_PREV, AI_UID, AI_REF, AI_REF_ID from ai_chat where ai_uid=@request_id";
 		DTTable tb = DTTable.getJdbcTable(sql, dbConfigName, rv);
 		if (tb.getCount() > 0) {
-			JSONObject chat = tb.getRow(0).toJson();
+			JSONObject chat = tb.getRow(0).toJson("UPPER");
 			chat.put("IS_NEW", false);
 			if (!chat.optString("AI_STEP_PREV").equalsIgnoreCase(this.stepName)) {
 				// 更新AI_STEP
@@ -1417,7 +1417,7 @@ public class ChatManagerBase {
 			LOGGER.error(getText(ErrorMessages.ERROR_AI_CHAT_CREATE_FAILED), "new AI_CHAT");
 			return UJSon.rstFalse(getText(ErrorMessages.ERROR_AI_CHAT_CREATE_FAILED) + " new AI_CHAT");
 		}
-		JSONObject chat = tb.getRow(0).toJson();
+		JSONObject chat = tb.getRow(0).toJson("UPPER");
 		chat.put("IS_NEW", true);
 
 		this.isNew = true;
