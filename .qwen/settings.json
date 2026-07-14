@@ -30,7 +30,11 @@
       "Bash(./bin/start.sh *)",
       "Bash(pkill *)",
       "Bash(sleep *)",
-      "Bash(codex *)"
+      "Bash(codex *)",
+      "Read(//Users/admin/gyap.org/aiachatroom/**)",
+      "Read(//Users/admin/gyap.org/pf2023/**)",
+      "Bash(jar *)",
+      "Bash(unzip *)"
     ]
   },
   "$version": 4
