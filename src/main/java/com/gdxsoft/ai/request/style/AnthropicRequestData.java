@@ -114,6 +114,14 @@ public abstract class AnthropicRequestData extends RequestDataBase {
 				part.put("content", textArr);
 				break;
 			case AUDIO:
+				AiAudioContent audio = (AiAudioContent) content;
+				part.put("type", "input_audio");
+				JSONObject audioSource = new JSONObject();
+				audioSource.put("type", "base64");
+				audioSource.put("media_type", audio.getMimeType() != null ? audio.getMimeType() : "audio/wav");
+				audioSource.put("data", audio.isUrlMode() ? audio.getUrl() : audio.getBase64Data());
+				part.put("source", audioSource);
+				break;
 			case VIDEO:
 				part.put("type", "text");
 				part.put("text", "[多媒体: " + content.getType().getName() + " 不支持]");

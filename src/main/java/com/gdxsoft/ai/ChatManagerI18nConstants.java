@@ -48,6 +48,24 @@ public final class ChatManagerI18nConstants {
             put("ERROR_AI_CHAT_CREATE_FAILED", new String[] { "AI聊天创建失败：{}", "AI chat creation failed: {}" });
 
             put("ERROR_API_NOT_FOUND", new String[] { "API未找到：{}", "API not found: {}" });
+
+            // ========== STT 错误信息类 ==========
+            put("ERROR_STT_NO_AUDIO",
+                    new String[] { "STT请求缺少音频源", "STT request has no audio source" });
+            put("ERROR_STT_PROVIDER_NOT_FOUND",
+                    new String[] { "未找到STT提供商：{}", "STT provider not found: {}" });
+            put("ERROR_STT_AUDIO_TOO_LARGE",
+                    new String[] { "音频超过最大限制 {} 字节", "Audio exceeds limit of {} bytes" });
+            put("ERROR_STT_UNSUPPORTED_FORMAT",
+                    new String[] { "不支持的音频格式：{}", "Unsupported audio format: {}" });
+            put("ERROR_STT_HTTP_ERROR",
+                    new String[] { "STT HTTP错误 {}: {}", "STT HTTP error {}: {}" });
+            put("ERROR_STT_RESPONSE_PARSE",
+                    new String[] { "STT响应解析失败：{}", "STT response parse failed: {}" });
+            put("ERROR_STT_NO_API_KEY",
+                    new String[] { "STT提供商 {} 未配置API Key", "STT provider {} has no API key" });
+            put("ERROR_STT_AZURE_REGION_MISSING",
+                    new String[] { "Azure STT缺少 region 配置", "Azure STT requires region config" });
         }
     };
 
@@ -86,6 +104,18 @@ public final class ChatManagerI18nConstants {
     public static final class StatusMessages {
         public static final String ACTION_CREATING = "ACTION_CREATING";
         public static final String SUCCESS_OK = "SUCCESS_OK";
+    }
+
+    /** STT 错误信息类常量 */
+    public static final class SttErrorMessages {
+        public static final String ERROR_STT_NO_AUDIO = "ERROR_STT_NO_AUDIO";
+        public static final String ERROR_STT_PROVIDER_NOT_FOUND = "ERROR_STT_PROVIDER_NOT_FOUND";
+        public static final String ERROR_STT_AUDIO_TOO_LARGE = "ERROR_STT_AUDIO_TOO_LARGE";
+        public static final String ERROR_STT_UNSUPPORTED_FORMAT = "ERROR_STT_UNSUPPORTED_FORMAT";
+        public static final String ERROR_STT_HTTP_ERROR = "ERROR_STT_HTTP_ERROR";
+        public static final String ERROR_STT_RESPONSE_PARSE = "ERROR_STT_RESPONSE_PARSE";
+        public static final String ERROR_STT_NO_API_KEY = "ERROR_STT_NO_API_KEY";
+        public static final String ERROR_STT_AZURE_REGION_MISSING = "ERROR_STT_AZURE_REGION_MISSING";
     }
 
     /**

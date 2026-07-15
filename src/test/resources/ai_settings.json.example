@@ -55,5 +55,11 @@
     "api_url": "",
     "api_key": "",
     "model": ""
+  },
+  "openai_stt": {
+    "_comment": "OpenAI Whisper / gpt-4o-transcribe — 用于语音转文字 (STT)",
+    "api_url": "https://api.openai.com/v1/audio/transcriptions",
+    "api_key": "sk-xxx",
+    "model": "whisper-1"
   }
 }

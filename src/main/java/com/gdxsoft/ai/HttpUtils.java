@@ -3,8 +3,11 @@ package com.gdxsoft.ai;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.http.HttpClient;
+import java.nio.charset.StandardCharsets;
 import java.security.cert.X509Certificate;
 import java.time.Duration;
+import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.Executor;
 import java.util.zip.GZIPOutputStream;
 
@@ -112,5 +115,122 @@ public class HttpUtils {
             gzipOut.finish(); // Ensure all data is flushed
             return baos.toByteArray();
         }
+    }
+
+    // ============================================================
+    // Multipart/form-data helpers (used by STT providers)
+    // ============================================================
+
+    /**
+     * Generate a 16-byte random boundary string suitable for multipart/form-data.
+     *
+     * @return boundary string (no leading {@code --})
+     */
+    public static String newMultipartBoundary() {
+        return UUID.randomUUID().toString().replace("-", "");
+    }
+
+    /**
+     * One part of a multipart/form-data body.
+     * <p>
+     * Use {@link #text(String, String)} for form fields and {@link #file(String, byte[], String, String)}
+     * for uploaded files. Both produce a part with the appropriate
+     * {@code Content-Disposition} and (for files) {@code Content-Type} headers.
+     */
+    public static final class MultipartPart {
+        private final String name;
+        private final byte[] data;
+        private final String filename;
+        private final String contentType;
+
+        private MultipartPart(String name, byte[] data, String filename, String contentType) {
+            this.name = name;
+            this.data = data;
+            this.filename = filename;
+            this.contentType = contentType;
+        }
+
+        /** A simple text form field (no {@code filename}, no per-part {@code Content-Type}). */
+        public static MultipartPart text(String name, String value) {
+            return new MultipartPart(name, value == null ? new byte[0] : value.getBytes(StandardCharsets.UTF_8),
+                    null, null);
+        }
+
+        /** A file upload part with the given filename and optional Content-Type. */
+        public static MultipartPart file(String name, byte[] data, String filename, String contentType) {
+            if (filename == null || filename.isEmpty()) {
+                throw new IllegalArgumentException("filename is required for file part");
+            }
+            return new MultipartPart(name, data == null ? new byte[0] : data, filename, contentType);
+        }
+
+        public String getName() { return name; }
+        public byte[] getData() { return data; }
+        public String getFilename() { return filename; }
+        public String getContentType() { return contentType; }
+    }
+
+    /** Pre-built multipart body with bytes and the matching {@code Content-Type} value. */
+    public static final class MultipartBody {
+        private final byte[] bytes;
+        private final String boundary;
+        private final String contentType;
+
+        public MultipartBody(byte[] bytes, String boundary) {
+            this.bytes = bytes;
+            this.boundary = boundary;
+            this.contentType = "multipart/form-data; boundary=" + boundary;
+        }
+
+        public byte[] bytes() { return bytes; }
+        public String boundary() { return boundary; }
+        public String contentType() { return contentType; }
+    }
+
+    /**
+     * Build a {@code multipart/form-data} body from the given parts using a random boundary.
+     *
+     * @param parts parts in order
+     * @return assembled body + Content-Type
+     * @throws IOException on write failure
+     */
+    public static MultipartBody buildMultipart(List<MultipartPart> parts) throws IOException {
+        return buildMultipart(parts, newMultipartBoundary());
+    }
+
+    /**
+     * Build a {@code multipart/form-data} body with a caller-supplied boundary.
+     * <p>
+     * Package-private to support deterministic byte-level testing.
+     *
+     * @param parts    parts in order
+     * @param boundary boundary string (no leading {@code --})
+     * @return assembled body + Content-Type
+     * @throws IOException on write failure
+     */
+    static MultipartBody buildMultipart(List<MultipartPart> parts, String boundary) throws IOException {
+        if (boundary == null || boundary.isEmpty()) {
+            throw new IllegalArgumentException("boundary must be non-empty");
+        }
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        String crlf = "\r\n";
+        for (MultipartPart p : parts) {
+            out.write(("--" + boundary + crlf).getBytes(StandardCharsets.UTF_8));
+            StringBuilder disp = new StringBuilder();
+            disp.append("Content-Disposition: form-data; name=\"").append(p.getName()).append("\"");
+            if (p.getFilename() != null) {
+                disp.append("; filename=\"").append(p.getFilename()).append("\"");
+            }
+            out.write(disp.toString().getBytes(StandardCharsets.UTF_8));
+            out.write(crlf.getBytes(StandardCharsets.UTF_8));
+            if (p.getContentType() != null) {
+                out.write(("Content-Type: " + p.getContentType() + crlf).getBytes(StandardCharsets.UTF_8));
+            }
+            out.write(crlf.getBytes(StandardCharsets.UTF_8));
+            out.write(p.getData());
+            out.write(crlf.getBytes(StandardCharsets.UTF_8));
+        }
+        out.write(("--" + boundary + "--" + crlf).getBytes(StandardCharsets.UTF_8));
+        return new MultipartBody(out.toByteArray(), boundary);
     }
 }
