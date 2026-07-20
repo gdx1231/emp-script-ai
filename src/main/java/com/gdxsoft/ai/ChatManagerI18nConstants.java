@@ -66,6 +66,18 @@ public final class ChatManagerI18nConstants {
                     new String[] { "STT提供商 {} 未配置API Key", "STT provider {} has no API key" });
             put("ERROR_STT_AZURE_REGION_MISSING",
                     new String[] { "Azure STT缺少 region 配置", "Azure STT requires region config" });
+
+            // ========== IMG (Image Generation) 错误信息类 ==========
+            put("ERROR_IMG_PROVIDER_NOT_FOUND",
+                    new String[] { "未找到图片生成提供商：{}", "Image generation provider not found: {}" });
+            put("ERROR_IMG_NO_API_KEY",
+                    new String[] { "图片生成提供商 {} 未配置API Key", "Image generation provider {} has no API key" });
+            put("ERROR_IMG_NO_PROMPT",
+                    new String[] { "图片生成缺少提示词(prompt)", "Image generation request has no prompt" });
+            put("ERROR_IMG_HTTP_ERROR",
+                    new String[] { "图片生成HTTP错误 {}: {}", "Image generation HTTP error {}: {}" });
+            put("ERROR_IMG_RESPONSE_PARSE",
+                    new String[] { "图片生成响应解析失败：{}", "Image generation response parse failed: {}" });
         }
     };
 
@@ -116,6 +128,15 @@ public final class ChatManagerI18nConstants {
         public static final String ERROR_STT_RESPONSE_PARSE = "ERROR_STT_RESPONSE_PARSE";
         public static final String ERROR_STT_NO_API_KEY = "ERROR_STT_NO_API_KEY";
         public static final String ERROR_STT_AZURE_REGION_MISSING = "ERROR_STT_AZURE_REGION_MISSING";
+    }
+
+    /** IMG (Image Generation) 错误信息类常量 */
+    public static final class ImgErrorMessages {
+        public static final String ERROR_IMG_PROVIDER_NOT_FOUND = "ERROR_IMG_PROVIDER_NOT_FOUND";
+        public static final String ERROR_IMG_NO_API_KEY = "ERROR_IMG_NO_API_KEY";
+        public static final String ERROR_IMG_NO_PROMPT = "ERROR_IMG_NO_PROMPT";
+        public static final String ERROR_IMG_HTTP_ERROR = "ERROR_IMG_HTTP_ERROR";
+        public static final String ERROR_IMG_RESPONSE_PARSE = "ERROR_IMG_RESPONSE_PARSE";
     }
 
     /**
