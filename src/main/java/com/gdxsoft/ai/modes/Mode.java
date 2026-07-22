@@ -289,6 +289,18 @@ public class Mode {
 			throw new Exception("API not found for name: " + apiName);
 		}
 
+		// Tool 且定义了 command 时执行本地程序，否则走 URL 调用
+		if (api instanceof Tool) {
+			Tool tool = (Tool) api;
+			if (tool.isLocalCommand()) {
+				Tool.ExecResult execResult = tool.executeCommand(rv);
+				// 记录实际执行的命令行（占用 apiCurl 字段，便于统一记录到 api_call_curl）
+				prompt.setApiCurl(execResult.getCommandLine());
+				prompt.setContent(execResult.getOutput());
+				return true;
+			}
+		}
+
 		String url = this.createApiUrl(api, rv);
 
 		LOGGER.info("调用 API: " + apiName + ", URL: " + url);
@@ -629,6 +641,30 @@ public class Mode {
 	}
 
 	/**
+	 * 拼接本 mode 所有带调用说明（usage）的 api/tool 的说明文本，每条之间换行。
+	 * 用于 apisCheck/toolsCheck prompt 构建时自动附加工具清单。
+	 * 
+	 * @return 拼接后的调用说明，没有任何 usage 时返回空串
+	 */
+	public String getApisUsage() {
+		StringBuilder sb = new StringBuilder();
+		if (apis == null) {
+			return sb.toString();
+		}
+		for (Api api : apis) {
+			String usage = api.getUsage();
+			if (usage == null || usage.trim().length() == 0) {
+				continue;
+			}
+			if (sb.length() > 0) {
+				sb.append("\n");
+			}
+			sb.append(usage.trim());
+		}
+		return sb.toString();
+	}
+
+	/**
 	 * Create a deep copy of current Mode, including
 	 * steps/prompts/sqlQueries/actions
 	 */
@@ -689,13 +725,22 @@ public class Mode {
 		List<Api> apisCopy = new ArrayList<>();
 		if (this.apis != null) {
 			for (Api api : this.apis) {
-				Api newApi = new Api(api.getName(), api.getDescription(), api.getUrl());
+				Api newApi;
+				if (api instanceof Tool) {
+					// Tool 需要保留具体类型与 command
+					Tool newTool = new Tool(api.getName(), api.getDescription(), api.getUrl());
+					newTool.setCommand(((Tool) api).getCommand());
+					newApi = newTool;
+				} else {
+					newApi = new Api(api.getName(), api.getDescription(), api.getUrl());
+				}
 				newApi.setMethod(api.getMethod());
 				newApi.setTimeout(api.getTimeout());
 				newApi.setRefRequest(api.isRefRequest());
 				newApi.setParameters(api.getParameters());
 				newApi.setKey(api.getKey());
 				newApi.setBody(api.getBody());
+				newApi.setUsage(api.getUsage());
 				// 复制请求头
 				if (api.getHeaders() != null) {
 					List<ApiHeader> headersCopy = new ArrayList<>();

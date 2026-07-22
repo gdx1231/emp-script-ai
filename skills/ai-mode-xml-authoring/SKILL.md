@@ -1,6 +1,6 @@
 ---
 name: ai-mode-xml-authoring
-description: emp-script-ai 及其下游项目（travelagent、pf2023）所用 AI Mode XML schema 的撰写参考。覆盖 `<mode>` / `<step>` / `<prompt>` / `<apis>` / `<sqls>` / `<actions>` / `<paramChecks>` / `<ui>` 各块结构、prompt 数据源（sqlRef / api / action / CDATA）、函数调用 prompt（`apisCheck`）、URL / 请求占位符、输出自定义标签（`<day>`、`<rq>`、`<cid>`、`<enj>`、`<id>`、`<num>`、`<sersday>`、`<prices>`、`<gn>`）以及 step 控制属性（`innerCall`、`validateParams`、`multiOnlyUserMsg`、`action`、`actionSqlRef`）。
+description: emp-script-ai 及其下游项目（travelagent、pf2023）所用 AI Mode XML schema 的撰写参考。覆盖 `<mode>` / `<step>` / `<prompt>` / `<apis>` / `<tools>` / `<common>` / `<sqls>` / `<actions>` / `<paramChecks>` / `<ui>` 各块结构、prompt 数据源（sqlRef / api / tool / action / CDATA）、函数调用 prompt（`apisCheck` / `toolsCheck`，工具调用说明自动附加）、URL / 请求占位符、本地程序工具（command）、输出自定义标签（`<day>`、`<rq>`、`<cid>`、`<enj>`、`<id>`、`<num>`、`<sersday>`、`<prices>`、`<gn>`）以及 step 控制属性（`innerCall`、`validateParams`、`multiOnlyUserMsg`、`action`、`actionSqlRef`）。
 source: synthesized
 extracted_at: '2026-06-22'
 synthesized_from:
@@ -79,7 +79,7 @@ Mode XML 文件由 `emp-script-ai` 的 `Modes.loadModes(xml)` 解析。它定义
 |------|------|------|
 | （无） | 内联 `<![CDATA[...]]>` | 纯文本或 JSON schema 示例。 |
 | `sqlRef="name"` | `<sqls>/<sql name="name">` | 结果按 `dataType="json"` 或 `dataGroupField="..."` 渲染成 JSON / CSV。 |
-| `api="name"` | `<apis>/<api name="name">` | 每次请求调一次 API，把响应渲染进 prompt。 |
+| `api="name"` | `<apis>/<api name="name">` 或 `<tools>/<tool name="name">` | 每次请求调一次 API，把响应渲染进 prompt。`tool="name"` 是等价别名写法。 |
 | `action="name"` | `<actions>/<action name="name">` | Java 类（实现 `IAction.execute`）生成内容。 |
 
 可选 prompt 属性：
@@ -89,16 +89,13 @@ Mode XML 文件由 `emp-script-ai` 的 `Modes.loadModes(xml)` 解析。它定义
 - `dataType="json"` — 告诉渲染器把 SQL 结果按 JSON 输出。
 - `dataGroupField="SER_NAME"` — 把 SQL 结果 JSON 数组按指定字段重组成 `{field: [rows]}` 形式。
 - `showInChat="false"` — 在聊天 UI 中隐藏该 prompt 文本，但仍发给 LLM（用于合成预提示）。
-- `apisCheck="true"` — 该 prompt 是**函数调用指令**：LLM 只能输出 `[{"tool": "name", "args": {...}}]` 或 `[{"tool": "none"}]`，不得输出其他文字。框架随后按 `<api name="...">` 解析工具，把结果以系统消息回灌。典型用法：路由到 `getparametersapi`、`exportapi`、`createenqjnyapi`、`checkparamsapi` 等。
+- `apisCheck="true"`（别名 `toolsCheck="true"`）— 该 prompt 是**函数调用指令**：LLM 只能输出 `[{"tool": "name", "args": {...}}]` 或 `[{"tool": "none"}]`，不得输出其他文字。框架随后按 `<api>/<tool name="...">` 解析工具，把结果以系统消息回灌。典型用法：路由到 `getparametersapi`、`exportapi`、`createenqjnyapi`、`checkparamsapi` 等。**工具清单无需手写**：框架会把本 mode 所有带 CDATA 调用说明的 `<tool>` 说明自动附加到该 prompt 后面（见下文 `<tools>`）。
 
 ### 函数调用 prompt 模板
 
 ```xml
 <prompt name="checkUsingXxx" role="user" apisCheck="true"><![CDATA[
 你是一个智能助手，能够根据用户需求调用工具回答问题。
-可用工具：
-
-xxxapi(arg: type): description。返回 JSON {...}。
 
 任务：根据用户输入，以 JSON 格式输出工具调用指令：
 [{"tool": "工具名", "args": {"参数名": "参数值"}}] 或 [{"tool": "none"}]
@@ -108,6 +105,8 @@ xxxapi(arg: type): description。返回 JSON {...}。
 2. 调用 xxxapi 时 args.xxx 必须传用户输入的完整原句，不得改写/截取。
 ]]></prompt>
 ```
+
+「可用工具」清单**不需要手写**：只要各 `<tool>` 写了 CDATA 调用说明，框架会自动在该 prompt 后附加「可用工具：」及全部说明（旧配置中手写的清单仍然有效，只是不再必要）。
 
 对应的 `<api>` 节点需要 `refRequest="true"`，框架自动把 `request_id` 拼到 URL 用于后端关联。
 
@@ -140,6 +139,54 @@ xxxapi(arg: type): description。返回 JSON {...}。
 | `<headers><header>` | 自定义 HTTP header。 |
 
 `@EWA.HOST_BASE` 是宿主 EWA 应用的运行期 base URL。后端 JSP 通常挂在 `/back_admin/ai/` 下。
+
+## `<tools>` — 工具定义（URL 调用 / 本地程序）
+
+`<tools>/<tool>` 是 `<apis>/<api>` 的增强别名写法，全部属性（`name`/`url`/`method`/`parameters`/`refRequest`/`key`/`timeout`/`form`/`body`/`headers`）与 `<api>` 相同，并额外支持：
+
+```xml
+<tools>
+    <!-- URL 调用工具：与 <api> 等价，CDATA 是该工具的调用说明 -->
+    <tool name="weatherapi" description="天气"
+          url="@EWA.HOST_BASE/back_admin/apis/weather.jsp"
+          parameters="location=@location&amp;from_date=@from_date&amp;to_date=@to_date"
+          refRequest="true" timeout="5000" method="get">
+        <![CDATA[weatherapi(location: str, from_date: YYYY-MM-DD, to_date: YYYY-MM-DD):查询指定城市、日期的天气]]>
+    </tool>
+
+    <!-- 本地程序工具：command 非空时执行本地程序而非 URL 调用 -->
+    <tool name="translate" command="/opt/bin/trans --text @text --lang @lang" timeout="10000">
+        <![CDATA[translate(text: str, lang: str):把文本翻译为指定语言]]>
+    </tool>
+</tools>
+```
+
+规则：
+
+- **CDATA 调用说明（usage）**：构建 `apisCheck`/`toolsCheck` prompt 时，框架自动把本 mode 所有带说明的工具说明逐条附加到 prompt 末尾（带「可用工具：」标题），无需再在 prompt CDATA 里手写工具清单。
+- **`command`**：本地程序命令模板，`@占位符` 由 LLM 给出的 args（经 RequestValue）替换。不经 shell，直接按参数数组启动进程（支持引号包裹含空格的参数），`timeout`（毫秒）到期强制结束；stdout/stderr 合并后作为工具结果，输出超过 100K 字符截断。`command` 为空时走 `url` 调用。**安全提示**：command 由 LLM 的 args 参与替换，务必把参数限制在占位符层面，不要让 LLM 输入直接拼成完整命令；不要把无保护的 mode 暴露给不可信用户。
+- **同名覆盖**：同一 mode 内 `<tool>` 与 `<api>` 同名（忽略大小写）时 tool 整体覆盖 api；`<common>` 块内规则相同，合并进 mode 时仍是 mode 本地定义优先。
+- prompt 引用属性 `tool="name"` 等价于 `api="name"`，`toolsCheck="true"` 等价于 `apisCheck="true"`；两者同时存在时旧属性优先。
+
+### `<common><apis>` / `<common><tools>` — 跨 mode 共享的公共定义
+
+`<modes>` 根下可放一个 `<common>` 块，定义所有 mode 共享的 `<api>` / `<tool>`：
+
+```xml
+<modes>
+    <mode name="A">...</mode>
+    <mode name="B">...</mode>
+    <common>
+        <tools>
+            <tool name="weatherapi" url="..." method="get" refRequest="true">
+                <![CDATA[weatherapi(location: str, ...):查询天气]]>
+            </tool>
+        </tools>
+    </common>
+</modes>
+```
+
+合并规则：mode 读取 apis 时先取本 mode 下的 `<apis>`/`<tools>`，再合并 common 中的定义；名称一致（忽略大小写）时 common 中的定义被抛弃，即 **mode 本地定义优先**；common 内部同名时 tool 覆盖 api。典型用法：多个 mode 都要调 `weatherapi`，但各自需要不同的 `getGroupInfo`（内部视角 / 客人视角）——把 `weatherapi` 放 common，把 `getGroupInfo` 分别放各 mode 里。
 
 ### `request_id` 必须是 UUID 格式
 

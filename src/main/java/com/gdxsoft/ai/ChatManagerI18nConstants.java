@@ -78,6 +78,9 @@ public final class ChatManagerI18nConstants {
                     new String[] { "图片生成HTTP错误 {}: {}", "Image generation HTTP error {}: {}" });
             put("ERROR_IMG_RESPONSE_PARSE",
                     new String[] { "图片生成响应解析失败：{}", "Image generation response parse failed: {}" });
+
+            // ========== 工具调用（apisCheck/toolsCheck） ==========
+            put("AVAILABLE_TOOLS", new String[] { "可用工具：", "Available tools:" });
         }
     };
 
@@ -116,6 +119,11 @@ public final class ChatManagerI18nConstants {
     public static final class StatusMessages {
         public static final String ACTION_CREATING = "ACTION_CREATING";
         public static final String SUCCESS_OK = "SUCCESS_OK";
+    }
+
+    /** 工具调用（apisCheck/toolsCheck）常量 */
+    public static final class ToolMessages {
+        public static final String AVAILABLE_TOOLS = "AVAILABLE_TOOLS";
     }
 
     /** STT 错误信息类常量 */

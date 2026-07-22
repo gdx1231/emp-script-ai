@@ -575,6 +575,11 @@ public class ChatManagerBase {
 			promptContent = prompt.getPrefix() + promptContent;
 		}
 		promptContent = this.rv.replaceParameters(promptContent);
+		// 自动附加本 mode 所有带调用说明（usage）的工具清单，无需在 prompt 中手写
+		String apisUsage = mode.getApisUsage();
+		if (!StringUtils.isBlank(apisUsage)) {
+			promptContent += "\n\n" + getText(ChatManagerI18nConstants.ToolMessages.AVAILABLE_TOOLS) + "\n" + apisUsage;
+		}
 		promptContent += "\n\n用户输入：" + this.prompt;
 		reqCheckData.addMessage(promptContent, role);
 
@@ -595,6 +600,12 @@ public class ChatManagerBase {
 
 		// 提取 JSON 响应并返回成功信息
 		JSONObject json = req.extraceJson(fullText, true);
+
+		// 记录 Token 使用情况（非流式响应的 usage 由 extraceJson 解析到 req 中）
+		JSONObject usage = req.getTokensUsage();
+		if (usage != null) {
+			this.updateAiChatMsgTokens(aimId, usage);
+		}
 		String content = json.getString("content").trim();
 		JSONArray tools;
 		if (content.startsWith("{")) {
@@ -1639,7 +1650,13 @@ public class ChatManagerBase {
 			String content = json != null && json.has("content") ? json.getString("content") : fullText;
 
 			// 记录 AI 响应
-			addAiChatMsg(content, "assistant", true);
+			long aimId = addAiChatMsg(content, "assistant", true);
+
+			// 记录 Token 使用情况（非流式响应的 usage 由 extraceJson 解析到 req 中）
+			JSONObject usage = req.getTokensUsage();
+			if (usage != null) {
+				this.updateAiChatMsgTokens(aimId, usage);
+			}
 
 			return content;
 		} catch (Exception e) {

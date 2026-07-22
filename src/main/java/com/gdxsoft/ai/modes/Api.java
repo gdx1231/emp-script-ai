@@ -8,8 +8,6 @@ import java.util.ArrayList;
  * <p>
  * Data model for <api> element under XML <apis> node.
  * 
- * @author PF2023项目组
- * @since 2025-08-23
  */
 public class Api {
     private String name;
@@ -21,6 +19,7 @@ public class Api {
     private int timeout = 5000; // 默认5秒超时
     private String method = "GET"; // 默认GET方法
     private String body;
+    private String usage; // 工具调用说明（<tool>/<api> 元素内的 CDATA），构建 apisCheck prompt 时自动附加
     private List<ApiHeader> headers;
     private List<ApiField> form;
 
@@ -238,6 +237,24 @@ public class Api {
      */
     public void setBody(String body) {
         this.body = body;
+    }
+
+    /**
+     * 获取工具调用说明（&lt;tool&gt;/&lt;api&gt; 元素内的 CDATA）
+     * 
+     * @return 调用说明，未定义返回 null
+     */
+    public String getUsage() {
+        return usage;
+    }
+
+    /**
+     * 设置工具调用说明
+     * 
+     * @param usage 调用说明
+     */
+    public void setUsage(String usage) {
+        this.usage = usage;
     }
 
     /**

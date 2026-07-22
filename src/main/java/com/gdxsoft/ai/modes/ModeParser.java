@@ -2,6 +2,8 @@ package com.gdxsoft.ai.modes;
 
 import java.util.List;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
 
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
@@ -46,6 +48,10 @@ public class ModeParser {
 			String stepDescription = stepElement.getAttribute("description");
 			String stepAction = stepElement.getAttribute("action");
 			String stepApi = stepElement.getAttribute("api");
+			if (stepApi == null || stepApi.trim().length() == 0) {
+				// tool 属性为 api 的别名写法
+				stepApi = stepElement.getAttribute("tool");
+			}
 			String actionSqlRef = stepElement.getAttribute("actionSqlRef");
 			String innerCallAttr = stepElement.getAttribute("innerCall");
 			String multiOnlyUserMsgAttr = stepElement.getAttribute("multiOnlyUserMsg");
@@ -124,18 +130,11 @@ public class ModeParser {
 			}
 		}
 
-		// Parse APIs
+		// Parse APIs（<apis>/<api>）与 Tools（<tools>/<tool>，同名时 tool 整体覆盖 api）
 		List<Api> apis = new ArrayList<>();
-		NodeList apisNodes = root.getElementsByTagName("apis");
-		if (apisNodes.getLength() > 0) {
-			Element apisElement = (Element) apisNodes.item(0);
-			NodeList apiNodes = apisElement.getElementsByTagName("api");
-			for (int i = 0; i < apiNodes.getLength(); i++) {
-				Element apiElement = (Element) apiNodes.item(i);
-				Api api = parseApi(apiElement);
-				apis.add(api);
-			}
-		}
+		Map<String, Integer> apiNameIndex = new HashMap<>();
+		collectApis(root, "apis", "api", apis, apiNameIndex, false);
+		collectApis(root, "tools", "tool", apis, apiNameIndex, true);
 
 		// Parse paramChecks
 		List<ParamCheck> paramChecks = new ArrayList<>();
@@ -219,6 +218,44 @@ public class ModeParser {
 	}
 
 	/**
+	 * 收集 root 下第一个 &lt;blockTag&gt; 块中的 &lt;itemTag&gt; 定义到 apis 列表。
+	 * <p>
+	 * override=true 时（用于 &lt;tool&gt;），名称（忽略大小写）已存在的定义被原位替换
+	 * （tool 整体覆盖 api）；否则 api 之间不去重，保持原有行为。
+	 *
+	 * @param root    包含块的元素（mode 或 common）
+	 * @param blockTag 块标签名（apis / tools）
+	 * @param itemTag  子项标签名（api / tool）
+	 * @param apis    收集目标列表
+	 * @param index   名称（小写）到列表位置的索引
+	 * @param override 同名时是否整体覆盖
+	 */
+	public static void collectApis(Element root, String blockTag, String itemTag, List<Api> apis,
+			Map<String, Integer> index, boolean override) {
+		NodeList blockNodes = root.getElementsByTagName(blockTag);
+		if (blockNodes.getLength() == 0) {
+			return;
+		}
+		Element blockElement = (Element) blockNodes.item(0);
+		NodeList itemNodes = blockElement.getElementsByTagName(itemTag);
+		for (int i = 0; i < itemNodes.getLength(); i++) {
+			Element itemElement = (Element) itemNodes.item(i);
+			Api api = "tool".equals(itemTag) ? parseTool(itemElement) : parseApi(itemElement);
+			String key = api.getName() == null ? "" : api.getName().toLowerCase();
+			Integer pos = index.get(key);
+			if (pos != null && override) {
+				// tool 整体覆盖同名 api，保持原位
+				apis.set(pos.intValue(), api);
+			} else {
+				if (pos == null) {
+					index.put(key, Integer.valueOf(apis.size()));
+				}
+				apis.add(api);
+			}
+		}
+	}
+
+	/**
 	 * 解析提示列表
 	 * 
 	 * @param promptsElement prompts元素
@@ -253,8 +290,16 @@ public class ModeParser {
 		String dataGroupField = promptElement.getAttribute("dataGroupField");
 		String action = promptElement.getAttribute("action");
 		String api = promptElement.getAttribute("api");
+		if (api == null || api.trim().length() == 0) {
+			// tool 属性为 api 的别名写法
+			api = promptElement.getAttribute("tool");
+		}
 		String showInChatAttr = promptElement.getAttribute("showInChat");
 		String apisCheckAttr = promptElement.getAttribute("apisCheck");
+		if (apisCheckAttr == null || apisCheckAttr.trim().length() == 0) {
+			// toolsCheck 属性为 apisCheck 的别名写法
+			apisCheckAttr = promptElement.getAttribute("toolsCheck");
+		}
 		Prompt p = new Prompt(promptName, role, description, sqlRef, dataType, prefix, content, action);
 		if (dataGroupField != null && dataGroupField.length() > 0) {
 			p.setDataGroupField(dataGroupField);
@@ -359,6 +404,12 @@ public class ModeParser {
 		api.setParameters(parameters);
 		api.setKey(key);
 
+		// 解析元素内直接的文本/CDATA 内容作为调用说明（<body>/<headers>/<form> 子元素不受影响）
+		String usage = getElementContent(apiElement);
+		if (usage != null && usage.length() > 0) {
+			api.setUsage(usage);
+		}
+
 		// 解析body元素
 		NodeList bodyNodes = apiElement.getElementsByTagName("body");
 		if (bodyNodes.getLength() > 0) {
@@ -384,6 +435,35 @@ public class ModeParser {
 		}
 
 		return api;
+	}
+
+	/**
+	 * 解析 &lt;tool&gt; 元素为 Tool 实例（继承 Api 的全部属性，额外支持 command 本地程序命令）
+	 *
+	 * @param toolElement tool元素
+	 * @return Tool对象
+	 */
+	public static Tool parseTool(Element toolElement) {
+		Api base = parseApi(toolElement);
+		Tool tool = new Tool();
+		tool.setName(base.getName());
+		tool.setDescription(base.getDescription());
+		tool.setUrl(base.getUrl());
+		tool.setMethod(base.getMethod());
+		tool.setTimeout(base.getTimeout());
+		tool.setRefRequest(base.isRefRequest());
+		tool.setParameters(base.getParameters());
+		tool.setKey(base.getKey());
+		tool.setBody(base.getBody());
+		tool.setUsage(base.getUsage());
+		tool.setHeaders(base.getHeaders());
+		tool.setForm(base.getForm());
+
+		String command = toolElement.getAttribute("command");
+		if (command != null && command.trim().length() > 0) {
+			tool.setCommand(command.trim());
+		}
+		return tool;
 	}
 
 	/**

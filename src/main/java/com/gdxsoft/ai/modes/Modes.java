@@ -47,18 +47,45 @@ public class Modes {
 
         this.document = UXml.asDocument(xmlContent);
 
+        // 解析 <common><apis> 中的公共 API 定义
+        List<Api> commonApis = parseCommonApis(this.document);
+
         List<Mode> modes = new ArrayList<>();
         NodeList modeNodes = document.getElementsByTagName("mode");
 
         for (int i = 0; i < modeNodes.getLength(); i++) {
             Element modeElement = (Element) modeNodes.item(i);
             Mode mode = Mode.parseMode(modeElement);
+            // 合并公共 API：mode 自身的 apis 优先，common 中同名（忽略大小写）的 API 被抛弃
+            for (Api commonApi : commonApis) {
+                if (mode.getApi(commonApi.getName()) == null) {
+                    mode.getApis().add(commonApi);
+                }
+            }
             MODES.put(mode.getName(), mode);
             modes.add(mode);
             LOGGER.info("Mode: " + mode.getName());
         }
         XML_MD5.put(this.xmlMd5, modes);
         return modes;
+    }
+
+    /**
+     * 解析 <common> 下的公共 <api>/<tool> 定义列表（同名时 tool 整体覆盖 api）。
+     * <p>
+     * Parse common <api>/<tool> definitions under <common>.
+     */
+    private static List<Api> parseCommonApis(Document document) {
+        List<Api> commonApis = new ArrayList<>();
+        NodeList commonNodes = document.getElementsByTagName("common");
+        if (commonNodes.getLength() == 0) {
+            return commonApis;
+        }
+        Element commonElement = (Element) commonNodes.item(0);
+        Map<String, Integer> apiNameIndex = new HashMap<>();
+        ModeParser.collectApis(commonElement, "apis", "api", commonApis, apiNameIndex, false);
+        ModeParser.collectApis(commonElement, "tools", "tool", commonApis, apiNameIndex, true);
+        return commonApis;
     }
 
 }
