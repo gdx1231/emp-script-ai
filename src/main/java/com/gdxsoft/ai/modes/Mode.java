@@ -672,92 +672,28 @@ public class Mode {
 		List<Step> stepsCopy = new ArrayList<>();
 		if (this.steps != null) {
 			for (Step s : this.steps) {
-				List<Prompt> promptsCopy = new ArrayList<>();
-				if (s.getPrompts() != null) {
-					for (Prompt p : s.getPrompts()) {
-						Prompt np = new Prompt(p.getName(), p.getRole(), p.getDescription(), p.getSqlRef(),
-								p.getDataType(), p.getPrefix(), p.getContent(), p.getAction());
-						if (p.getDataGroupField() != null) {
-							np.setDataGroupField(p.getDataGroupField());
-						}
-						np.setShowInChat(p.isShowInChat());
-						if (p.getApi() != null) {
-							np.setApi(p.getApi());
-						}
-						np.setApisCheck(p.isApisCheck());
-						promptsCopy.add(np);
-					}
-				}
-				Step ns;
-				if (s.getAction() != null && s.getAction().length() > 0) {
-					ns = new Step(s.getName(), s.getDescription(), promptsCopy, s.getAction());
-				} else {
-					ns = new Step(s.getName(), s.getDescription(), promptsCopy);
-				}
-				ns.setStream(s.isStream());
-				ns.setActionSqlRef(s.getActionSqlRef());
-				if (s.getApi() != null) {
-					ns.setApi(s.getApi());
-				}
-				ns.setInnerCall(s.isInnerCall());
-				ns.setMultiOnlyUserMsg(s.isMultiOnlyUserMsg());
-				if (s.getValidateParams() != null) {
-					ns.setValidateParams(s.getValidateParams());
-				}
-				stepsCopy.add(ns);
+				stepsCopy.add(s.clone());
 			}
 		}
 
 		List<SqlQuery> sqlsCopy = new ArrayList<>();
 		if (this.sqlQueries != null) {
 			for (SqlQuery q : this.sqlQueries) {
-				sqlsCopy.add(new SqlQuery(q.getName(), q.getDescription(), q.getContent()));
+				sqlsCopy.add(q.clone());
 			}
 		}
 
 		List<Action> actionsCopy = new ArrayList<>();
 		if (this.actions != null) {
 			for (Action a : this.actions) {
-				actionsCopy.add(new Action(a.getName(), a.getDescription(), a.getClassName()));
+				actionsCopy.add(a.clone());
 			}
 		}
 
 		List<Api> apisCopy = new ArrayList<>();
 		if (this.apis != null) {
 			for (Api api : this.apis) {
-				Api newApi;
-				if (api instanceof Tool) {
-					// Tool 需要保留具体类型与 command
-					Tool newTool = new Tool(api.getName(), api.getDescription(), api.getUrl());
-					newTool.setCommand(((Tool) api).getCommand());
-					newApi = newTool;
-				} else {
-					newApi = new Api(api.getName(), api.getDescription(), api.getUrl());
-				}
-				newApi.setMethod(api.getMethod());
-				newApi.setTimeout(api.getTimeout());
-				newApi.setRefRequest(api.isRefRequest());
-				newApi.setParameters(api.getParameters());
-				newApi.setKey(api.getKey());
-				newApi.setBody(api.getBody());
-				newApi.setUsage(api.getUsage());
-				// 复制请求头
-				if (api.getHeaders() != null) {
-					List<ApiHeader> headersCopy = new ArrayList<>();
-					for (ApiHeader header : api.getHeaders()) {
-						headersCopy.add(new ApiHeader(header.getName(), header.getValue()));
-					}
-					newApi.setHeaders(headersCopy);
-				}
-				// 复制表单字段
-				if (api.getForm() != null) {
-					List<ApiField> formCopy = new ArrayList<>();
-					for (ApiField field : api.getForm()) {
-						formCopy.add(new ApiField(field.getName(), field.getValue()));
-					}
-					newApi.setForm(formCopy);
-				}
-				apisCopy.add(newApi);
+				apisCopy.add(api.clone());
 			}
 		}
 
@@ -765,7 +701,6 @@ public class Mode {
 		copy.setTemperature(this.temperature);
 		copy.setTopP(this.topP);
 		copy.setThinking(this.thinking);
-		// copy responseFormat
 		copy.setResponseFormat(this.responseFormat);
 		copy.setUiWelcome(this.uiWelcome);
 		copy.setUiComplete(this.uiComplete);
@@ -776,8 +711,7 @@ public class Mode {
 		if (this.paramChecks != null) {
 			List<ParamCheck> paramChecksCopy = new ArrayList<>();
 			for (ParamCheck pc : this.paramChecks) {
-				paramChecksCopy.add(new ParamCheck(pc.getName(), pc.getDes(), pc.getType(),
-						pc.getDefaultValue(), pc.getOptions()));
+				paramChecksCopy.add(pc.clone());
 			}
 			copy.setParamChecks(paramChecksCopy);
 		}

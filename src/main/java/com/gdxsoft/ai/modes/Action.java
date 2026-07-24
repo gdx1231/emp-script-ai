@@ -40,4 +40,8 @@ public class Action {
     public void setClassName(String className) {
         this.className = className;
     }
+
+    public Action clone() {
+        return new Action(name, description, className);
+    }
 }

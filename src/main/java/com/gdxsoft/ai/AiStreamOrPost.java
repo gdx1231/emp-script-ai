@@ -119,10 +119,25 @@ public class AiStreamOrPost {
 	 * @throws IOException 发生IO错误
 	 */
 	public boolean init(RequestValue rv, String dbConfigName, PrintWriter writer) {
+		return this.init(rv, dbConfigName, null, writer);
+	}
+
+	/**
+	 * 初始化
+	 * 
+	 * @param rv           请求对象
+	 * @param dbConfigName 数据库配置名称
+	 * @param apiOwnerId   模型apiKey的拥有者
+	 * @param writer       输出对象
+	 * @return 是否初始化成功
+	 * @throws IOException 发生IO错误
+	 * @return
+	 */
+	public boolean init(RequestValue rv, String dbConfigName, String apiOwnerId, PrintWriter writer) {
 		// 创建ChatManager实例
 		this.writer = writer;
 		this.en = "enus".equalsIgnoreCase(rv.getLang());
-		chatManager = new ChatManagerBase(rv, dbConfigName, writer);
+		chatManager = new ChatManagerBase(rv, dbConfigName, apiOwnerId, writer);
 		try {
 			// 验证参数
 			if (!validateParameters()) {
@@ -144,7 +159,8 @@ public class AiStreamOrPost {
 	 * <p>
 	 * 三类分支：
 	 * <ul>
-	 * <li>RST=false 且有 message → 推送 SSE 给前端，返回 message 作为哨兵，processRequest 据此跳过主步骤</li>
+	 * <li>RST=false 且有 message → 推送 SSE 给前端，返回 message 作为哨兵，processRequest
+	 * 据此跳过主步骤</li>
 	 * <li>RST=true 但 validateParams 缺参 → 推送 "请确认：…？" SSE，返回 msg 作为哨兵</li>
 	 * <li>校验通过 → 提取 params 注入 RequestValue + 写入 AI_CHAT_PARAMS，返回 null 让主步骤继续</li>
 	 * </ul>

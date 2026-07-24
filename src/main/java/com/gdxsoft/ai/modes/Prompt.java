@@ -180,4 +180,16 @@ public class Prompt {
     public void setApiCurl(String apiCurl) {
         this.apiCurl = apiCurl;
     }
+
+    /**
+     * 深拷贝当前 Prompt（运行时字段 apiCurl 不复制）
+     */
+    public Prompt clone() {
+        Prompt np = new Prompt(name, role, description, sqlRef, dataType, prefix, content, action);
+        np.setShowInChat(showInChat);
+        np.setDataGroupField(dataGroupField);
+        np.setApi(api);
+        np.setApisCheck(apisCheck);
+        return np;
+    }
 }

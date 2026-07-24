@@ -40,6 +40,10 @@ public final class ChatManagerI18nConstants {
             put("ERROR_MODEL_OFFLINE_1", new String[] { "模型已下线1：{},供应商：{}", "Model is offline (1): {}, Provider: {}" });
             put("ERROR_API_CONFIG_NOT_EXIST",
                     new String[] { "API配置不存在,供应商：{}", "API configuration does not exist, Provider: {}" });
+            put("ERROR_API_CONFIG_NOT_URL",
+                    new String[] { "API地址为空,供应商：{}", "API URL is empty, Provider: {}" });
+            put("ERROR_API_CONFIG_NOT_APIKEY",
+                    new String[] { "API密钥为空,供应商：{}", "API key is empty, Provider: {}" });
             put("ERROR_GENERAL", new String[] { "错误：{}", "Error: {}" });
 
             // ========== 状态提示类 ==========
@@ -81,6 +85,8 @@ public final class ChatManagerI18nConstants {
 
             // ========== 工具调用（apisCheck/toolsCheck） ==========
             put("AVAILABLE_TOOLS", new String[] { "可用工具：", "Available tools:" });
+            put("CURRENT_TIME", new String[] { "当前时间：", "Current time: " });
+            put("USER_INPUT", new String[] { "用户输入：", "User input: " });
         }
     };
 
@@ -110,6 +116,8 @@ public final class ChatManagerI18nConstants {
         public static final String ERROR_MODEL_OFFLINE_0 = "ERROR_MODEL_OFFLINE_0";
         public static final String ERROR_MODEL_OFFLINE_1 = "ERROR_MODEL_OFFLINE_1";
         public static final String ERROR_API_CONFIG_NOT_EXIST = "ERROR_API_CONFIG_NOT_EXIST";
+        public static final String ERROR_API_CONFIG_NOT_URL = "ERROR_API_CONFIG_NOT_URL";
+        public static final String ERROR_API_CONFIG_NOT_APIKEY = "ERROR_API_CONFIG_NOT_APIKEY";
         public static final String ERROR_GENERAL = "ERROR_GENERAL";
         public static final String ERROR_AI_CHAT_CREATE_FAILED = "ERROR_AI_CHAT_CREATE_FAILED";
         public static final String ERROR_API_NOT_FOUND = "ERROR_API_NOT_FOUND";
@@ -124,6 +132,8 @@ public final class ChatManagerI18nConstants {
     /** 工具调用（apisCheck/toolsCheck）常量 */
     public static final class ToolMessages {
         public static final String AVAILABLE_TOOLS = "AVAILABLE_TOOLS";
+        public static final String CURRENT_TIME = "CURRENT_TIME";
+        public static final String USER_INPUT = "USER_INPUT";
     }
 
     /** STT 错误信息类常量 */

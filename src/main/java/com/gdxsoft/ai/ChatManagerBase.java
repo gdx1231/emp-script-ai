@@ -69,7 +69,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -95,7 +94,6 @@ import com.gdxsoft.ai.request.IRequestData;
 import com.gdxsoft.ai.request.RequestAIFactory;
 import com.gdxsoft.ai.request.RequestDataFactory;
 import com.gdxsoft.easyweb.data.DTTable;
-import com.gdxsoft.easyweb.datasource.DataConnection;
 import com.gdxsoft.easyweb.script.RequestValue;
 import com.gdxsoft.easyweb.utils.UJSon;
 import com.gdxsoft.easyweb.utils.UObjectValue;
@@ -224,6 +222,8 @@ public class ChatManagerBase {
 	private PrintWriter writer;
 	/** 数据库配置名称 */
 	private String dbConfigName;
+	/** 数据库操作代理 */
+	private ChatManagerDb db;
 	/** AI提供商 */
 	private String aiProvider;
 	/** AI模型名称 */
@@ -242,6 +242,8 @@ public class ChatManagerBase {
 
 	/** API工具检查结果缓存 (promptName -> apiResult)，避免修改共享Prompt对象 */
 	private Map<String, String> apiCheckResults = new HashMap<>();
+
+	private String apiOwnerId = null;
 
 	/**
 	 * 获取是否开启流式输出
@@ -344,8 +346,27 @@ public class ChatManagerBase {
 		this.rv = rv;
 		this.writer = writer;
 		this.dbConfigName = dbConfigName;
+		this.db = new ChatManagerDb(rv, dbConfigName);
 		// 从请求参数中获取语言设置
 		this.en = rv.isEn();
+	}
+
+	/**
+	 * 构造函数
+	 * 
+	 * @param rv           请求参数值对象
+	 * @param dbConfigName 数据库配置名称
+	 * @param apiOwnerId   apiKey的拥有者
+	 * @param writer
+	 */
+	public ChatManagerBase(RequestValue rv, String dbConfigName, String apiOwnerId, PrintWriter writer) {
+		this.rv = rv;
+		this.writer = writer;
+		this.dbConfigName = dbConfigName;
+		this.db = new ChatManagerDb(rv, dbConfigName);
+		// 从请求参数中获取语言设置
+		this.en = rv.isEn();
+		this.apiOwnerId = apiOwnerId;
 	}
 
 	/**
@@ -432,8 +453,7 @@ public class ChatManagerBase {
 		String md5 = Utils.md5(fullText);
 
 		// 查询之前的AI代理消息，检查是否已有相同内容的处理结果
-		String sqlAgent = "select aim_msg from AI_CHAT_MSG where ai_id=@ai_id and AIM_ROLE='agent' order by AIM_ID desc";
-		DTTable tbAgent = DTTable.getJdbcTable(sqlAgent, rv);
+		DTTable tbAgent = db.queryAgentMessages(this.aiId);
 		for (int i = 0; i < tbAgent.getCount(); i++) {
 			String msg = tbAgent.getCell(i, "AIM_MSG").toString();
 			try {
@@ -510,6 +530,57 @@ public class ChatManagerBase {
 			processPrompt(p, promptSet, existsMessages, reqData, refHeaders);
 		}
 
+		// 确保 system 消息在最前面（缓存过期重建时 system 可能被追加到 user/assistant 之后）
+		ensureSystemMessagesFirst(reqData);
+	}
+
+	/**
+	 * 将 messages 中 role=system 的消息移到数组最前面，保持其余消息的相对顺序。
+	 * <p>
+	 * 当多轮对话缓存过期触发提示词重建时，旧的 system 消息被标记跳过，
+	 * 但 user/assistant 消息保留，导致新的 system prompt 被追加到末尾。
+	 * 此方法确保发送给 AI 的消息顺序始终为 system → user → assistant → ...
+	 */
+	private void ensureSystemMessagesFirst(IRequestData reqData) {
+		JSONArray messages = reqData.getMessages();
+		if (messages == null || messages.length() <= 1) {
+			return;
+		}
+		// 检查是否需要重排：如果第一条已经是 system 则跳过
+		boolean needsReorder = false;
+		for (int i = 0; i < messages.length(); i++) {
+			JSONObject msg = messages.optJSONObject(i);
+			if (msg != null && "system".equalsIgnoreCase(msg.optString("role"))) {
+				if (i > 0) {
+					needsReorder = true;
+				}
+				break;
+			}
+		}
+		if (!needsReorder) {
+			return;
+		}
+
+		// 分离 system 和非 system 消息
+		List<Object> systemMsgs = new ArrayList<>();
+		List<Object> otherMsgs = new ArrayList<>();
+		for (int i = 0; i < messages.length(); i++) {
+			JSONObject msg = messages.optJSONObject(i);
+			if (msg != null && "system".equalsIgnoreCase(msg.optString("role"))) {
+				systemMsgs.add(msg);
+			} else {
+				otherMsgs.add(msg);
+			}
+		}
+
+		// 重建 JSONArray：system 在前，其余保持原序
+		messages.clear();
+		for (Object msg : systemMsgs) {
+			messages.put(msg);
+		}
+		for (Object msg : otherMsgs) {
+			messages.put(msg);
+		}
 	}
 
 	/**
@@ -580,7 +651,10 @@ public class ChatManagerBase {
 		if (!StringUtils.isBlank(apisUsage)) {
 			promptContent += "\n\n" + getText(ChatManagerI18nConstants.ToolMessages.AVAILABLE_TOOLS) + "\n" + apisUsage;
 		}
-		promptContent += "\n\n用户输入：" + this.prompt;
+		String nowStr = java.time.ZonedDateTime.now(java.time.ZoneId.systemDefault())
+				.format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss xxx"));
+		promptContent += "\n\n" + getText(ChatManagerI18nConstants.ToolMessages.CURRENT_TIME) + nowStr + "\n"
+				+ getText(ChatManagerI18nConstants.ToolMessages.USER_INPUT) + this.prompt;
 		reqCheckData.addMessage(promptContent, role);
 
 		// 记录到数据库中
@@ -753,21 +827,16 @@ public class ChatManagerBase {
 		if (this.step.getCachedSeconds() <= 0) {
 			return false;
 		}
-		String existsSql = "select AIM_TIME_BEGIN from AI_CHAT_MSG where ai_id=@ai_id and AIM_ROLE='system' order by AIM_ID desc";
-		// 使用 DTTable 分页方法限制返回条数，兼容所有数据库
-		DTTable tbMsg = DTTable.getJdbcTable(existsSql, "AIM_ID", 1, 1, "", rv);
+		DTTable tbMsg = db.queryLatestSystemMessageTime(this.aiId);
 		if (tbMsg.getCount() == 0) {
 			return true;
 		}
 		if (tbMsg.getCell(0, 0).isNull()) {
 			return true;
 		}
-		long overTime = System.currentTimeMillis() + step.getCachedSeconds() * 1000;
-		if (tbMsg.getCell(0, 0).toTime() < overTime) {
-			return true;
-		}
-
-		return false;
+		long messageTime = tbMsg.getCell(0, 0).toTime();
+		long expireTime = messageTime + step.getCachedSeconds() * 1000;
+		return expireTime < System.currentTimeMillis();
 	}
 
 	/**
@@ -784,16 +853,22 @@ public class ChatManagerBase {
 		}
 		boolean isOverTime = checkPreviousOverTime();
 
-		String existsSystemSql = "select * from AI_CHAT_MSG where ai_id=@ai_id and AIM_ACTION is null \n"
-				+ " and AIM_ROLE in ('system') \n"
-				+ " and case when AIM_SKIP_APPEND is null then 0 else AIM_SKIP_APPEND end = 0 order by AIM_ID desc";
-		DTTable tbSystemMsg = DTTable.getJdbcTable(existsSystemSql, "AIM_ID", 1, 1, "", rv);
+		if (isOverTime && this.step != null && !StringUtils.isBlank(this.step.getName())) {
+			// 缓存过期：标记当前 step 的旧消息为 SKIP
+			db.markStepMessagesSkipped(this.aiId, this.step.getName());
+			LOGGER.info("cachedSeconds expired for step '{}', old prompts marked as skipped", this.step.getName());
 
-		String existsSql = "select * from AI_CHAT_MSG where ai_id=@ai_id and AIM_ACTION is null \n"
-				+ " and AIM_ROLE in ('user', 'system', 'assistant') \n"
-				+ " and case when AIM_SKIP_APPEND is null then 0 else AIM_SKIP_APPEND end = 0 order by AIM_ID desc";
+			// 记录一条重建 system 提示的消息，便于排查
+			String nowStr = java.time.ZonedDateTime.now(java.time.ZoneId.systemDefault())
+					.format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss xxx"));
+			String rebuildMsg = "系统提示词重建：" + this.step.getName() + "，时间：" + nowStr;
+			rv.addOrUpdateValue("AIM_PROMPT_NAME", "system_rebuild");
+			this.addAiChatMsg(rebuildMsg, "system", true);
+			rv.addOrUpdateValue("AIM_PROMPT_NAME", null);
+		}
+
 		// 使用 DTTable 分页方法限制返回条数，兼容所有数据库
-		DTTable tbMsg = DTTable.getJdbcTable(existsSql, "AIM_ID", maxMsgCount, 1, "", rv);
+		DTTable tbMsg = db.loadHistoryMessages(this.aiId, maxMsgCount);
 
 		if (tbMsg == null || !tbMsg.isOk()) {
 			// 查询失败或无数据，仅添加 API prompts
@@ -892,13 +967,24 @@ public class ChatManagerBase {
 			return messages; // 未超限，无需截断
 		}
 
-		// 从最早的消息开始删除，直到低于限制
+		// 从最早的消息开始删除，但保留 system 角色的消息
 		List<org.json.JSONObject> result = new ArrayList<>(messages);
 		int removed = 0;
 		while (totalTokens > maxTokens && result.size() > 1) {
-			String removedContent = result.get(0).optString("content", "");
+			// 找到第一条非 system 消息
+			int removeIdx = -1;
+			for (int i = 0; i < result.size(); i++) {
+				if (!"system".equalsIgnoreCase(result.get(i).optString("role"))) {
+					removeIdx = i;
+					break;
+				}
+			}
+			if (removeIdx < 0) {
+				break; // 剩余全是 system 消息，不再删除
+			}
+			String removedContent = result.get(removeIdx).optString("content", "");
 			totalTokens -= estimateTokens(removedContent);
-			result.remove(0);
+			result.remove(removeIdx);
 			removed++;
 		}
 
@@ -1065,21 +1151,7 @@ public class ChatManagerBase {
 			return rst;
 		}
 
-		Map<String, String> savedParams = new HashMap<>();
-		try {
-			rv.addOrUpdateValue("ai_id", this.aiId, "bigint", 100);
-			String sql = "SELECT AIP_NAME, AIP_VAL FROM AI_CHAT_PARAMS WHERE AI_ID = @ai_id";
-			DTTable tb = DTTable.getJdbcTable(sql, dbConfigName, rv);
-			for (int i = 0; i < tb.getCount(); i++) {
-				String name = tb.getCell(i, "AIP_NAME").toString();
-				String val = tb.getCell(i, "AIP_VAL").toString();
-				if (name != null && val != null) {
-					savedParams.put(name, val);
-				}
-			}
-		} catch (Exception e) {
-			LOGGER.error("Failed to load AI_CHAT_PARAMS for AI_ID={}", this.aiId, e);
-		}
+		Map<String, String> savedParams = db.loadSavedParams(this.aiId);
 
 		JSONObject params = new JSONObject();
 		JSONArray missing = new JSONArray();
@@ -1165,30 +1237,7 @@ public class ChatManagerBase {
 	}
 
 	private String loadConversationContext() {
-		try {
-			rv.addOrUpdateValue("ai_id", this.aiId, "bigint", 100);
-			String sql = "select top 30 AIM_ROLE, AIM_MSG from AI_CHAT_MSG m "
-					+ "inner join AI_CHAT c on m.AI_ID = c.AI_ID " + "where c.AI_ID = @ai_id "
-					+ "and isnull(m.AIM_SKIP_APPEND, 0) = 0 " + "order by m.AIM_ID desc";
-			DTTable tb = DTTable.getJdbcTable(sql, dbConfigName, rv);
-			StringBuilder sb = new StringBuilder();
-			for (int i = tb.getCount() - 1; i >= 0; i--) {
-				String role = tb.getCell(i, "AIM_ROLE").toString();
-				Object value = tb.getCell(i, "AIM_MSG").getValue();
-				String msg = value == null ? "" : value.toString();
-				if (msg.trim().isEmpty()) {
-					continue;
-				}
-				if (sb.length() > 0) {
-					sb.append("\n");
-				}
-				sb.append(role).append(": ").append(msg);
-			}
-			return sb.toString();
-		} catch (Exception e) {
-			LOGGER.error("Failed to load conversation context for AI_ID={}", this.aiId, e);
-			return "";
-		}
+		return db.loadConversationContext(this.aiId);
 	}
 
 	private String buildExtractPrompt(List<ParamCheck> paramChecks) {
@@ -1259,99 +1308,22 @@ public class ChatManagerBase {
 	}
 
 	private JSONObject saveParamsToDatabase(JSONObject extractedParams, List<ParamCheck> paramChecks) {
-		JSONObject saved = new JSONObject();
-		long aimId = getLastAimId();
-
-		DataConnection cnn = new DataConnection();
-		cnn.setRequestValue(rv);
-		cnn.setConfigName(dbConfigName);
-		cnn.transBegin();
-
-		try {
-			rv.addOrUpdateValue("ai_id", this.aiId, "bigint", 100);
-			cnn.executeUpdate("DELETE FROM AI_CHAT_PARAMS WHERE AI_ID=@ai_id");
-
-			for (ParamCheck pc : paramChecks) {
-				String name = pc.getName();
-				String value = null;
-
-				if (extractedParams.has(name) && !extractedParams.isNull(name)) {
-					value = extractedParams.optString(name, "").trim();
-				}
-
-				if (value == null || value.isEmpty() || "null".equalsIgnoreCase(value)) {
-					value = pc.getDefaultValue();
-				}
-
-				if (value != null && !value.isEmpty()) {
-					rv.addOrUpdateValue("AI_ID", this.aiId, "long", 100);
-					rv.addOrUpdateValue("AIM_ID", aimId, "long", 100);
-					rv.addOrUpdateValue("AIP_NAME", name);
-					rv.addOrUpdateValue("AIP_VAL", value);
-					rv.addOrUpdateValue("AIP_TYPE", pc.getType());
-
-					String insertSql = "INSERT INTO AI_CHAT_PARAMS (AI_ID, AIM_ID, AIP_NAME, AIP_VAL, AIP_TYPE) "
-							+ "VALUES (@AI_ID, @AIM_ID, @AIP_NAME, @AIP_VAL, @AIP_TYPE)";
-					cnn.executeUpdate(insertSql);
-					saved.put(name, value);
-				}
-			}
-
-			cnn.transCommit();
-		} catch (Exception e) {
-			cnn.transRollback();
-			LOGGER.error("Failed to save params to database", e);
-		} finally {
-			cnn.close();
-		}
-
-		return saved;
-	}
-
-	private long getLastAimId() {
-		try {
-			rv.addOrUpdateValue("ai_id", this.aiId, "bigint", 100);
-			String sql = "select isnull(max(AIM_ID), 0) as LAST_AIM_ID from AI_CHAT_MSG where AI_ID = @ai_id";
-			DTTable tb = DTTable.getJdbcTable(sql, dbConfigName, rv);
-			if (tb.getCount() > 0) {
-				return tb.getCell(0, "LAST_AIM_ID").toLong();
-			}
-		} catch (Exception e) {
-			LOGGER.error("Failed to get last AIM_ID for AI_ID={}", this.aiId, e);
-		}
-		return 0;
+		return db.saveParams(this.aiId, extractedParams, paramChecks);
 	}
 
 	public JSONObject checkProviderAndModel() {
-		String sql = "select a.*,b.ap_status from AI_PROVIDER_MODEL a "
-				+ " inner join AI_PROVIDER b on a.AP_CODE= b.AP_CODE  "
-				+ " where a.apm_code=@ai_model and a.ap_code=@ai_provider";
-		DTTable tb = DTTable.getJdbcTable(sql, dbConfigName, rv);
-		if (tb.getCount() == 0) {
-			JSONObject rst = UJSon.rstFalse(getText(ErrorMessages.ERROR_MODEL_NOT_EXIST, aiModel, aiProvider));
-			return rst;
+		JSONObject result = db.checkProviderAndModel(this.aiProvider, this.aiModel, this.apiOwnerId);
+		if (!result.optBoolean("RST")) {
+			String errorKey = result.optString("errorKey");
+			JSONArray errorArgs = result.optJSONArray("errorArgs");
+			Object[] args = new Object[errorArgs != null ? errorArgs.length() : 0];
+			for (int i = 0; i < args.length; i++) {
+				args[i] = errorArgs.get(i);
+			}
+			return UJSon.rstFalse(getText(errorKey, args));
 		}
-		try {
-			if (!"USED".equalsIgnoreCase(tb.getCell(0, "APM_STATUS").toString())) {
-				JSONObject rst = UJSon.rstFalse(getText(ErrorMessages.ERROR_MODEL_OFFLINE_0, aiModel, aiProvider));
-				return rst;
-			}
-			if (!"USED".equalsIgnoreCase(tb.getCell(0, "ap_status").toString())) {
-				JSONObject rst = UJSon.rstFalse(getText(ErrorMessages.ERROR_MODEL_OFFLINE_1, aiModel, aiProvider));
-				return rst;
-			}
-			String sql1 = "select APU_URL, APU_KEY from AI_PROVIDER_URL where APU_STATUS='USED' and ap_code=@ai_provider order by APU_MDATE desc";
-			DTTable tb1 = DTTable.getJdbcTable(sql1, dbConfigName, rv);
-			if (tb1.getCount() == 0) {
-				JSONObject rst = UJSon.rstFalse(getText(ErrorMessages.ERROR_API_CONFIG_NOT_EXIST, aiProvider));
-				return rst;
-			}
-			this.apiUrl = tb1.getCell(0, "APU_URL").toString();
-			this.apiKey = tb1.getCell(0, "APU_KEY").toString();
-		} catch (Exception e) {
-			JSONObject rst = UJSon.rstFalse(getText(ErrorMessages.ERROR_GENERAL, e.getLocalizedMessage()));
-			return rst;
-		}
+		this.apiUrl = result.optString("apiUrl");
+		this.apiKey = result.optString("apiKey");
 		return UJSon.rstTrue(getText(StatusMessages.SUCCESS_OK));
 	}
 
@@ -1381,56 +1353,37 @@ public class ChatManagerBase {
 	 * @return 聊天记录
 	 */
 	public JSONObject getOrNewAiChat() {
-		String sql = "select AI_ID, AI_CUR_STEP as AI_STEP_PREV, AI_UID, AI_REF, AI_REF_ID from ai_chat where ai_uid=@request_id";
-		DTTable tb = DTTable.getJdbcTable(sql, dbConfigName, rv);
-		if (tb.getCount() > 0) {
-			JSONObject chat = tb.getRow(0).toJson("UPPER");
+		JSONObject chat = db.queryChatByRequestId(this.requestId);
+		if (chat != null) {
 			chat.put("IS_NEW", false);
 			if (!chat.optString("AI_STEP_PREV").equalsIgnoreCase(this.stepName)) {
-				// 更新AI_STEP
-				String sqlUpdate = "update AI_CHAT set AI_CUR_STEP=@AIM_STEP, AI_MDATE=@sys_date where AI_ID="
-						+ chat.optLong("AI_ID");
-				DataConnection.updateAndClose(sqlUpdate, dbConfigName, rv);
+				db.updateChatStep(chat.optLong("AI_ID"), this.stepName);
 			}
 			this.isNew = false;
 			this.aiId = chat.optLong("AI_ID");
 			this.aiStepPrev = chat.optString("AI_STEP_PREV");
 			this.aiRef = chat.optString("AI_REF");
 			this.aiRefId = chat.optString("AI_REF_ID");
-
-			this.aimNumberOfInteractions = 1;
-
-			// 当前的交互轮次
-			String aimNOISql = "select max(AIM_NOI) a from ai_chat_msg where ai_id=" + this.aiId;
-			DTTable tbAimNOI = DTTable.getJdbcTable(aimNOISql);
-			if (tbAimNOI.getCount() > 0 && !tbAimNOI.getCell(0, 0).isNull()) {
-				this.aimNumberOfInteractions = Short.parseShort(tbAimNOI.getCell(0, 0).toString());
-				this.aimNumberOfInteractions++;
-			}
+			this.aimNumberOfInteractions = db.getNextInteractionNumber(this.aiId);
 			return chat;
 		}
 
-		StringBuilder sbIns = new StringBuilder();
-		sbIns.append("INSERT INTO AI_CHAT (\n");
-		sbIns.append("    AI_UID, AI_PID, AI_PROVIDER, AI_MODEL, AI_THINKING, AI_STREAM, AI_CUR_STEP\n");
-		sbIns.append("  , AI_MODE, AI_MAX_TOKEN, AI_CDATE, AI_MDATE, ADM_ID, USR_ID, SUP_ID\n");
-		sbIns.append("  , AI_REF, AI_REF_ID\n");
-		sbIns.append(") VALUES(\n");
-		sbIns.append("    @request_id, @p_ai_pid, @AI_PROVIDER, @AI_MODEL, " + (this.aiThinking ? 1 : 0) + ", "
-				+ (this.aiStream ? 1 : 0) + ", @AIM_STEP\n");
-		sbIns.append("  , @MODE, @AI_MAX_TOKEN, @sys_DATE, @sys_DATE, @g_ADM_ID, @G_WEB_USR_ID, @g_SUP_ID\n");
-		sbIns.append("  , @AI_REF, @AI_REF_ID\n");
-		sbIns.append(")");
+		// 设置插入所需的参数
+		rv.addOrUpdateValue("AI_PROVIDER", this.aiProvider);
+		rv.addOrUpdateValue("AI_MODEL", this.aiModel);
+		rv.addOrUpdateValue("AI_THINKING", this.aiThinking ? 1 : 0);
+		rv.addOrUpdateValue("AI_STREAM", this.aiStream ? 1 : 0);
+		rv.addOrUpdateValue("AIM_STEP", this.stepName);
+		rv.addOrUpdateValue("MODE", this.modeName);
 
-		DataConnection.insertAndReturnAutoIdLong(sbIns.toString(), dbConfigName, rv);
-		tb = DTTable.getJdbcTable(sql, dbConfigName, rv);
-		if (tb.getCount() == 0) {
+		db.createChat(rv);
+		// 重新查询获取完整记录
+		chat = db.queryChatByRequestId(this.requestId);
+		if (chat == null) {
 			LOGGER.error(getText(ErrorMessages.ERROR_AI_CHAT_CREATE_FAILED), "new AI_CHAT");
 			return UJSon.rstFalse(getText(ErrorMessages.ERROR_AI_CHAT_CREATE_FAILED) + " new AI_CHAT");
 		}
-		JSONObject chat = tb.getRow(0).toJson("UPPER");
 		chat.put("IS_NEW", true);
-
 		this.isNew = true;
 		this.aiId = chat.optLong("AI_ID");
 		return chat;
@@ -1450,36 +1403,18 @@ public class ChatManagerBase {
 	}
 
 	public long addAiChatMsg(String msg, String role, boolean isSkipAppend, boolean byUser) {
-		rv.addOrUpdateValue("AIM_MSG", msg);
-		rv.addOrUpdateValue("AIM_ROLE", role);
-		if (!"assistant".equals(role)) {
-			rv.addOrUpdateValue("AIM_TIME_END", new Date(), "date", 100);
-		}
-		rv.addOrUpdateValue("AIM_BY_USER", byUser ? 1 : 0);
-		// 交互次数
-		rv.addOrUpdateValue("AIM_NOI", this.aimNumberOfInteractions);
-		String sql = "INSERT INTO AI_CHAT_MSG( AI_ID, AIM_NOI, AIM_MSG, AIM_ROLE, AIM_BY_USER, AIM_TIME_BEGIN, AIM_TIME_END, AIM_STEP, AIM_ACTION, AIM_ACTION_CLASS, AIM_PROMPT_NAME, AIM_SKIP_APPEND)"
-				+ " VALUES(@ai_id, @AIM_NOI, @AIM_MSG, @AIM_ROLE, @AIM_BY_USER, @sys_date, @AIM_TIME_END, @AIM_STEP, @AIM_ACTION, @AIM_ACTION_CLASS, @AIM_PROMPT_NAME, "
-				+ (isSkipAppend ? 1 : 0) + ")";
-
-		long aimId = DataConnection.insertAndReturnAutoIdLong(sql, dbConfigName, rv);
-		return aimId;
+		return db.addMessage(this.aiId, msg, role, this.stepName, rv.s("AIM_PROMPT_NAME"), rv.s("AIM_ACTION"),
+				rv.s("AIM_ACTION_CLASS"), this.aimNumberOfInteractions, isSkipAppend, byUser);
 	}
 
 	/**
 	 * 更新AI聊天消息
-	 * 
+	 *
 	 * @param aimId 消息ID
 	 * @param msg   消息内容
-	 * @param rv    请求值对象
 	 */
 	public void updateAiChatMsg(long aimId, String msg) {
-		rv.addOrUpdateValue("AIM_MSG", msg);
-		rv.addOrUpdateValue("AIM_TIME_END", new Date(), "date", 100);
-
-		String sql = "update AI_CHAT_MSG set AIM_MSG = @AIM_MSG, AIM_TIME_END= @AIM_TIME_END where AIM_ID = " + aimId;
-
-		DataConnection.updateAndClose(sql, dbConfigName, rv);
+		db.updateMessage(aimId, msg);
 	}
 
 	/**
@@ -1490,49 +1425,22 @@ public class ChatManagerBase {
 	 *              prompt_tokens字段
 	 */
 	public void updateAiChatMsgTokens(long aimId, JSONObject usage) {
-		long totalTokens = usage.optLong("total_tokens");
-		long completionTokens = usage.optLong("completion_tokens");
-		long promptTokens = usage.optLong("prompt_tokens");
-		long cachedTokens = 0;
-		// 提取 cached_tokens（来自 prompt_tokens_details）
-		if (usage.has("prompt_tokens_details")) {
-			JSONObject details = usage.optJSONObject("prompt_tokens_details");
-			if (details != null) {
-				cachedTokens = details.optLong("cached_tokens");
-			}
-		}
-
-		this.updateAiChatMsgTokens(aimId, totalTokens, completionTokens, promptTokens, cachedTokens);
+		db.updateMessageTokens(aimId, usage);
 	}
 
 	/**
 	 * 更新AI聊天消息的Token使用情况
-	 * 
-	 * @param aimId            消息ID
-	 * @param totalTokens      总Token数
-	 * @param completionTokens 完成Token数
-	 * @param promptTokens     提示词Token数
 	 */
 	public void updateAiChatMsgTokens(long aimId, long totalTokens, long completionTokens, long promptTokens) {
-		this.updateAiChatMsgTokens(aimId, totalTokens, completionTokens, promptTokens, 0);
+		db.updateMessageTokens(aimId, totalTokens, completionTokens, promptTokens, 0);
 	}
 
 	/**
 	 * 更新AI聊天消息的Token使用情况（含缓存Token）
-	 *
-	 * @param aimId            消息ID
-	 * @param totalTokens      总Token数
-	 * @param completionTokens 完成Token数
-	 * @param promptTokens     提示词Token数
-	 * @param cachedTokens     缓存命中Token数（prompt_tokens_details.cached_tokens）
 	 */
 	public void updateAiChatMsgTokens(long aimId, long totalTokens, long completionTokens, long promptTokens,
 			long cachedTokens) {
-		String sql = "update AI_CHAT_MSG set AIM_TOTAL_TOKENS = " + totalTokens + ", AIM_COMPLETION_TOKENS= "
-				+ completionTokens + ", AIM_PROMPT_TOKENS = " + promptTokens + ", AIM_CACHED_TOKENS = " + cachedTokens
-				+ " where AIM_ID = " + aimId;
-
-		DataConnection.updateAndClose(sql, dbConfigName, rv);
+		db.updateMessageTokens(aimId, totalTokens, completionTokens, promptTokens, cachedTokens);
 	}
 
 	public String getRequestId() {
@@ -1680,25 +1588,11 @@ public class ChatManagerBase {
 		}
 		// 通过 AI_PID 找到父 chat，然后提取所有相关 chat 的用户消息
 		try {
-			rv.addOrUpdateValue("ai_id", this.aiId, "bigint", 100);
-			String sql = "select AI_PID from AI_CHAT where AI_ID=@ai_id";
-			DTTable pidTb = DTTable.getJdbcTable(sql, dbConfigName, rv);
-			if (pidTb.getCount() == 0)
-				return prompt;
-			Double pidObj = pidTb.getCell(0, "AI_PID").toDouble();
-			if (pidObj == null)
-				return prompt;
-			long parentAiId = pidObj.longValue();
-
-			if (parentAiId <= 0)
+			Long parentAiId = db.queryParentAiId(this.aiId);
+			if (parentAiId == null)
 				return prompt;
 
-			// 提取父 chat 和所有子 chat 中 AIM_BY_USER=1 的用户消息
-			rv.addOrUpdateValue("parent_ai_id", parentAiId, "bigint", 100);
-			String msgSql = "select AIM_MSG from AI_CHAT_MSG m " + "where m.AIM_BY_USER = 1 and m.AIM_ROLE = 'user' "
-					+ "and m.AI_ID in (" + "  select AI_ID from AI_CHAT where AI_PID = @parent_ai_id"
-					+ ") order by m.AIM_ID";
-			DTTable msgTb = DTTable.getJdbcTable(msgSql, dbConfigName, rv);
+			DTTable msgTb = db.queryParentUserMessages(parentAiId);
 			if (msgTb.getCount() == 0)
 				return prompt;
 
@@ -1708,14 +1602,11 @@ public class ChatManagerBase {
 			int roundNum = 0;
 			for (int i = 0; i < msgTb.getCount(); i++) {
 				String msg = msgTb.getCell(i, "AIM_MSG").toString();
-				// 从消息中提取【当前输入】部分（去除嵌套的历史对话）
-				// 使用 lastIndexOf 找到最后一个【当前输入】，避免嵌套问题
 				String actualInput = msg;
 				int idx = msg.lastIndexOf("【当前输入】");
 				if (idx >= 0) {
 					actualInput = msg.substring(idx + 6).trim();
 				}
-				// 去重
 				if (actualInput.equals(lastMsg)) {
 					continue;
 				}
@@ -1797,12 +1688,10 @@ public class ChatManagerBase {
 		this.stepName = stepName;
 		this.step = step;
 		this.rv.addOrUpdateValue("AIM_STEP", stepName);
-		// 更新数据库中的 AI_CUR_STEP，确保后续请求使用正确的步骤
+		// 更新数据库中的 AI_CUR_STEP
 		try {
 			if (this.aiId > 0) {
-				this.rv.addOrUpdateValue("ai_id", this.aiId, "bigint", 100);
-				String sqlUpdate = "update AI_CHAT set AI_CUR_STEP=@AIM_STEP, AI_MDATE=@sys_date where AI_ID=@ai_id";
-				com.gdxsoft.easyweb.datasource.DataConnection.updateAndClose(sqlUpdate, dbConfigName, rv);
+				db.updateChatStep(this.aiId, stepName);
 			}
 		} catch (Exception e) {
 			LOGGER.warn("Failed to update AI_CUR_STEP in database: {}", e.getMessage());
@@ -2086,6 +1975,22 @@ public class ChatManagerBase {
 			return "****";
 		}
 		return key.substring(0, 4) + "****" + key.substring(key.length() - 4);
+	}
+
+	/**
+	 * 获取模型归属供应商，供应商自己的 apikey
+	 */
+	public String getApiOwnerId() {
+		return apiOwnerId;
+	}
+
+	/**
+	 * 获取模型归属供应商，供应商自己的 apikey
+	 * 
+	 * @param apiOwnerId 供应商Id
+	 */
+	public void setApiOwnerId(String apiOwnerId) {
+		this.apiOwnerId = apiOwnerId;
 	}
 
 }

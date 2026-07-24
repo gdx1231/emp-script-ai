@@ -53,4 +53,8 @@ public class SqlQuery {
     public void setContent(String content) {
         this.content = content;
     }
+
+    public SqlQuery clone() {
+        return new SqlQuery(name, description, content);
+    }
 }

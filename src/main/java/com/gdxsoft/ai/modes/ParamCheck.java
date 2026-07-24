@@ -138,6 +138,14 @@ public class ParamCheck {
 		this.sqlLabelField = sqlLabelField;
 	}
 
+	public ParamCheck clone() {
+		ParamCheck copy = new ParamCheck(name, des, type, defaultValue, options, promptRule);
+		copy.setSqlRef(sqlRef);
+		copy.setSqlValueField(sqlValueField);
+		copy.setSqlLabelField(sqlLabelField);
+		return copy;
+	}
+
 	// ==================== 静态工具方法 ====================
 
 	/**

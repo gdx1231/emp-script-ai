@@ -1,5 +1,6 @@
 package com.gdxsoft.ai.modes;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -189,5 +190,31 @@ public class Step {
      */
     public void setCachedSeconds(int cachedSeconds) {
         this.cachedSeconds = cachedSeconds;
+    }
+
+    /**
+     * 深拷贝当前 Step，包括所有 Prompt
+     */
+    public Step clone() {
+        List<Prompt> promptsCopy = new ArrayList<>();
+        if (prompts != null) {
+            for (Prompt p : prompts) {
+                promptsCopy.add(p.clone());
+            }
+        }
+        Step ns;
+        if (action != null && action.length() > 0) {
+            ns = new Step(name, description, promptsCopy, action);
+        } else {
+            ns = new Step(name, description, promptsCopy);
+        }
+        ns.setStream(stream);
+        ns.setActionSqlRef(actionSqlRef);
+        ns.setApi(api);
+        ns.setInnerCall(innerCall);
+        ns.setMultiOnlyUserMsg(multiOnlyUserMsg);
+        ns.setCachedSeconds(cachedSeconds);
+        ns.setValidateParams(validateParams);
+        return ns;
     }
 }

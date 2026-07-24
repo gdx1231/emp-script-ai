@@ -100,6 +100,34 @@ public class Tool extends Api {
 		return command != null && command.trim().length() > 0;
 	}
 
+	@Override
+	public Tool clone() {
+		Tool copy = new Tool(getName(), getDescription(), getUrl());
+		copy.setMethod(getMethod());
+		copy.setTimeout(getTimeout());
+		copy.setRefRequest(isRefRequest());
+		copy.setParameters(getParameters());
+		copy.setKey(getKey());
+		copy.setBody(getBody());
+		copy.setUsage(getUsage());
+		copy.setCommand(command);
+		if (getHeaders() != null) {
+			List<ApiHeader> headersCopy = new ArrayList<>();
+			for (ApiHeader h : getHeaders()) {
+				headersCopy.add(new ApiHeader(h.getName(), h.getValue()));
+			}
+			copy.setHeaders(headersCopy);
+		}
+		if (getForm() != null) {
+			List<ApiField> formCopy = new ArrayList<>();
+			for (ApiField f : getForm()) {
+				formCopy.add(new ApiField(f.getName(), f.getValue()));
+			}
+			copy.setForm(formCopy);
+		}
+		return copy;
+	}
+
 	/**
 	 * 执行本地程序命令。命令模板中的 @占位符由 rv 替换；不经 shell，
 	 * 直接以 ProcessBuilder 按参数数组执行，避免 shell 注入。

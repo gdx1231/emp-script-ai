@@ -348,4 +348,34 @@ public class Api {
                 ", formFieldsCount=" + (form != null ? form.size() : 0) +
                 '}';
     }
+
+    /**
+     * 深拷贝当前 Api，包括 headers 和 form。
+     * 子类 Tool 需覆盖此方法以复制 command 等额外字段。
+     */
+    public Api clone() {
+        Api copy = new Api(name, description, url);
+        copy.setMethod(method);
+        copy.setTimeout(timeout);
+        copy.setRefRequest(refRequest);
+        copy.setParameters(parameters);
+        copy.setKey(key);
+        copy.setBody(body);
+        copy.setUsage(usage);
+        if (headers != null) {
+            List<ApiHeader> headersCopy = new ArrayList<>();
+            for (ApiHeader h : headers) {
+                headersCopy.add(new ApiHeader(h.getName(), h.getValue()));
+            }
+            copy.setHeaders(headersCopy);
+        }
+        if (form != null) {
+            List<ApiField> formCopy = new ArrayList<>();
+            for (ApiField f : form) {
+                formCopy.add(new ApiField(f.getName(), f.getValue()));
+            }
+            copy.setForm(formCopy);
+        }
+        return copy;
+    }
 }
