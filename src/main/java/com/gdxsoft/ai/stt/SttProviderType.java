@@ -14,6 +14,7 @@ public enum SttProviderType {
     OPENAI_COMPAT("openai_compat_stt"),
     AZURE("azure_stt"),
     GOOGLE("google_stt"),
+    QWEN("qwen_stt"),
     LOCAL("local_stt");
 
     private final String name;

@@ -25,6 +25,7 @@ public final class SttProviderFactory {
             case OPENAI_COMPAT -> new com.gdxsoft.ai.stt.providers.openaiCompat.OpenAiCompatSttProvider();
             case AZURE         -> new com.gdxsoft.ai.stt.providers.azure.AzureSttProvider();
             case GOOGLE        -> new com.gdxsoft.ai.stt.providers.google.GoogleSttProvider();
+            case QWEN          -> new com.gdxsoft.ai.stt.providers.qwen.QwenSttProvider();
             case LOCAL         -> new com.gdxsoft.ai.stt.providers.local.LocalSttProvider();
         };
     }

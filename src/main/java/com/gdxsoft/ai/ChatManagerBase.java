@@ -84,6 +84,7 @@ import org.json.JSONObject;
 import com.gdxsoft.ai.ChatManagerI18nConstants.ErrorMessages;
 import com.gdxsoft.ai.ChatManagerI18nConstants.LogMessages;
 import com.gdxsoft.ai.ChatManagerI18nConstants.StatusMessages;
+import com.gdxsoft.ai.export.ActionBase;
 import com.gdxsoft.ai.export.IAction;
 import com.gdxsoft.ai.modes.*;
 import com.gdxsoft.ai.request.AiTool;
@@ -474,6 +475,16 @@ public class ChatManagerBase {
 		msg1.put("content", "<i>" + getText(StatusMessages.ACTION_CREATING) + "</i>");
 		msg1.put("action", actionName);
 		outEvent(msg1.toString());
+
+		// 将 action 的 aiProvider / aiModel 注入 rv
+		if (action.getAiProvider() != null) rv.addOrUpdateValue("ai_provider", action.getAiProvider());
+		if (action.getAiModel() != null) rv.addOrUpdateValue("ai_model", action.getAiModel());
+
+		// 确保 ActionBase 能输出 SSE 事件（outEvents 是延迟初始化的）
+		if (stepAction instanceof ActionBase) {
+			((ActionBase) stepAction).setOutEvents(this.outEvents);
+			((ActionBase) stepAction).setWriter(this.writer);
+		}
 
 		// 执行实际的动作
 		JSONObject result = stepAction.doAction(rv, fullText);
@@ -1340,6 +1351,12 @@ public class ChatManagerBase {
 		UObjectValue uv = new UObjectValue();
 		// IExport exporter = new pf2023.AiModeEnqJny();
 		IAction stepAction = (IAction) uv.loadClass(actionClassName, null);
+		stepAction.setAction(action);
+		if (stepAction instanceof ActionBase) {
+			((ActionBase) stepAction).setChatManagerDb(this.db);
+			((ActionBase) stepAction).setOutEvents(this.outEvents);
+			((ActionBase) stepAction).setWriter(this.writer);
+		}
 		this.stepAction = stepAction;
 		this.actionName = actionName;
 		this.action = action;

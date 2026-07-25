@@ -8,8 +8,9 @@ package com.gdxsoft.ai.modes;
 public class Action {
     private String name;
     private String description;
-    // maps from XML attribute 'class'
     private String className;
+    private String aiProvider;
+    private String aiModel;
 
     public Action(String name, String description, String className) {
         this.name = name;
@@ -17,31 +18,25 @@ public class Action {
         this.className = className;
     }
 
-    public String getName() {
-        return name;
-    }
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
 
-    public String getDescription() {
-        return description;
-    }
+    public String getDescription() { return description; }
+    public void setDescription(String description) { this.description = description; }
 
-    public String getClassName() {
-        return className;
-    }
+    public String getClassName() { return className; }
+    public void setClassName(String className) { this.className = className; }
 
-    public void setName(String name) {
-        this.name = name;
-    }
+    public String getAiProvider() { return aiProvider; }
+    public void setAiProvider(String aiProvider) { this.aiProvider = aiProvider; }
 
-    public void setDescription(String description) {
-        this.description = description;
-    }
-
-    public void setClassName(String className) {
-        this.className = className;
-    }
+    public String getAiModel() { return aiModel; }
+    public void setAiModel(String aiModel) { this.aiModel = aiModel; }
 
     public Action clone() {
-        return new Action(name, description, className);
+        Action a = new Action(name, description, className);
+        a.setAiProvider(aiProvider);
+        a.setAiModel(aiModel);
+        return a;
     }
 }

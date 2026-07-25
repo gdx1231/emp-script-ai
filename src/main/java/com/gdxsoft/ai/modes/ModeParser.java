@@ -126,7 +126,10 @@ public class ModeParser {
 				String actionName = actionElement.getAttribute("name");
 				String actionDescription = actionElement.getAttribute("description");
 				String className = actionElement.getAttribute("class");
-				actions.add(new Action(actionName, actionDescription, className));
+				Action act = new Action(actionName, actionDescription, className);
+				act.setAiProvider(actionElement.getAttribute("aiProvider"));
+				act.setAiModel(actionElement.getAttribute("aiModel"));
+				actions.add(act);
 			}
 		}
 

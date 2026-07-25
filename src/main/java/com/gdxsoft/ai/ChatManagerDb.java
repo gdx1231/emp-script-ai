@@ -164,11 +164,11 @@ public class ChatManagerDb {
 		rv.addOrUpdateValue("AIM_PROMPT_NAME", promptName);
 
 		String sql = String.format("""
-				INSERT INTO AI_CHAT_MSG( AI_ID, AIM_NOI, AIM_MSG, AIM_ROLE, AIM_BY_USER, AIM_TIME_BEGIN
-					, AIM_TIME_END, AIM_STEP, AIM_ACTION, AIM_ACTION_CLASS, AIM_PROMPT_NAME, AIM_SKIP_APPEND)
-				VALUES(@ai_id, @AIM_NOI, @AIM_MSG, @AIM_ROLE, @AIM_BY_USER, @sys_date
-					, @AIM_TIME_END, @AIM_STEP, @AIM_ACTION, @AIM_ACTION_CLASS, @AIM_PROMPT_NAME, %d)
-			""", (isSkipAppend ? 1 : 0));
+					INSERT INTO AI_CHAT_MSG( AI_ID, AIM_NOI, AIM_MSG, AIM_ROLE, AIM_BY_USER, AIM_TIME_BEGIN
+						, AIM_TIME_END, AIM_STEP, AIM_ACTION, AIM_ACTION_CLASS, AIM_PROMPT_NAME, AIM_SKIP_APPEND)
+					VALUES(@ai_id, @AIM_NOI, @AIM_MSG, @AIM_ROLE, @AIM_BY_USER, @sys_date
+						, @AIM_TIME_END, @AIM_STEP, @AIM_ACTION, @AIM_ACTION_CLASS, @AIM_PROMPT_NAME, %d)
+				""", (isSkipAppend ? 1 : 0));
 		rv.addOrUpdateValue("ai_id", aiId, "bigint", 100);
 		return DataConnection.insertAndReturnAutoIdLong(sql, dbConfigName, rv);
 	}
@@ -387,7 +387,7 @@ public class ChatManagerDb {
 		}
 		try {
 			rv.addOrUpdateValue("ai_id", aiId, "bigint", 100);
-			
+
 			Double pidObj = pidTb.getCell(0, "AI_PID").toDouble();
 			if (pidObj == null) {
 				return null;
@@ -436,7 +436,7 @@ public class ChatManagerDb {
 		String sql = "SELECT AIP_NAME, AIP_VAL FROM AI_CHAT_PARAMS WHERE AI_ID = @ai_id";
 		DTTable tb = DTTable.getJdbcTable(sql, dbConfigName, rv);
 		try {
-			
+
 			for (int i = 0; i < tb.getCount(); i++) {
 				String name = tb.getCell(i, "AIP_NAME").toString();
 				String val = tb.getCell(i, "AIP_VAL").toString();
@@ -533,7 +533,7 @@ public class ChatManagerDb {
 	 *
 	 * @param aiProvider 供应商代码（如 qwen, openai, anthropic）
 	 * @param aiModel    模型代码（如 qwen-plus, gpt-4o）
-	 * @param apiOwnerId 	模型归属供应商
+	 * @param apiOwnerId 模型归属供应商
 	 * @return 校验结果 JSON
 	 */
 	public JSONObject checkProviderAndModel(String aiProvider, String aiModel, String apiOwnerId) {
@@ -564,11 +564,11 @@ public class ChatManagerDb {
 				return result;
 			}
 			String sql1 = "select APU_URL, APU_KEY from AI_PROVIDER_URL where APU_STATUS='USED' and ap_code=@ai_provider ";
-			if(apiOwnerId != null) {
+			if (apiOwnerId != null) {
 				rv.addOrUpdateValue("_APU_OWN_ID", apiOwnerId);
-				sql1+=" and APU_OWN_ID = @_APU_OWN_ID ";
+				sql1 += " and APU_OWN_ID = @_APU_OWN_ID ";
 			}
-			sql1+=" order by APU_MDATE desc";
+			sql1 += " order by APU_MDATE desc";
 			DTTable tb1 = DTTable.getJdbcTable(sql1, dbConfigName, rv);
 			if (tb1.getCount() == 0) {
 				result.put("RST", false);
@@ -599,5 +599,40 @@ public class ChatManagerDb {
 			result.put("errorArgs", new JSONArray().put(e.getLocalizedMessage()));
 		}
 		return result;
+	}
+
+	 /**
+	  * 将图片文件信息写入 AI_CHAT_EXP_ATTS。
+	  * @param fileFrom
+	  * @param fileRId
+	  * @param filePath
+	  * @param realPath
+	  * @param fileExt
+	  * @param fileSize
+	  * @param fileMd5
+	  * @param upJsp
+	  * @return
+	  */
+	public long addChatExpAtts(String fileFrom, long fileRId, String filePath, String realPath, String fileExt,
+			int fileSize, String fileMd5, String upJsp) {
+		synchronized (rv) {
+			rv.addOrUpdateValue("file_From", fileFrom);
+			rv.addOrUpdateValue("file_RId", fileRId, "bigint", 100);
+			rv.addOrUpdateValue("file_path", filePath);
+			rv.addOrUpdateValue("file_real_path", realPath);
+			rv.addOrUpdateValue("file_Ext", fileExt);
+			rv.addOrUpdateValue("file_Size", fileSize, "int", 100);
+			rv.addOrUpdateValue("file_md5", fileMd5);
+			rv.addOrUpdateValue("file_up_jsp", upJsp);
+			String sql = """
+						INSERT INTO AI_CHAT_EXP_ATTS(FILE_STATUS,FILE_FROM, SUP_ID, ADM_ID, FILE_CDATE
+							, FILE_EXT, FILE_SIZE, FILE_MD5
+							, FILE_RID, FILE_PATH, FILE_REAL_PATH, FILE_UP_JSP)
+						 VALUES('USED', @file_From, @G_SUP_ID, @G_ADM_ID, @sys_date
+							 , @FILE_EXT, @FILE_SIZE, @FILE_MD5
+							 , @file_RId, @file_path, @file_real_path, @file_up_jsp)
+					""";
+			return DataConnection.insertAndReturnAutoIdLong(sql, dbConfigName, rv);
+		}
 	}
 }

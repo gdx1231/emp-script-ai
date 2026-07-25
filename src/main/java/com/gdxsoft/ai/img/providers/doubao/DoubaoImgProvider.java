@@ -123,7 +123,9 @@ public class DoubaoImgProvider extends ImgProviderBase {
             body.put("user", opts.getUser());
         }
         // Doubao-specific parameters
-        body.put("sequential_image_generation", sequentialImageGeneration);
+        if (sequentialImageGeneration != null && !"disabled".equalsIgnoreCase(sequentialImageGeneration)) {
+            body.put("sequential_image_generation", sequentialImageGeneration);
+        }
         body.put("watermark", watermark);
         body.put("stream", stream);
 
