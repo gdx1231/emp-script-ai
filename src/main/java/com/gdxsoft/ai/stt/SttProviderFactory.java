@@ -26,6 +26,7 @@ public final class SttProviderFactory {
             case AZURE         -> new com.gdxsoft.ai.stt.providers.azure.AzureSttProvider();
             case GOOGLE        -> new com.gdxsoft.ai.stt.providers.google.GoogleSttProvider();
             case QWEN          -> new com.gdxsoft.ai.stt.providers.qwen.QwenSttProvider();
+            case DOUBAO        -> new com.gdxsoft.ai.stt.providers.doubao.DoubaoSttProvider();
             case LOCAL         -> new com.gdxsoft.ai.stt.providers.local.LocalSttProvider();
         };
     }

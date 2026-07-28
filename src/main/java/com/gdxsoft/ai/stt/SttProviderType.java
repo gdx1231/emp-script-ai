@@ -15,6 +15,7 @@ public enum SttProviderType {
     AZURE("azure_stt"),
     GOOGLE("google_stt"),
     QWEN("qwen_stt"),
+    DOUBAO("doubao_stt"),
     LOCAL("local_stt");
 
     private final String name;

@@ -327,7 +327,7 @@ public class ChatManagerDb {
 				and AIM_STEP=@_skip_step \
 				and AIM_PROMPT_NAME is not null and AIM_PROMPT_NAME<>'' \
 				and (AIM_SKIP_APPEND is null or AIM_SKIP_APPEND=0)""";
-		DTTable.getJdbcTable(sql, rv);
+		DataConnection.updateAndClose(sql, dbConfigName, rv);
 	}
 
 	/**
@@ -510,6 +510,28 @@ public class ChatManagerDb {
 		}
 
 		return saved;
+	}
+
+	/**
+	 * 保存单个参数到 {@code AI_CHAT_PARAMS}（{@code AIM_ID=0}，{@code AIP_TYPE='validate'}）。
+	 * <p>
+	 * 供 innerCall 等场景保存校验通过的参数，供后续轮次的 checkparamsapi 读取。
+	 *
+	 * @param aiId  聊天会话 ID
+	 * @param name  参数名
+	 * @param value 参数值
+	 */
+	public void saveValidateParam(long aiId, String name, String value) {
+		rv.addOrUpdateValue("AI_ID", aiId, "long", 100);
+		rv.addOrUpdateValue("AIM_ID", 0, "long", 100);
+		rv.addOrUpdateValue("AIP_NAME", name);
+		rv.addOrUpdateValue("AIP_VAL", value);
+		rv.addOrUpdateValue("AIP_TYPE", "validate");
+		String sql = """
+				INSERT INTO AI_CHAT_PARAMS (AI_ID, AIM_ID, AIP_NAME, AIP_VAL, AIP_TYPE)
+				VALUES (@AI_ID, @AIM_ID, @AIP_NAME, @AIP_VAL, @AIP_TYPE)
+				""";
+		DataConnection.updateAndClose(sql, dbConfigName, rv);
 	}
 
 	// ==================== AI_PROVIDER_MODEL / AI_PROVIDER 表 ====================

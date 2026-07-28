@@ -1667,6 +1667,16 @@ public class ChatManagerBase {
 		return aiId;
 	}
 
+	/**
+	 * 保存单个校验参数到 {@code AI_CHAT_PARAMS}（委托给 {@link ChatManagerDb#saveValidateParam}）。
+	 *
+	 * @param name  参数名
+	 * @param value 参数值
+	 */
+	public void saveValidateParam(String name, String value) {
+		this.db.saveValidateParam(this.aiId, name, value);
+	}
+
 	public String getAiStepPrev() {
 		return aiStepPrev;
 	}
@@ -1744,6 +1754,14 @@ public class ChatManagerBase {
 
 	public void setAiProvider(String aiProvider) {
 		this.aiProvider = aiProvider;
+	}
+
+	public String getAiModel() {
+		return aiModel;
+	}
+
+	public void setAiModel(String aiModel) {
+		this.aiModel = aiModel;
 	}
 
 	/**

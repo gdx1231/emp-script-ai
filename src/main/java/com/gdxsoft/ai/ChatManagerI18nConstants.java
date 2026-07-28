@@ -71,6 +71,18 @@ public final class ChatManagerI18nConstants {
             put("ERROR_STT_AZURE_REGION_MISSING",
                     new String[] { "Azure STT缺少 region 配置", "Azure STT requires region config" });
 
+            // ========== TTS 错误信息类 ==========
+            put("ERROR_TTS_NO_TEXT",
+                    new String[] { "TTS请求缺少文本", "TTS request has no text" });
+            put("ERROR_TTS_PROVIDER_NOT_FOUND",
+                    new String[] { "未找到TTS提供商：{}", "TTS provider not found: {}" });
+            put("ERROR_TTS_NO_API_KEY",
+                    new String[] { "TTS提供商 {} 未配置API Key", "TTS provider {} has no API key" });
+            put("ERROR_TTS_HTTP_ERROR",
+                    new String[] { "TTS HTTP错误 {}: {}", "TTS HTTP error {}: {}" });
+            put("ERROR_TTS_MISSING_CONFIG",
+                    new String[] { "TTS提供商 {} 缺少配置项：{}", "TTS provider {} missing config: {}" });
+
             // ========== IMG (Image Generation) 错误信息类 ==========
             put("ERROR_IMG_PROVIDER_NOT_FOUND",
                     new String[] { "未找到图片生成提供商：{}", "Image generation provider not found: {}" });
@@ -146,6 +158,15 @@ public final class ChatManagerI18nConstants {
         public static final String ERROR_STT_RESPONSE_PARSE = "ERROR_STT_RESPONSE_PARSE";
         public static final String ERROR_STT_NO_API_KEY = "ERROR_STT_NO_API_KEY";
         public static final String ERROR_STT_AZURE_REGION_MISSING = "ERROR_STT_AZURE_REGION_MISSING";
+    }
+
+    /** TTS 错误信息类常量 */
+    public static final class TtsErrorMessages {
+        public static final String ERROR_TTS_NO_TEXT = "ERROR_TTS_NO_TEXT";
+        public static final String ERROR_TTS_PROVIDER_NOT_FOUND = "ERROR_TTS_PROVIDER_NOT_FOUND";
+        public static final String ERROR_TTS_NO_API_KEY = "ERROR_TTS_NO_API_KEY";
+        public static final String ERROR_TTS_HTTP_ERROR = "ERROR_TTS_HTTP_ERROR";
+        public static final String ERROR_TTS_MISSING_CONFIG = "ERROR_TTS_MISSING_CONFIG";
     }
 
     /** IMG (Image Generation) 错误信息类常量 */

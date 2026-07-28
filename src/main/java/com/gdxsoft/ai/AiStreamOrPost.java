@@ -241,10 +241,7 @@ public class AiStreamOrPost {
 						for (String saveKey : paramsObj.keySet()) {
 							String saveVal = paramsObj.optString(saveKey, "");
 							if (saveVal != null && !saveVal.isEmpty() && !saveVal.startsWith("{")) {
-								String sql = "insert into AI_CHAT_PARAMS (AI_ID, AIM_ID, AIP_NAME, AIP_VAL, AIP_TYPE) "
-										+ "values (" + aiId + ", 0, '" + saveKey.replace("'", "''") + "', '"
-										+ saveVal.replace("'", "''") + "', 'validate')";
-								com.gdxsoft.easyweb.data.DTTable.getJdbcTable(sql, chatManager.getRv());
+								chatManager.saveValidateParam(saveKey, saveVal);
 							}
 						}
 					}
@@ -400,7 +397,6 @@ public class AiStreamOrPost {
 
 		// 检查每个参数是否有值
 		StringBuilder missing = new StringBuilder();
-		int missingCount = 0;
 		for (String param : paramNames) {
 			boolean hasValue = false;
 			// 检查顶层字段
@@ -445,7 +441,6 @@ public class AiStreamOrPost {
 				}
 			}
 			if (!hasValue) {
-				missingCount++;
 				String label = paramLabels.getOrDefault(param, param);
 				if (missing.length() > 0)
 					missing.append("和");
