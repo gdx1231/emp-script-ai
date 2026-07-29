@@ -14,7 +14,8 @@ import com.gdxsoft.easyweb.script.RequestValue;
  * - tool 内 CDATA 解析为调用说明（usage），apisCheck prompt 构建时自动附加；
  * - prompt 的 tool/toolsCheck 属性等价于 api/apisCheck；
  * - common 下的 tools 参与合并，mode 本地优先；
- * - command 非空的 Tool 执行本地程序。
+ * - command 非空的 Tool 执行本地程序；
+ * - useMode 非空的 Tool 标记为进程内调用子 mode。
  */
 class ModeToolAliasTest {
 
@@ -35,7 +36,15 @@ class ModeToolAliasTest {
 			+ "<tool name='localproc' command='echo hello @name' timeout='5000'>"
 			+ "<![CDATA[localproc(name: str):本地打招呼程序]]>"
 			+ "</tool>"
+			+ "<tool name='bizsearch' useMode='getBiz'>"
+			+ "<![CDATA[bizsearch(name: str):查询工商信息]]>"
+			+ "</tool>"
 			+ "</tools>"
+			+ "</mode>"
+			+ "<mode name='getBiz' enableSearch='true'>"
+			+ "<step name='init'><prompts>"
+			+ "<prompt name='sys' role='system'><![CDATA[提取企业信息]]></prompt>"
+			+ "</prompts></step>"
 			+ "</mode>"
 			+ "<mode name='M2'>"
 			+ "</mode>"
@@ -59,8 +68,8 @@ class ModeToolAliasTest {
 		assertTrue(weather instanceof Tool);
 		assertEquals("http://tool-new/weather", weather.getUrl());
 
-		// getData / localproc / commontool 均生效；common 的 weatherapi 被本地抛弃
-		assertEquals(4, m1.getApis().size());
+		// getData / localproc / bizsearch / commontool 均生效；common 的 weatherapi 被本地抛弃
+		assertEquals(5, m1.getApis().size());
 		assertEquals("http://api/data", m1.getApi("getData").getUrl());
 		assertEquals("http://tool-new/weather", m1.getApi("weatherapi").getUrl());
 		assertEquals("http://common/tool", m1.getApi("commontool").getUrl());
@@ -81,7 +90,32 @@ class ModeToolAliasTest {
 		String usage = m1.getApisUsage();
 		assertEquals("weatherapi(location: str):查询指定城市的天气\n"
 				+ "localproc(name: str):本地打招呼程序\n"
+				+ "bizsearch(name: str):查询工商信息\n"
 				+ "commontool():公共工具", usage);
+	}
+
+	@Test
+	void testUseModeParsedAndCloned() throws Exception {
+		Modes modes = new Modes();
+		modes.loadModes(XML);
+		Mode m1 = Modes.getMode("M1"); // getMode 返回克隆体
+
+		Api biz = m1.getApi("bizsearch");
+		assertTrue(biz instanceof Tool);
+		Tool bizTool = (Tool) biz;
+		assertTrue(bizTool.isUseMode());
+		assertEquals("getBiz", bizTool.getUseMode());
+		assertFalse(bizTool.isLocalCommand()); // useMode 与 command 互不影响
+
+		// 普通 tool 不是 useMode 工具
+		Api weather = m1.getApi("weatherapi");
+		assertFalse(((Tool) weather).isUseMode());
+
+		// 子 mode 本身可正常获取，enableSearch 属性解析且在克隆体上保留
+		Mode getBiz = Modes.getMode("getBiz");
+		assertNotNull(getBiz);
+		assertTrue(getBiz.isEnableSearch());
+		assertFalse(m1.isEnableSearch()); // 未设置时默认 false
 	}
 
 	@Test

@@ -45,6 +45,7 @@ public class Mode {
 	private List<ParamCheck> paramChecks;
 	// Debug output control: whether to show technical details like API calls
 	private boolean debugOutput = false; // default false, hide technical details from users
+	private boolean enableSearch = false; // 联网搜索（如 qwen enable_search），default false
 	// Maximum number of history messages to include in each turn (default 30)
 	private int maxHistoryMessages = 30;
 	// Maximum total token count for history messages, in thousands (default 100 = 100K tokens)
@@ -458,6 +459,24 @@ public class Mode {
 		return responseFormat;
 	}
 
+	/**
+	 * 是否启用联网搜索（请求体附加 enable_search=true，仅 provider 支持时生效）
+	 *
+	 * @return enableSearch
+	 */
+	public boolean isEnableSearch() {
+		return enableSearch;
+	}
+
+	/**
+	 * 设置是否启用联网搜索
+	 *
+	 * @param enableSearch true 时请求体附加 enable_search=true
+	 */
+	public void setEnableSearch(boolean enableSearch) {
+		this.enableSearch = enableSearch;
+	}
+
 	// Setters
 	public void setName(String name) {
 		this.name = name;
@@ -706,6 +725,7 @@ public class Mode {
 		copy.setUiComplete(this.uiComplete);
 		copy.setUiCompleteTest(this.uiCompleteTest);
 		copy.setDebugOutput(this.debugOutput);
+		copy.setEnableSearch(this.enableSearch);
 		copy.setMaxHistoryMessages(this.maxHistoryMessages);
 		copy.setMaxHistoryTokensK(this.maxHistoryTokensK);
 		if (this.paramChecks != null) {

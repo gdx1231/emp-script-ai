@@ -64,6 +64,7 @@ public class Tool extends Api {
 	private static final int MAX_OUTPUT_CHARS = 100_000;
 
 	private String command; // 本地程序命令模板，支持 @占位符
+	private String useMode; // 子 mode 名称，非空时工具执行为进程内调用指定 mode
 
 	public Tool() {
 		super();
@@ -100,6 +101,33 @@ public class Tool extends Api {
 		return command != null && command.trim().length() > 0;
 	}
 
+	/**
+	 * 获取子 mode 名称
+	 *
+	 * @return 子 mode 名称，未定义返回 null
+	 */
+	public String getUseMode() {
+		return useMode;
+	}
+
+	/**
+	 * 设置子 mode 名称
+	 *
+	 * @param useMode 子 mode 名称，工具被选中时进程内调用该 mode
+	 */
+	public void setUseMode(String useMode) {
+		this.useMode = useMode;
+	}
+
+	/**
+	 * 是否为子 mode 调用工具（useMode 非空）
+	 *
+	 * @return true 表示进程内调用子 mode，false 表示走 URL / command 调用
+	 */
+	public boolean isUseMode() {
+		return useMode != null && useMode.trim().length() > 0;
+	}
+
 	@Override
 	public Tool clone() {
 		Tool copy = new Tool(getName(), getDescription(), getUrl());
@@ -111,6 +139,7 @@ public class Tool extends Api {
 		copy.setBody(getBody());
 		copy.setUsage(getUsage());
 		copy.setCommand(command);
+		copy.setUseMode(useMode);
 		if (getHeaders() != null) {
 			List<ApiHeader> headersCopy = new ArrayList<>();
 			for (ApiHeader h : getHeaders()) {

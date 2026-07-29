@@ -41,7 +41,7 @@ public class ChatManagerDb {
 	private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger(ChatManagerDb.class);
 
 	/** 请求参数值对象，用于 SQL 参数化绑定的上下文 */
-	private final RequestValue rv;
+	private RequestValue rv;
 	/** 数据库配置名称（对应 ewa_conf.xml 中的配置节） */
 	private final String dbConfigName;
 
@@ -54,6 +54,17 @@ public class ChatManagerDb {
 	public ChatManagerDb(RequestValue rv, String dbConfigName) {
 		this.rv = rv;
 		this.dbConfigName = dbConfigName;
+	}
+
+	/**
+	 * 替换请求参数上下文对象。
+	 * <p>
+	 * 用于子 mode 调用等场景：将 db 的 rv 切换为克隆体，避免 db 操作污染原始 rv。
+	 *
+	 * @param rv 新的请求参数值对象
+	 */
+	public void setRv(RequestValue rv) {
+		this.rv = rv;
 	}
 
 	// ==================== AI_CHAT 表 ====================

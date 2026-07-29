@@ -173,6 +173,11 @@ public class ModeParser {
 		if (debugOutputAttr != null && debugOutputAttr.trim().length() > 0) {
 			mode.setDebugOutput(Boolean.parseBoolean(debugOutputAttr.trim()));
 		}
+		// Parse enableSearch attribute（联网搜索，如 qwen enable_search，default false）
+		String enableSearchAttr = root.getAttribute("enableSearch");
+		if (enableSearchAttr != null && enableSearchAttr.trim().length() > 0) {
+			mode.setEnableSearch(Boolean.parseBoolean(enableSearchAttr.trim()));
+		}
 		// Parse maxHistoryMessages attribute (default 30)
 		String maxHistoryMsgAttr = root.getAttribute("maxHistoryMessages");
 		if (maxHistoryMsgAttr != null && maxHistoryMsgAttr.trim().length() > 0) {
@@ -441,7 +446,8 @@ public class ModeParser {
 	}
 
 	/**
-	 * 解析 &lt;tool&gt; 元素为 Tool 实例（继承 Api 的全部属性，额外支持 command 本地程序命令）
+	 * 解析 &lt;tool&gt; 元素为 Tool 实例（继承 Api 的全部属性，额外支持 command 本地程序命令、
+	 * useMode 进程内调用子 mode）
 	 *
 	 * @param toolElement tool元素
 	 * @return Tool对象
@@ -465,6 +471,10 @@ public class ModeParser {
 		String command = toolElement.getAttribute("command");
 		if (command != null && command.trim().length() > 0) {
 			tool.setCommand(command.trim());
+		}
+		String useMode = toolElement.getAttribute("useMode");
+		if (useMode != null && useMode.trim().length() > 0) {
+			tool.setUseMode(useMode.trim());
 		}
 		return tool;
 	}

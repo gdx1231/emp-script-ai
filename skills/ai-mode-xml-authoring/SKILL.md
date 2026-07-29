@@ -54,6 +54,7 @@ Mode XML 文件由 `emp-script-ai` 的 `Modes.loadModes(xml)` 解析。它定义
 | `maxHistoryMessages` | 否 | 多轮历史消息数上限（默认 30）。 |
 | `maxHistoryTokensK` | 否 | 历史 token 上限，单位 K（默认 100），超限会截断并打 WARN。 |
 | `debugOutput` | 否 | 回显 LLM 原始输出，便于调试。 |
+| `enableSearch` | 否 | `"true"` 时请求体附加 `enable_search: true` 启用联网搜索（qwen/DashScope 兼容模式等支持的 provider 生效，不支持的 provider 会忽略或报错，按需开启）。适合「工具 = 联网查询」的 useMode 子 mode。 |
 
 ## `<step>` 属性
 
@@ -158,6 +159,11 @@ Mode XML 文件由 `emp-script-ai` 的 `Modes.loadModes(xml)` 解析。它定义
     <tool name="translate" command="/opt/bin/trans --text @text --lang @lang" timeout="10000">
         <![CDATA[translate(text: str, lang: str):把文本翻译为指定语言]]>
     </tool>
+
+    <!-- 子 mode 工具：useMode 非空时进程内调用另一个 mode（非流式单次请求） -->
+    <tool name="bussiness_search" description="查询客户工商信息" useMode="getBussinessInfo">
+        <![CDATA[bussiness_search(crm_com_name: str): 查询客户工商信息]]>
+    </tool>
 </tools>
 ```
 
@@ -165,6 +171,7 @@ Mode XML 文件由 `emp-script-ai` 的 `Modes.loadModes(xml)` 解析。它定义
 
 - **CDATA 调用说明（usage）**：构建 `apisCheck`/`toolsCheck` prompt 时，框架自动把本 mode 所有带说明的工具说明逐条附加到 prompt 末尾（带「可用工具：」标题），无需再在 prompt CDATA 里手写工具清单。
 - **`command`**：本地程序命令模板，`@占位符` 由 LLM 给出的 args（经 RequestValue）替换。不经 shell，直接按参数数组启动进程（支持引号包裹含空格的参数），`timeout`（毫秒）到期强制结束；stdout/stderr 合并后作为工具结果，输出超过 100K 字符截断。`command` 为空时走 `url` 调用。**安全提示**：command 由 LLM 的 args 参与替换，务必把参数限制在占位符层面，不要让 LLM 输入直接拼成完整命令；不要把无保护的 mode 暴露给不可信用户。
+- **`useMode`**：子 mode 名称，非空时工具执行为**进程内调用该 mode**（优先级高于 url/command）：子 mode 各 step 的 prompt（跳过 apisCheck 与空内容 prompt）拼接为消息，LLM 的 args 注入 RequestValue 供 `@占位符` 使用，并作为子 mode 的用户输入（单参数取其值，多参数传 JSON 字符串）。采样参数（`temperature`/`topP`/`thinking`/`responseFormat`/`enableSearch`）取**子 mode** 的定义，provider/model/key 沿用当前会话；非流式单次调用，不执行子 mode 的 action。调用过程记录到一个**新建子 chat**（`AI_CHAT.AI_PID` = 父 chat 的 `AI_ID`，`request_id` 为全新 UUID，消息为隐藏的 curl/user/assistant 记录，curl 为可直接执行的完整表达式），父 chat 的对话历史不受影响。适合「工具 = 另一次 AI 抽取/转换/联网查询」的场景，子 mode 建议 `temperature` 低、`stream="false"`；需要联网查询时在子 mode 上加 `enableSearch="true"`。
 - **同名覆盖**：同一 mode 内 `<tool>` 与 `<api>` 同名（忽略大小写）时 tool 整体覆盖 api；`<common>` 块内规则相同，合并进 mode 时仍是 mode 本地定义优先。
 - prompt 引用属性 `tool="name"` 等价于 `api="name"`，`toolsCheck="true"` 等价于 `apisCheck="true"`；两者同时存在时旧属性优先。
 

@@ -421,6 +421,10 @@ public class ChatManagerBase {
 		if (mode.getTopP() != 0) {
 			reqData.topP(mode.getTopP());
 		}
+		if (mode.isEnableSearch()) {
+			// 联网搜索（如 qwen enable_search），provider 不支持时忽略该字段
+			reqData.getParameters().put("enable_search", true);
+		}
 		LOGGER.info(getText(LogMessages.MODEL_REQUEST_PARAMS), reqData.buildJson());
 		return reqData;
 	}
@@ -733,6 +737,12 @@ public class ChatManagerBase {
 	 * @throws Exception 执行失败时抛出异常
 	 */
 	private String executeApiCall(String toolName, JSONObject args, Map<String, String> refHeaders) throws Exception {
+		// useMode 工具：进程内调用子 mode，不走 HTTP / 本地程序
+		Api apiDef = mode.getApi(toolName);
+		if (apiDef instanceof Tool && ((Tool) apiDef).isUseMode()) {
+			return executeUseModeCall(toolName, (Tool) apiDef, args, refHeaders);
+		}
+
 		RequestValue rv = this.rv.clone();
 		for (String argName : args.keySet()) {
 			String argValue = args.optString(argName);
@@ -765,6 +775,148 @@ public class ChatManagerBase {
 		String apiContent = api.getDescription() + "数据:\n" + calledContent;
 
 		return apiContent;
+	}
+
+	/**
+	 * 执行 useMode 工具调用：进程内调用子 mode（非流式、单次请求）。
+	 * <p>
+	 * 子 mode 各 step 的 prompt（CDATA、sqlRef、api 等数据源）按定义拼接为消息；
+	 * LLM 给出的 args 注入 RequestValue（供 prompt/api/sql 的 @占位符 使用），
+	 * 同时作为子 mode 的用户输入——单参数时取其值，多参数时传 JSON 字符串。
+	 * 采样参数（temperature/topP/thinking/responseFormat）取子 mode 的定义，
+	 * provider/model/key 沿用当前会话。不执行子 mode 的 action。
+	 * <p>
+	 * 调用过程记录到一个新建的子 chat（AI_CHAT.AI_PID = 父 chat 的 AI_ID，
+	 * request_id 为全新 UUID），父 chat 的对话历史不受影响。
+	 *
+	 * @param toolName   工具名称
+	 * @param tool       useMode 工具定义
+	 * @param args       LLM 给出的工具参数
+	 * @param refHeaders 请求头信息
+	 * @return 子 mode 的 AI 响应内容
+	 * @throws Exception 子 mode 未定义或调用失败时抛出异常
+	 */
+	private String executeUseModeCall(String toolName, Tool tool, JSONObject args, Map<String, String> refHeaders)
+			throws Exception {
+		String subModeName = tool.getUseMode().trim();
+		Mode subMode = Modes.getMode(subModeName);
+		if (subMode == null) {
+			throw new Exception("useMode 未找到: " + subModeName + " (tool: " + toolName + ")");
+		}
+
+		// args 注入 RequestValue，供子 mode 的 prompt/api/sql 中 @占位符 使用
+		RequestValue rvPrev = this.rv;
+		// 复制一份，同时切换 db 的 rv 引用，避免 db 操作污染原始 rv
+		this.rv = rvPrev.clone();
+		this.db.setRv(this.rv);
+		for (String argName : args.keySet()) {
+			this.rv.addOrUpdateValue(argName, args.optString(argName));
+		}
+
+		// 构建请求：非流式，沿用当前 provider/model，采样参数取子 mode 的定义
+		IRequestData reqData = RequestDataFactory.createRequestData(aiProvider);
+		reqData.stream(false).model(this.aiModel).thinking(subMode.isThinking());
+		if (subMode.getTemperature() != 0) {
+			reqData.temperature(subMode.getTemperature());
+		}
+		if (subMode.getTopP() != 0) {
+			reqData.topP(subMode.getTopP());
+		}
+		if (!StringUtils.isBlank(subMode.getResponseFormat())) {
+			reqData.responseFormat(subMode.getResponseFormat());
+		}
+		if (subMode.isEnableSearch()) {
+			// 联网搜索（如 qwen enable_search），provider 不支持时忽略该字段
+			reqData.getParameters().put("enable_search", true);
+		}
+
+		// 拼接子 mode 各 step 的 prompts（跳过 apisCheck 与空内容 prompt）
+		for (Step s : subMode.getSteps()) {
+			if (s.getPrompts() == null) {
+				continue;
+			}
+			for (Prompt p : s.getPrompts()) {
+				if (p.isApisCheck()) {
+					continue;
+				}
+				subMode.createStepPrompt(p, this.dbConfigName, this.rv, refHeaders);
+				String promptContent = p.getContent();
+				if (StringUtils.isBlank(promptContent)) {
+					continue;
+				}
+				if (!StringUtils.isBlank(p.getPrefix())) {
+					promptContent = p.getPrefix() + promptContent;
+				}
+				String role = StringUtils.isBlank(p.getRole()) ? "user" : p.getRole();
+				reqData.addMessage(promptContent, role);
+			}
+		}
+
+		// 用户输入：单参数取其值，多参数传 JSON 字符串
+		String userInput;
+		if (args.length() == 1) {
+			String onlyKey = args.keySet().iterator().next();
+			userInput = args.optString(onlyKey);
+		} else {
+			userInput = args.toString();
+		}
+		reqData.addMessage(userInput, "user");
+
+		// 根据 debugOutput 开关决定是否输出调试信息
+		if (mode.isDebugOutput()) {
+			JSONObject msg = UJSon.rstTrue("");
+			msg.put("reasoning_content", "调用子Mode: " + subModeName + ", " + args.toString() + "\n\n");
+			this.outEvent(msg.toString());
+		}
+		LOGGER.info("useMode 调用: tool={}, mode={}, args={}", toolName, subModeName, args.toString());
+
+		// 记录父级状态，创建子 chat（AI_CHAT.AI_PID = 父 chat 的 AI_ID），
+		// 子 mode 的调用过程记录到子 chat，父 chat 的对话历史不受影响
+		long parentAiId = this.aiId;
+		String prevRequestId = this.requestId;
+		String prevStepName = this.stepName;
+		boolean prevIsNew = this.isNew;
+		short prevInteractions = this.aimNumberOfInteractions;
+
+		try {
+			this.rv.addOrUpdateValue("p_ai_pid", parentAiId);
+			this.rv.addOrUpdateValue("MODE", subModeName);
+			this.stepName = toolName;
+			this.rv.addOrUpdateValue("AIM_STEP", this.stepName);
+			// 子 chat 使用全新的 request_id（AI_UID），必然走 insert 分支
+			this.requestId = Utils.getGuid();
+			this.rv.addOrUpdateValue("request_id", this.requestId );
+			
+			getOrNewAiChat();
+			this.aimNumberOfInteractions = db.getNextInteractionNumber(this.aiId);
+
+			// 记录子 mode 的完整调用过程到子 chat（隐藏消息，不参与对话历史）
+			IRequestAI req = createRequestAI();
+			this.addAiChatMsg("useMode: " + subModeName + "\n" + req.curl(reqData), "api_call_curl", true);
+			this.addAiChatMsg(userInput, "user", true);
+
+			String fullText = req.doPost(reqData);
+			JSONObject json = req.extraceJson(fullText, true);
+			String content = json != null && json.has("content") ? json.getString("content") : fullText;
+
+			long aimId = this.addAiChatMsg(content, "assistant", true);
+			JSONObject usage = req.getTokensUsage();
+			if (usage != null) {
+				this.updateAiChatMsgTokens(aimId, usage);
+			}
+
+			return tool.getDescription() + "数据:\n" + content;
+		} finally {
+			// 恢复父 chat 上下文
+			this.rv = rvPrev;
+			this.db.setRv(this.rv);
+
+			this.aiId = parentAiId;
+			this.requestId = prevRequestId;
+			this.stepName = prevStepName;
+			this.isNew = prevIsNew;
+			this.aimNumberOfInteractions = prevInteractions;
+		}
 	}
 
 	/**
