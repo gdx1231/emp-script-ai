@@ -1,0 +1,67 @@
+{
+  "name": "text-to-video",
+  "description": "文本创建视频工作流",
+  "version": "1.0",
+
+  "limits": {
+    "maxConcurrentWorkflows": 3,
+    "maxConcurrentImageGen": 3,
+    "maxConcurrentVideoGen": 1,
+    "maxRetries": 2,
+    "retryDelayMs": 5000,
+    "taskTimeoutMs": 600000,
+    "pollIntervalMs": 5000
+  },
+
+  "output": {
+    "baseDir": "./workflow-output",
+    "dbConfigName": "default",
+    "ffmpegPath": "ffmpeg"
+  },
+
+  "phases": [
+    {
+      "name": "planning",
+      "type": "llm_storyboard",
+      "provider": "qwen",
+      "model": "qwen-plus",
+      "promptTemplate": "你是视频导演。根据故事输出分镜JSON：{\"title\":\"...\",\"characters\":[{\"name\":\"...\",\"description\":\"...\",\"imgPrompt\":\"...\"}],\"environments\":[{\"name\":\"...\",\"description\":\"...\",\"imgPrompt\":\"...\"}],\"shots\":[{\"index\":1,\"description\":\"...\",\"videoPrompt\":\"...\",\"duration\":5,\"cameraMovement\":\"static\",\"characterRefs\":[\"小明\"],\"environmentRef\":\"教室\",\"dialogue\":null,\"narration\":null}]}。约束：每个分镜 duration ≤ 15；人物/环境必须先定义后引用；videoPrompt 用英文。故事：@{input}",
+      "responseFormat": "json_object"
+    },
+    {
+      "name": "materials",
+      "type": "image_generation",
+      "dependsOn": "planning",
+      "provider": "doubao_img",
+      "size": "1024x1024",
+      "concurrency": 3
+    },
+    {
+      "name": "generating",
+      "type": "video_generation",
+      "dependsOn": "materials",
+      "provider": "doubao",
+      "model": "doubao-seedance-2-0-260128",
+      "chainShots": true,
+      "returnLastFrame": true,
+      "maxDuration": 15,
+      "defaultAspectRatio": "16:9",
+      "defaultResolution": "720p",
+      "generateAudio": true,
+      "concurrency": 1
+    },
+    {
+      "name": "compositing",
+      "type": "video_compose",
+      "dependsOn": "generating",
+      "ffmpeg": {
+        "resolution": "1280x720",
+        "fps": 30,
+        "videoCodec": "libx264",
+        "audioCodec": "aac",
+        "transitions": false,
+        "bgmVolume": 0.3
+      }
+    }
+  ]
+}

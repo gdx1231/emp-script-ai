@@ -1,0 +1,216 @@
+-- =====================================================================
+-- 视频创作工作流 DDL — PostgreSQL
+-- 全部 11 张表, 完整建库模版
+-- =====================================================================
+
+CREATE TABLE AI_WF_DEF (
+    WFD_ID      BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, -- 主键
+    WFD_NAME    VARCHAR(100) NOT NULL,                            -- 工作流名称
+    WFD_DESC    VARCHAR(500),                                     -- 描述
+    WFD_VERSION VARCHAR(20),                                      -- 版本
+    WFD_JSON    TEXT,                                             -- 完整 workflow.json
+    WFD_MD5     VARCHAR(32),                                      -- JSON MD5(去重)
+    WFD_STATUS  VARCHAR(20) DEFAULT 'USED',                       -- USED/DISABLED
+    WFD_CDATE   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,              -- 创建时间
+    WFD_MDATE   TIMESTAMP DEFAULT CURRENT_TIMESTAMP               -- 修改时间
+);
+CREATE INDEX idx_wfd_name ON AI_WF_DEF(WFD_NAME, WFD_STATUS);
+
+CREATE TABLE AI_WF_INSTANCE (
+    WFI_ID          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, -- 主键
+    WFD_ID          BIGINT NOT NULL,                                 -- FK→AI_WF_DEF
+    WFI_UID         UUID NOT NULL,                                    -- UUID
+    WFI_STATUS      VARCHAR(20) DEFAULT 'pending',                   -- pending/planning/materials/generating/compositing/done/failed/cancelled
+    WFI_PRIORITY    INT DEFAULT 5,                                   -- 优先级 1最高 9最低
+    WFI_INPUT       TEXT,                                            -- 用户输入(故事文本)
+    WFI_STORYBOARD  TEXT,                                            -- 分镜JSON(Phase1输出)
+    WFI_RESULT      TEXT,                                            -- 最终结果JSON
+    WFI_FINAL_URL   VARCHAR(500),                                    -- 最终视频URL
+    WFI_ERROR       TEXT,                                            -- 失败原因
+    WFI_PROGRESS    INT DEFAULT 0,                                   -- 进度 0-100
+    WFI_CUR_PHASE   VARCHAR(50),                                     -- 当前执行阶段名
+    WFI_RETRY_COUNT INT DEFAULT 0,                                   -- 工作流级重试次数
+    ADM_ID          INT,                                             -- 管理员
+    USR_ID          INT,                                             -- 用户
+    SUP_ID          INT,                                             -- 供应商
+    WFI_CDATE       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,             -- 创建时间
+    WFI_MDATE       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,             -- 修改时间
+    WFI_SDATE       TIMESTAMP,                                       -- 开始执行时间
+    WFI_EDATE       TIMESTAMP,                                       -- 完成时间
+    WFI_ENGINE_ID   VARCHAR(100)                                     -- 执行引擎标识(hostname+pid)
+);
+CREATE INDEX idx_wfi_status ON AI_WF_INSTANCE(WFI_STATUS, WFI_PRIORITY, WFI_CDATE);
+CREATE INDEX idx_wfi_uid    ON AI_WF_INSTANCE(WFI_UID);
+
+CREATE TABLE AI_WF_TASK (
+    WFT_ID            BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, -- 主键
+    WFI_ID            BIGINT NOT NULL,                                 -- FK→AI_WF_INSTANCE
+    WFT_TYPE          VARCHAR(50) NOT NULL,                            -- planning/material_img/shot_video/video_compose/tts
+    WFT_NAME          VARCHAR(200),                                    -- 任务名称
+    WFT_SEQ           INT,                                             -- 同类型任务序号
+    WFT_PHASE         VARCHAR(50),                                     -- 所属阶段名
+    WFT_STATUS        VARCHAR(20) DEFAULT 'pending',                   -- pending/running/succeeded/failed/skipped
+    WFT_DEP_ID        BIGINT,                                          -- 依赖前置任务ID(尾帧续接)
+    WFT_INPUT         TEXT,                                            -- 任务输入JSON
+    WFT_OUTPUT        TEXT,                                            -- 任务输出JSON
+    WFT_PROVIDER      VARCHAR(50),                                     -- 供应商标识
+    WFT_MODEL         VARCHAR(100),                                    -- 模型标识
+    WFT_REMOTE_ID     VARCHAR(200),                                    -- 远端异步任务ID
+    WFT_REMOTE_STATUS VARCHAR(50),                                     -- 远端任务状态
+    WFT_ERROR         TEXT,                                            -- 失败原因
+    WFT_RETRY_COUNT   INT DEFAULT 0,                                   -- 已重试次数
+    WFT_CDATE         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,             -- 创建时间
+    WFT_MDATE         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,             -- 修改时间
+    WFT_SDATE         TIMESTAMP,                                       -- 开始执行时间
+    WFT_EDATE         TIMESTAMP                                        -- 完成时间
+);
+CREATE INDEX idx_wft_instance ON AI_WF_TASK(WFI_ID, WFT_TYPE, WFT_SEQ);
+CREATE INDEX idx_wft_status   ON AI_WF_TASK(WFT_STATUS);
+CREATE INDEX idx_wft_remote   ON AI_WF_TASK(WFT_REMOTE_ID);
+
+CREATE TABLE AI_CHAT (
+    AI_ID        BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, -- 主键
+    AI_UID       UUID NOT NULL,                                    -- 请求编号
+    AI_PROVIDER  VARCHAR(20) NOT NULL,                             -- AI供应商
+    AI_MODEL     VARCHAR(50) NOT NULL,                             -- 模型
+    AI_THINKING  BOOLEAN,                                           -- 思考模式
+    AI_STREAM    BOOLEAN,                                           -- 流模式
+    AI_MODE      VARCHAR(20) NOT NULL,                             -- 交互模式
+    AI_MAX_TOKEN INT,                                               -- 最大Token限制
+    AI_CDATE     TIMESTAMP NOT NULL,                                -- 创建时间
+    AI_MDATE     TIMESTAMP NOT NULL,                                -- 修改时间
+    ADM_ID       INT,                                               -- 管理员
+    USR_ID       INT,                                               -- 用户
+    SUP_ID       INT,                                               -- 供应商
+    AI_CUR_STEP  VARCHAR(50) NOT NULL,                              -- 当前步骤
+    AI_PID       BIGINT,                                            -- 父会话ID
+    AI_REF       VARCHAR(50),                                       -- 关联类型
+    AI_REF_ID    VARCHAR(50)                                        -- 关联ID
+);
+CREATE INDEX idx_ai_chat_ref ON AI_CHAT(AI_REF, AI_REF_ID);
+
+CREATE TABLE AI_CHAT_MSG (
+    AIM_ID               BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, -- 主键
+    AI_ID                BIGINT NOT NULL,                                 -- FK→AI_CHAT
+    AIM_NOI              SMALLINT DEFAULT 0 NOT NULL,                     -- 回话轮次
+    AIM_ROLE             VARCHAR(20) NOT NULL,                            -- system/user/assistant/agent
+    AIM_BY_USER          BOOLEAN DEFAULT FALSE,                           -- 用户提问
+    AIM_SKIP_APPEND      BOOLEAN,                                         -- 下次回话不附加
+    AIM_MSG              TEXT NOT NULL,                                   -- 消息内容
+    AIM_STEP             VARCHAR(50),                                     -- 当前步骤
+    AIM_ACTION           VARCHAR(50),                                     -- 执行动作
+    AIM_ACTION_CLASS     VARCHAR(200),                                    -- 执行类
+    AIM_PROMPT_NAME      VARCHAR(50),                                     -- 提示词名称
+    AIM_TOTAL_TOKENS     INT,                                             -- 总词元
+    AIM_COMPLETION_TOKENS INT,                                            -- 输出词元
+    AIM_PROMPT_TOKENS    INT,                                             -- 输入词元
+    AIM_CACHED_TOKENS    INT,                                             -- 缓存词元
+    AIM_TIME_BEGIN       TIMESTAMP NOT NULL,                              -- 开始时间
+    AIM_TIME_END         TIMESTAMP                                        -- 结束时间
+);
+
+CREATE TABLE AI_CHAT_EXP_ATTS (
+    FILE_ID        BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, -- 主键
+    FILE_NAME      VARCHAR(150),                                    -- 资产名称
+    FILE_DES       VARCHAR(500),                                    -- 元数据JSON
+    FILE_UNID      UUID,                                            -- UUID
+    FILE_EXT       VARCHAR(20),                                     -- 扩展名
+    FILE_FROM      VARCHAR(100),                                    -- 资产类型(char_img/env_img/shot_video/last_frame/final_video/tts_audio)
+    FILE_RID       BIGINT,                                          -- WFI_ID
+    FILE_RID1      BIGINT,                                          -- WFT_ID
+    FILE_RID2      BIGINT,                                          -- 扩展引用ID2
+    FILE_PARA0     VARCHAR(50),                                     -- refType
+    FILE_PARA1     VARCHAR(50),                                     -- refName
+    FILE_PARA2     VARCHAR(50),                                     -- 扩展参数2
+    FILE_KEYWORD   VARCHAR(150),                                    -- 关键词
+    FILE_STATUS    VARCHAR(50) DEFAULT 'USED',                      -- 状态
+    FILE_SIZE      INT,                                             -- 文件大小(字节)
+    FILE_PATH      VARCHAR(300),                                    -- 远端URL
+    FILE_REAL_PATH VARCHAR(500),                                    -- 本地路径
+    FILE_ORD       INT,                                             -- 排序
+    FILE_MD5       VARCHAR(32),                                     -- MD5
+    FILE_UP_UA     TEXT,                                            -- 上传UA
+    FILE_UP_IP     VARCHAR(40),                                     -- 上传IP
+    FILE_UP_JSP    TEXT,                                            -- 上传JSP
+    SUP_ID         INT,                                             -- 供应商
+    ADM_ID         INT,                                             -- 管理员
+    FILE_MDATE     TIMESTAMP,                                       -- 修改时间
+    FILE_CDATE     TIMESTAMP DEFAULT CURRENT_TIMESTAMP              -- 创建时间
+);
+
+CREATE TABLE AI_CHAT_PARAMS (
+    AIP_ID   BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, -- 主键
+    AI_ID    BIGINT NOT NULL,                                  -- FK→AI_CHAT
+    AIM_ID   BIGINT NOT NULL,                                  -- FK→AI_CHAT_MSG
+    AIP_NAME VARCHAR(100) NOT NULL,                           -- 参数名
+    AIP_VAL  TEXT,                                             -- 参数值
+    AIP_TYPE VARCHAR(50)                                       -- 参数类型
+);
+
+CREATE TABLE AI_CREATE_VIDEO_LIB (
+    ACVL_ID       BIGINT NOT NULL,                              -- 主键
+    ACVL_NAME     VARCHAR(100) NOT NULL,                       -- 视频名称
+    ACVL_DES      TEXT,                                         -- 描述
+    ACVL_UNID     UUID NOT NULL,                                -- UUID
+    ACVL_TYPE     VARCHAR(20),                                  -- 类型
+    ACVL_EXT      VARCHAR(20),                                  -- 扩展名(mp4)
+    ACVL_SIZE     INT,                                          -- 文件大小(字节)
+    ACVL_MD5      VARCHAR(32),                                  -- MD5
+    ACVL_PATH     VARCHAR(300),                                 -- URL/相对路径
+    ACVL_REALPATH VARCHAR(500),                                 -- 本地绝对路径
+    ACVL_UP_UA    TEXT,                                         -- 上传UA
+    ACVL_UP_IP    VARCHAR(40),                                  -- 上传IP
+    ACVL_UP_JSP   TEXT,                                         -- 上传JSP
+    ACVL_CDATE    TIMESTAMP,                                    -- 创建时间
+    ACVL_MDATE    TIMESTAMP,                                    -- 修改时间
+    ACVL_STATUS   VARCHAR(4) DEFAULT 'USED' NOT NULL,          -- USED/DEL
+    ADM_ID        INT,                                          -- 管理员
+    SUP_ID        INT,                                          -- 供应商
+    PRIMARY KEY (ACVL_ID)
+);
+
+CREATE TABLE AI_PROVIDER (
+    AP_CODE   VARCHAR(20) NOT NULL,                              -- 供应商编码(PK)
+    AP_NAME   VARCHAR(100) NOT NULL,                             -- 供应商名称
+    AP_MEMO   TEXT,                                               -- 备注
+    AP_STATUS VARCHAR(4) NOT NULL,                               -- 状态(USED/DEL)
+    AP_CDATE  TIMESTAMP NOT NULL,                                 -- 创建时间
+    AP_MDATE  TIMESTAMP NOT NULL,                                 -- 修改时间
+    ADM_ID    INT,                                                -- 管理员
+    PRIMARY KEY (AP_CODE)
+);
+
+CREATE TABLE AI_PROVIDER_MODEL (
+    APM_CODE            VARCHAR(45) NOT NULL,                    -- 模型编码(PK)
+    AP_CODE             VARCHAR(20) NOT NULL,                    -- 供应商编码(PK,FK)
+    APM_NAME            VARCHAR(100),                            -- 模型名称
+    APM_MEMO            TEXT,                                     -- 备注
+    APM_STATUS          VARCHAR(4) NOT NULL,                     -- 状态(USED/DEL)
+    APM_CDATE           TIMESTAMP NOT NULL,                       -- 创建时间
+    APM_MDATE           TIMESTAMP NOT NULL,                       -- 修改时间
+    ADM_ID              INT,                                     -- 管理员
+    APM_PRICE_TK_IN     NUMERIC(19,4),                           -- 输入价格-未命中
+    APM_PRICE_TK_OUT    NUMERIC(19,4),                           -- 输出价格
+    APM_PRICE_TK_CACHED NUMERIC(19,4),                           -- 输入价格-缓存命中
+    APM_COIN_ID         INT,                                     -- 币种ID
+    APM_MAX_WINDOW      INT,                                     -- 最大窗体Tokens
+    APM_MAX_TOKEN       INT,                                     -- 最大Token数
+    APM_TYPE            VARCHAR(20) DEFAULT 'AI_TP_CHAT' NOT NULL, -- 类型(AI_TP_CHAT/AI_TP_IMG/AI_TP_STT)
+    APM_CONCURRENCY     INT,                                     -- 并发数
+    PRIMARY KEY (APM_CODE, AP_CODE)
+);
+
+CREATE TABLE AI_PROVIDER_URL (
+    APU_UID         UUID NOT NULL,                               -- 主键(UUID)
+    AP_CODE         VARCHAR(20) NOT NULL,                        -- 供应商编码(FK)
+    APU_URL         VARCHAR(200),                                 -- API网址
+    APU_KEY         VARCHAR(200),                                 -- 密钥
+    APU_MEMO        TEXT,                                         -- 备注
+    APU_STATUS      VARCHAR(4) NOT NULL,                          -- 状态(USED/DEL)
+    APU_CDATE       TIMESTAMP NOT NULL,                           -- 创建时间
+    APU_MDATE       TIMESTAMP NOT NULL,                           -- 修改时间
+    ADM_ID          INT,                                          -- 管理员
+    APU_OWN_ID      VARCHAR(50),                                  -- 归属ID
+    APU_CONCURRENCY INT,                                          -- 并发数
+    PRIMARY KEY (APU_UID)
+);

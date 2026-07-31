@@ -20,15 +20,23 @@ public class VideoResponse {
     private final String model;
     private final JSONObject usage;
     private final JSONObject raw;
+    private final String lastFrameUrl;  // 尾帧图 URL（return_last_frame=true 时）
 
     public VideoResponse(List<GeneratedVideo> videos, String taskId,
                          String model, JSONObject usage, JSONObject raw) {
+        this(videos, taskId, model, usage, raw, null);
+    }
+
+    public VideoResponse(List<GeneratedVideo> videos, String taskId,
+                         String model, JSONObject usage, JSONObject raw,
+                         String lastFrameUrl) {
         this.videos = videos == null ? Collections.emptyList()
                 : Collections.unmodifiableList(videos);
         this.taskId = taskId;
         this.model = model;
         this.usage = usage;
         this.raw = raw;
+        this.lastFrameUrl = lastFrameUrl;
     }
 
     public List<GeneratedVideo> getVideos() { return videos; }
@@ -37,6 +45,7 @@ public class VideoResponse {
     public String getModel() { return model; }
     public JSONObject getUsage() { return usage; }
     public JSONObject getRaw() { return raw; }
+    public String getLastFrameUrl() { return lastFrameUrl; }
 
     /**
      * A single generated video.

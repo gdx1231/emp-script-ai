@@ -8,6 +8,7 @@ package com.gdxsoft.ai.video;
 public enum VideoProviderType {
     KLING("kling_video"),
     JIMENG("jimeng_video"),
+    DOUBAO("doubao_video"),
     QWEN("qwen_video"),
     OPENAI_COMPAT("openai_compat_video");
 

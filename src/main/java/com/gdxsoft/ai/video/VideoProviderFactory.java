@@ -16,6 +16,7 @@ public final class VideoProviderFactory {
         return switch (type) {
             case KLING  -> new com.gdxsoft.ai.video.providers.kling.KlingVideoProvider();
             case JIMENG -> new com.gdxsoft.ai.video.providers.jimeng.JimengVideoProvider();
+            case DOUBAO -> new com.gdxsoft.ai.video.providers.doubao.DoubaoVideoProvider();
             case QWEN   -> new com.gdxsoft.ai.video.providers.qwen.QwenVideoProvider();
             case OPENAI_COMPAT -> new com.gdxsoft.ai.video.providers.openaiCompat.OpenAiCompatVideoProvider();
         };
