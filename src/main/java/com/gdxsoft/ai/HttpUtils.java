@@ -9,6 +9,8 @@ import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.zip.GZIPOutputStream;
 
 import javax.net.ssl.SSLContext;
@@ -96,6 +98,20 @@ public class HttpUtils {
         } catch (Exception e) {
             // JDK < 21，不使用虚拟线程
             return null;
+        }
+    }
+
+    /**
+     * 创建虚拟线程执行器（JDK 21+），JDK < 21 时回退到 CachedThreadPool。
+     * 保证返回非 null 的 ExecutorService，可在 Java 17 编译环境下安全使用。
+     */
+    public static ExecutorService createVirtualThreadExecutorService() {
+        try {
+            java.lang.reflect.Method method = Executors.class.getMethod("newVirtualThreadPerTaskExecutor");
+            return (ExecutorService) method.invoke(null);
+        } catch (Exception e) {
+            LOGGER.debug("JDK < 21, fallback to CachedThreadPool");
+            return Executors.newCachedThreadPool();
         }
     }
 

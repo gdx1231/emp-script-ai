@@ -5,7 +5,6 @@ import java.net.InetAddress;
 import java.nio.file.Paths;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.Semaphore;
 
 import org.slf4j.Logger;
@@ -65,7 +64,7 @@ public class WorkflowCli {
                 config.getVersion(), config.getRawJson());
 
         String engineId = buildEngineId();
-        ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
+        ExecutorService executor = com.gdxsoft.ai.HttpUtils.createVirtualThreadExecutorService();
         Semaphore semaphore = new Semaphore(maxConcurrent > 0
                 ? maxConcurrent : config.getLimits().getMaxConcurrentWorkflows());
 

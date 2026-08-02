@@ -8,7 +8,6 @@ import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.Semaphore;
 
 import org.json.JSONArray;
@@ -76,7 +75,7 @@ public class WorkflowEngine {
         this.config = config;
         this.engineId = buildEngineId();
         this.db = new WorkflowDb(new RequestValue(), dbConfigName);
-        this.threadPool = Executors.newVirtualThreadPerTaskExecutor();
+        this.threadPool = com.gdxsoft.ai.HttpUtils.createVirtualThreadExecutorService();
 
         LOGGER.info("工作流引擎创建: engineId={}, name={}, dbConfig={}",
                 engineId, config.getName(), dbConfigName);
@@ -109,8 +108,8 @@ public class WorkflowEngine {
         scheduler = new WorkflowScheduler(config, db, executor, threadPool,
                 workflowSemaphore, engineId);
 
-        // 5. 启动调度线程
-        schedulerThread = Thread.ofVirtual().name("wf-scheduler").start(scheduler);
+        // 5. 启动调度线程（JDK 21+ 用虚拟线程，否则用普通线程）
+        schedulerThread = startVirtualOrPlatformThread("wf-scheduler", scheduler);
 
         // 6. 启动 HTTP 状态服务
         startStatusServer(8181);
@@ -207,11 +206,30 @@ public class WorkflowEngine {
                     os.write(bytes);
                 }
             });
-            httpServer.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
+            httpServer.setExecutor(com.gdxsoft.ai.HttpUtils.createVirtualThreadExecutorService());
             httpServer.start();
             LOGGER.info("HTTP 状态端点: http://0.0.0.0:{}/", port);
         } catch (Exception e) {
             LOGGER.warn("HTTP 状态服务启动失败: {} (端口={})", e.getMessage(), port);
+        }
+    }
+
+    /** JDK 21+ 启动虚拟线程，否则回退到普通线程 */
+    private static Thread startVirtualOrPlatformThread(String name, Runnable task) {
+        try {
+            // Thread.ofVirtual() 是 JDK 21+ API，通过反射调用以兼容 JDK 17 编译
+            var ofVirtual = Thread.class.getMethod("ofVirtual");
+            Object builder = ofVirtual.invoke(null);
+            var nameMethod = builder.getClass().getMethod("name", String.class);
+            builder = nameMethod.invoke(builder, name);
+            var startMethod = builder.getClass().getMethod("start", Runnable.class);
+            return (Thread) startMethod.invoke(builder, task);
+        } catch (Exception e) {
+            LOGGER.debug("JDK < 21, fallback to platform thread");
+            Thread t = new Thread(task, name);
+            t.setDaemon(true);
+            t.start();
+            return t;
         }
     }
 

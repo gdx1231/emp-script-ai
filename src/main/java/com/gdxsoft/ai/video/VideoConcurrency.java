@@ -5,7 +5,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
-import java.util.concurrent.Executors;
 import java.util.concurrent.Semaphore;
 
 import org.slf4j.Logger;
@@ -29,7 +28,7 @@ public final class VideoConcurrency {
     private VideoConcurrency(IVideoProvider provider, int maxConcurrency) {
         this.provider = provider;
         this.semaphore = new Semaphore(maxConcurrency);
-        this.executor = Executors.newVirtualThreadPerTaskExecutor();
+        this.executor = com.gdxsoft.ai.HttpUtils.createVirtualThreadExecutorService();
     }
 
     public static VideoConcurrency of(String name) {
