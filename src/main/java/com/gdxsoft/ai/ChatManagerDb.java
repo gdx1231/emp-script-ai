@@ -78,7 +78,7 @@ public class ChatManagerDb {
 	 * @return 聊天记录 JSON（大写键名），无记录返回 {@code null}
 	 */
 	public JSONObject queryChatByRequestId(String requestId) {
-		rv.addOrUpdateValue("request_id", requestId);
+		rv.addOrUpdateValue("request_id", requestId, "uuid", 36);
 		String sql = "select AI_ID, AI_CUR_STEP as AI_STEP_PREV, AI_UID, AI_REF, AI_REF_ID from ai_chat where ai_uid=@request_id";
 		DTTable tb = DTTable.getJdbcTable(sql, dbConfigName, rv);
 		if (tb.getCount() == 0) {
@@ -111,6 +111,14 @@ public class ChatManagerDb {
 	 * @return 自动生成的 AI_ID
 	 */
 	public long createChat(RequestValue rv) {
+		retypeParam(rv, "request_id", "uuid");
+		retypeParam(rv, "AI_THINKING", "boolean");
+		retypeParam(rv, "AI_STREAM", "boolean");
+		retypeParam(rv, "AI_MAX_TOKEN", "int");
+		retypeParam(rv, "p_ai_pid", "bigint");
+		
+		//g_ADM_ID, G_SUP_ID, G_WEB_USR_ID in session/cookie_encyrpt 无法更改类型
+		// 使用后缀.long修改类型
 		String sql = """
 				INSERT INTO AI_CHAT (
 				    AI_UID, AI_PID, AI_PROVIDER, AI_MODEL, AI_THINKING, AI_STREAM, AI_CUR_STEP
@@ -118,11 +126,22 @@ public class ChatManagerDb {
 				  , AI_REF, AI_REF_ID
 				) VALUES(
 				    @request_id, @p_ai_pid, @AI_PROVIDER, @AI_MODEL, @AI_THINKING, @AI_STREAM, @AIM_STEP
-				  , @MODE, @AI_MAX_TOKEN, @sys_DATE, @sys_DATE, @g_ADM_ID, @G_WEB_USR_ID, @g_SUP_ID
+				  , @MODE, @AI_MAX_TOKEN, @sys_DATE, @sys_DATE, @g_ADM_ID.long, @G_WEB_USR_ID.long, @g_SUP_ID.long
 				  , @AI_REF, @AI_REF_ID
 				)
-				""";
+				""" ;
 		return DataConnection.insertAndReturnAutoIdLong(sql, dbConfigName, rv);
+	}
+
+	/**
+	 * 将参数按指定类型重新登记（保留原值），使 PG 等严格类型数据库能正确绑定参数。
+	 *
+	 * @param rv       请求参数值对象
+	 * @param name     参数名
+	 * @param dataType 框架参数类型（boolean / int / bigint 等）
+	 */
+	private static void retypeParam(RequestValue rv, String name, String dataType) {
+		rv.addOrUpdateValue(name, rv.s(name), dataType, 100);
 	}
 
 	/**
@@ -167,19 +186,21 @@ public class ChatManagerDb {
 		if (!"assistant".equals(role)) {
 			rv.addOrUpdateValue("AIM_TIME_END", new Date(), "date", 100);
 		}
-		rv.addOrUpdateValue("AIM_BY_USER", byUser ? 1 : 0);
-		rv.addOrUpdateValue("AIM_NOI", numberOfInteractions);
+		// 布尔列按 boolean 类型绑定参数（setBoolean），兼容 PG BOOLEAN / MSSQL BIT / MYSQL TINYINT
+		rv.addOrUpdateValue("AIM_BY_USER", byUser ? 1 : 0, "boolean", 100);
+		rv.addOrUpdateValue("AIM_SKIP_APPEND", isSkipAppend ? 1 : 0, "boolean", 100);
+		rv.addOrUpdateValue("AIM_NOI", numberOfInteractions, "int", 100);
 		rv.addOrUpdateValue("AIM_STEP", stepName);
 		rv.addOrUpdateValue("AIM_ACTION", actionName);
 		rv.addOrUpdateValue("AIM_ACTION_CLASS", actionClass);
 		rv.addOrUpdateValue("AIM_PROMPT_NAME", promptName);
 
-		String sql = String.format("""
+		String sql = """
 					INSERT INTO AI_CHAT_MSG( AI_ID, AIM_NOI, AIM_MSG, AIM_ROLE, AIM_BY_USER, AIM_TIME_BEGIN
 						, AIM_TIME_END, AIM_STEP, AIM_ACTION, AIM_ACTION_CLASS, AIM_PROMPT_NAME, AIM_SKIP_APPEND)
 					VALUES(@ai_id, @AIM_NOI, @AIM_MSG, @AIM_ROLE, @AIM_BY_USER, @sys_date
-						, @AIM_TIME_END, @AIM_STEP, @AIM_ACTION, @AIM_ACTION_CLASS, @AIM_PROMPT_NAME, %d)
-				""", (isSkipAppend ? 1 : 0));
+						, @AIM_TIME_END, @AIM_STEP, @AIM_ACTION, @AIM_ACTION_CLASS, @AIM_PROMPT_NAME, @AIM_SKIP_APPEND)
+				""";
 		rv.addOrUpdateValue("ai_id", aiId, "bigint", 100);
 		return DataConnection.insertAndReturnAutoIdLong(sql, dbConfigName, rv);
 	}
@@ -256,7 +277,7 @@ public class ChatManagerDb {
 	public long getLastAimId(long aiId) {
 		try {
 			rv.addOrUpdateValue("ai_id", aiId, "bigint", 100);
-			String sql = "select isnull(max(AIM_ID), 0) as LAST_AIM_ID from AI_CHAT_MSG where AI_ID = @ai_id";
+			String sql = "select coalesce(max(AIM_ID), 0) as LAST_AIM_ID from AI_CHAT_MSG where AI_ID = @ai_id";
 			DTTable tb = DTTable.getJdbcTable(sql, dbConfigName, rv);
 			if (tb.getCount() > 0) {
 				return tb.getCell(0, "LAST_AIM_ID").toLong();
@@ -310,11 +331,13 @@ public class ChatManagerDb {
 	 */
 	public DTTable loadHistoryMessages(long aiId, int maxCount) {
 		rv.addOrUpdateValue("ai_id", aiId, "bigint", 100);
+		// 布尔列用参数比较，避免 PG BOOLEAN 与整数字面量类型不匹配
+		rv.addOrUpdateValue("_skip_append", 0, "boolean", 100);
 		String sql = """
 				select * from AI_CHAT_MSG
 				where ai_id = @ai_id and AIM_ACTION is null
 				and AIM_ROLE in ('user', 'system', 'assistant')
-				and case when AIM_SKIP_APPEND is null then 0 else AIM_SKIP_APPEND end = 0
+				and (AIM_SKIP_APPEND is null or AIM_SKIP_APPEND = @_skip_append)
 				order by AIM_ID desc
 				""";
 		return DTTable.getJdbcTable(sql, "AIM_ID", maxCount, 1, "", rv);
@@ -333,11 +356,14 @@ public class ChatManagerDb {
 	public void markStepMessagesSkipped(long aiId, String stepName) {
 		rv.addOrUpdateValue("ai_id", aiId, "bigint", 100);
 		rv.addOrUpdateValue("_skip_step", stepName);
+		// 布尔列用参数赋值/比较，兼容 PG BOOLEAN / MSSQL BIT / MYSQL TINYINT
+		rv.addOrUpdateValue("_skip_true", 1, "boolean", 100);
+		rv.addOrUpdateValue("_skip_false", 0, "boolean", 100);
 		String sql = """
-				update AI_CHAT_MSG set AIM_SKIP_APPEND=1 where ai_id=@ai_id \
+				update AI_CHAT_MSG set AIM_SKIP_APPEND=@_skip_true where ai_id=@ai_id \
 				and AIM_STEP=@_skip_step \
 				and AIM_PROMPT_NAME is not null and AIM_PROMPT_NAME<>'' \
-				and (AIM_SKIP_APPEND is null or AIM_SKIP_APPEND=0)""";
+				and (AIM_SKIP_APPEND is null or AIM_SKIP_APPEND=@_skip_false)""";
 		DataConnection.updateAndClose(sql, dbConfigName, rv);
 	}
 
@@ -352,14 +378,17 @@ public class ChatManagerDb {
 	 */
 	public String loadConversationContext(long aiId) {
 		rv.addOrUpdateValue("ai_id", aiId, "bigint", 100);
+		// 布尔列用参数比较，避免 PG BOOLEAN 与整数字面量类型不匹配
+		rv.addOrUpdateValue("_skip_append", 0, "boolean", 100);
 		String sql = """
-				select top 30 AIM_ROLE, AIM_MSG from AI_CHAT_MSG m
+				select AIM_ROLE, AIM_MSG from AI_CHAT_MSG m
 				inner join AI_CHAT c on m.AI_ID = c.AI_ID
 				where c.AI_ID = @ai_id
-				and isnull(m.AIM_SKIP_APPEND, 0) = 0
+				and (m.AIM_SKIP_APPEND is null or m.AIM_SKIP_APPEND = @_skip_append)
 				order by m.AIM_ID desc
 				""";
-		DTTable tb = DTTable.getJdbcTable(sql, dbConfigName, rv);
+		// 用分页接口代替 select top，由框架按数据库类型翻译（PG/MySQL: limit，MSSQL: top）
+		DTTable tb = DTTable.getJdbcTable(sql, "AIM_ID", 30, 1, dbConfigName, rv);
 		StringBuilder sb = new StringBuilder();
 		try {
 			for (int i = tb.getCount() - 1; i >= 0; i--) {
@@ -391,14 +420,13 @@ public class ChatManagerDb {
 	 * @return 父 chat 的 AI_ID，无父级或查询失败返回 {@code null}
 	 */
 	public Long queryParentAiId(long aiId) {
+		rv.addOrUpdateValue("ai_id", aiId, "bigint", 100);
 		String sql = "select AI_PID from AI_CHAT where AI_ID=@ai_id";
 		DTTable pidTb = DTTable.getJdbcTable(sql, dbConfigName, rv);
 		if (pidTb.getCount() == 0) {
 			return null;
 		}
 		try {
-			rv.addOrUpdateValue("ai_id", aiId, "bigint", 100);
-
 			Double pidObj = pidTb.getCell(0, "AI_PID").toDouble();
 			if (pidObj == null) {
 				return null;
@@ -421,9 +449,11 @@ public class ChatManagerDb {
 	 */
 	public DTTable queryParentUserMessages(long parentAiId) {
 		rv.addOrUpdateValue("parent_ai_id", parentAiId, "bigint", 100);
+		// 布尔列用参数比较，兼容 PG BOOLEAN / MSSQL BIT / MYSQL TINYINT
+		rv.addOrUpdateValue("_by_user", 1, "boolean", 100);
 		String sql = """
 				select AIM_MSG from AI_CHAT_MSG m
-				where m.AIM_BY_USER = 1 and m.AIM_ROLE = 'user'
+				where m.AIM_BY_USER = @_by_user and m.AIM_ROLE = 'user'
 				and m.AI_ID in (
 				  select AI_ID from AI_CHAT where AI_PID = @parent_ai_id
 				) order by m.AIM_ID

@@ -13,10 +13,8 @@
 package com.gdxsoft.ai.video.workflow.db;
 
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
 
-import org.json.JSONArray;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,6 +22,7 @@ import org.slf4j.LoggerFactory;
 import com.gdxsoft.easyweb.data.DTTable;
 import com.gdxsoft.easyweb.datasource.DataConnection;
 import com.gdxsoft.easyweb.script.RequestValue;
+import com.gdxsoft.easyweb.utils.Utils;
 
 /**
  * 视频创建工作流数据库操作类。
@@ -105,7 +104,7 @@ public class WorkflowDb {
      * @return WFD_ID（已存在则返回已有记录的 ID）
      */
     public long registerWorkflowDef(String name, String description, String version, String jsonContent) {
-        String md5 = md5(jsonContent);
+        String md5 = Utils.md5(jsonContent);
 
         // 先查是否已存在同 MD5 的记录
         rv.addOrUpdateValue("_wfd_md5", md5);
@@ -166,7 +165,7 @@ public class WorkflowDb {
      */
     public long submitInstance(long wfdId, String uid, String input, int priority) {
         rv.addOrUpdateValue("_wfd_id", wfdId, "bigint", 100);
-        rv.addOrUpdateValue("_wfi_uid", uid);
+        rv.addOrUpdateValue("_wfi_uid", uid, "uuid", 3);
         rv.addOrUpdateValue("_wfi_input", input != null ? input : "");
         rv.addOrUpdateValue("_wfi_priority", priority, "int", 100);
 
@@ -329,7 +328,7 @@ public class WorkflowDb {
      * @return 实例 JSON（大写键名），不存在返回 null
      */
     public JSONObject queryInstanceByUid(String uid) {
-        rv.addOrUpdateValue("_wfi_uid", uid);
+        rv.addOrUpdateValue("_wfi_uid", uid, "uuid", 36);
         String sql = "SELECT * FROM AI_WF_INSTANCE WHERE WFI_UID=@_wfi_uid";
         DTTable tb = DTTable.getJdbcTable(sql, dbConfigName, rv);
         if (tb.getCount() == 0) return null;
@@ -558,7 +557,7 @@ public class WorkflowDb {
     public int incrementTaskRetry(long taskId) {
         rv.addOrUpdateValue("_wft_id", taskId, "bigint", 100);
         // 先查当前重试次数
-        String querySql = "SELECT isnull(WFT_RETRY_COUNT, 0) AS RETRY FROM AI_WF_TASK WHERE WFT_ID=@_wft_id";
+        String querySql = "SELECT coalesce(WFT_RETRY_COUNT, 0) AS RETRY FROM AI_WF_TASK WHERE WFT_ID=@_wft_id";
         DTTable tb = DTTable.getJdbcTable(querySql, dbConfigName, rv);
         if (tb.getCount() == 0) return 0;
         int currentRetry;
@@ -690,7 +689,7 @@ public class WorkflowDb {
         rv.addOrUpdateValue("_file_path", url != null ? url : "");
         rv.addOrUpdateValue("_file_real_path", localPath != null ? localPath : "");
         rv.addOrUpdateValue("_file_des", metadata != null ? metadata : "");
-        rv.addOrUpdateValue("_file_unid", java.util.UUID.randomUUID().toString());
+        rv.addOrUpdateValue("_file_unid", java.util.UUID.randomUUID().toString(), "uuid", 36);
 
         String sql = """
                 INSERT INTO AI_CHAT_EXP_ATTS (
@@ -794,20 +793,5 @@ public class WorkflowDb {
     //  辅助方法
     // =======================================================
 
-    /**
-     * 计算字符串 MD5。
-     */
-    private String md5(String text) {
-        try {
-            java.security.MessageDigest md = java.security.MessageDigest.getInstance("MD5");
-            byte[] digest = md.digest(text.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-            StringBuilder sb = new StringBuilder();
-            for (byte b : digest) {
-                sb.append(String.format("%02x", b));
-            }
-            return sb.toString();
-        } catch (Exception e) {
-            return String.valueOf(text.hashCode());
-        }
-    }
+     
 }

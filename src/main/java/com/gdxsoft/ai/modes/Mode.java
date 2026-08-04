@@ -75,6 +75,7 @@ public class Mode {
 		if (StringUtils.isBlank(requestId)) {
 			return;
 		}
+		rv.addOrUpdateValue("request_id", requestId, "uuid", 36);
 		try {
 			String sql = "SELECT AIP_NAME, AIP_VAL FROM AI_CHAT_PARAMS p "
 				+ "INNER JOIN AI_CHAT c ON p.AI_ID = c.AI_ID "

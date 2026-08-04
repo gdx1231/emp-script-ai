@@ -114,8 +114,8 @@ public class AiChatParamsManager {
             LOGGER.debug("loadAiInfo: requestId 为空");
             return new AiChatInfo(0, 0);
         }
-        rv.addOrUpdateValue("request_id", requestId);
-        String sql = "select c.AI_ID, isnull(max(m.AIM_ID), 0) as LAST_AIM_ID "
+        rv.addOrUpdateValue("request_id", "uuid", requestId, 36);
+        String sql = "select c.AI_ID, coalesce(max(m.AIM_ID), 0) as LAST_AIM_ID "
                 + "from AI_CHAT c left join AI_CHAT_MSG m on c.AI_ID = m.AI_ID "
                 + "where c.AI_UID = @request_id group by c.AI_ID";
         try {
@@ -146,13 +146,16 @@ public class AiChatParamsManager {
         if (requestId == null || requestId.trim().isEmpty()) {
             return "";
         }
-        rv.addOrUpdateValue("request_id", requestId);
-        String sql = "select top 30 AIM_ROLE, AIM_MSG from AI_CHAT_MSG m "
+        rv.addOrUpdateValue("request_id", "uuid",  requestId, 36);
+        // 布尔列用参数比较，避免 PG BOOLEAN 与整数字面量类型不匹配
+        rv.addOrUpdateValue("_skip_append", 0, "boolean", 100);
+        String sql = "select AIM_ROLE, AIM_MSG from AI_CHAT_MSG m "
                 + "inner join AI_CHAT c on m.AI_ID = c.AI_ID "
                 + "where c.AI_UID = @request_id "
-                + "and isnull(m.AIM_SKIP_APPEND, 0) = 0 "
+                + "and (m.AIM_SKIP_APPEND is null or m.AIM_SKIP_APPEND = @_skip_append) "
                 + "order by m.AIM_ID desc";
-        DTTable tb = DTTable.getJdbcTable(sql, rv);
+        // 用分页接口代替 select top，由框架按数据库类型翻译（PG/MySQL: limit，MSSQL: top）
+        DTTable tb = DTTable.getJdbcTable(sql, "AIM_ID", 30, 1, "", rv);
         try {
 
             LOGGER.debug("loadConversationContext: 加载 {} 条消息", tb.getCount());
@@ -276,7 +279,7 @@ public class AiChatParamsManager {
             rv.addOrUpdateValue("mode", "getcity");
             rv.addOrUpdateValue("prompt", fullPrompt);
             String tempRequestId = java.util.UUID.randomUUID().toString();
-            rv.addOrUpdateValue("request_id", tempRequestId);
+            rv.addOrUpdateValue("request_id", "uuid", tempRequestId, 36);
             LOGGER.debug("callAiForExtraction: 配置完成, tempRequestId={}", tempRequestId);
 
             // 调用 AI
@@ -326,39 +329,24 @@ public class AiChatParamsManager {
      * @return AIM_ID 新插入的消息 ID
      */
     private static long recordToAiChatMsg(long aiId, String content, String role, RequestValue rv) {
-        long aimId = 0;
-        DataConnection cnn = null;
         try {
-            cnn = new DataConnection();
-            cnn.setRequestValue(rv);
-            cnn.setConfigName("");
-
-            // 插入消息记录
+            // 插入消息记录，布尔列按 boolean 类型绑定参数，兼容 PG BOOLEAN / MSSQL BIT / MYSQL TINYINT
             rv.addOrUpdateValue("AI_ID", aiId, "long", 100);
             rv.addOrUpdateValue("AIM_ROLE", role);
             rv.addOrUpdateValue("AIM_MSG", content);
-            rv.addOrUpdateValue("AIM_SKIP_APPEND", 1); // 标记为不追加到上下文
+            rv.addOrUpdateValue("AIM_SKIP_APPEND", 1, "boolean", 100); // 标记为不追加到上下文
 
             String insertSql = "INSERT INTO AI_CHAT_MSG (AI_ID, AIM_ROLE, AIM_MSG, AIM_SKIP_APPEND) "
                     + "VALUES (@AI_ID, @AIM_ROLE, @AIM_MSG, @AIM_SKIP_APPEND)";
-            cnn.executeUpdate(insertSql);
-
-            // 获取插入的 AIM_ID
-            String sql = "SELECT @@IDENTITY AS AIM_ID";
-            DTTable tb = DTTable.getJdbcTable(sql, rv);
-            if (tb.getCount() > 0) {
-                aimId = tb.getCell(0, "AIM_ID").toLong();
-            }
+            // 由框架按数据库类型获取自增 ID，替代 MSSQL 专属的 @@IDENTITY
+            long aimId = DataConnection.insertAndReturnAutoIdLong(insertSql, "", rv);
 
             LOGGER.debug("recordToAiChatMsg: 成功, aiId={}, role={}, aimId={}", aiId, role, aimId);
+            return aimId;
         } catch (Exception ex) {
             LOGGER.error("recordToAiChatMsg 失败: {}", ex.getMessage());
-        } finally {
-            if (cnn != null) {
-                cnn.close();
-            }
+            return 0;
         }
-        return aimId;
     }
 
     /**
