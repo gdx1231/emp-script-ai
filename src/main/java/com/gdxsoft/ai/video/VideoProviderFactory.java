@@ -18,6 +18,7 @@ public final class VideoProviderFactory {
             case JIMENG -> new com.gdxsoft.ai.video.providers.jimeng.JimengVideoProvider();
             case DOUBAO -> new com.gdxsoft.ai.video.providers.doubao.DoubaoVideoProvider();
             case QWEN   -> new com.gdxsoft.ai.video.providers.qwen.QwenVideoProvider();
+            case MINIMAX -> new com.gdxsoft.ai.video.providers.minimax.MiniMaxVideoProvider();
             case OPENAI_COMPAT -> new com.gdxsoft.ai.video.providers.openaiCompat.OpenAiCompatVideoProvider();
         };
     }

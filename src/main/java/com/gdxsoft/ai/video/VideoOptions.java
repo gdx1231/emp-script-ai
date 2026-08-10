@@ -77,6 +77,9 @@ public class VideoOptions {
     /** 是否启用联网搜索（Seedance 2.0），仅纯文本输入时有效 */
     private Boolean enableWebSearch;
 
+    /** 是否添加水印（Seedance 2.0）。null 表示沿用 provider instance 默认值 */
+    private Boolean watermark;
+
     /** 多张参考图片 URL 列表（最多 9 张），用于多模态参考 */
     private List<String> refImageUrls;
 
@@ -277,6 +280,15 @@ public class VideoOptions {
 
     /** 设置是否启用联网搜索（setter） */
     public VideoOptions setEnableWebSearch(Boolean v) { this.enableWebSearch = v; return this; }
+
+    /** @return 是否添加水印；null 表示使用 provider instance 默认值 */
+    public Boolean getWatermark() { return watermark; }
+
+    /** 设置是否添加水印（fluent）。null = 沿用 provider 默认 */
+    public VideoOptions watermark(Boolean v) { this.watermark = v; return this; }
+
+    /** 设置是否添加水印（setter） */
+    public VideoOptions setWatermark(Boolean v) { this.watermark = v; return this; }
 
     // ==================== 多模态参考素材列表 ====================
 

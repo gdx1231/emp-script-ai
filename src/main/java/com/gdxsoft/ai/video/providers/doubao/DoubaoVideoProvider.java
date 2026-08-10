@@ -224,8 +224,12 @@ public class DoubaoVideoProvider extends VideoProviderBase {
         if (opts.getDuration() != null) body.put("duration", opts.getDuration());
         if (opts.getAspectRatio() != null) body.put("ratio", opts.getAspectRatio());
         if (opts.getResolution() != null) body.put("resolution", opts.getResolution());
-        body.put("watermark", watermark);
         if (opts.getGenerateAudio() != null) body.put("generate_audio", opts.getGenerateAudio());
+        // watermark: prefer per-task override on VideoOptions, fall back to
+        // the provider instance default. Keeps existing
+        // provider.setWatermark() callers working (e.g. legacy tests).
+        Boolean wm = opts.getWatermark();
+        body.put("watermark", wm != null ? wm.booleanValue() : watermark);
         if (opts.getReturnLastFrame() != null) body.put("return_last_frame", opts.getReturnLastFrame());
         if (opts.getServiceTier() != null) body.put("service_tier", opts.getServiceTier());
 
