@@ -26,6 +26,28 @@ public interface IVideoProvider {
      */
     VideoResponse generate(VideoRequest request) throws IOException, InterruptedException;
 
+    /**
+     * Submit task (non-blocking). Returns immediately with task_id.
+     * <p>
+     * Default implementation throws {@link UnsupportedOperationException}.
+     * Providers that support async submission (Doubao / MiniMax / Qwen) override this.
+     */
+    default VideoTaskSubmit submitTask(VideoRequest request) throws Exception {
+        throw new UnsupportedOperationException(
+            getProviderType().getName() + " does not support non-blocking submitTask");
+    }
+
+    /**
+     * Poll task status (non-blocking). Returns current status without blocking.
+     * <p>
+     * Default implementation throws {@link UnsupportedOperationException}.
+     * Providers that support async polling (Doubao / MiniMax / Qwen) override this.
+     */
+    default VideoTaskStatus pollTask(String taskId, VideoOptions opts) throws Exception {
+        throw new UnsupportedOperationException(
+            getProviderType().getName() + " does not support non-blocking pollTask");
+    }
+
     /** Debug curl representation. */
     String curl(VideoRequest request);
 }

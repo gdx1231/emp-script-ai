@@ -52,13 +52,8 @@ public class VideoTaskRunner {
             logger.logCurl(curlOf(request));
         }
 
-        // 提交
-        VideoTaskSubmit result;
-        if (provider instanceof com.gdxsoft.ai.video.providers.doubao.DoubaoVideoProvider dp) {
-            result = dp.submitTask(request);
-        } else {
-            throw new UnsupportedOperationException("非阻塞模式仅支持 DoubaoVideoProvider");
-        }
+        // 提交（非阻塞）
+        VideoTaskSubmit result = provider.submitTask(request);
 
         // 日志：创建任务原始返回
         if (logger != null) {
@@ -72,12 +67,7 @@ public class VideoTaskRunner {
      * 查询任务状态（非阻塞），自动记录：查询返回 + 成功/失败结果。
      */
     public VideoTaskStatus poll(String taskId, VideoOptions opts) throws Exception {
-        VideoTaskStatus st;
-        if (provider instanceof com.gdxsoft.ai.video.providers.doubao.DoubaoVideoProvider dp) {
-            st = dp.pollTask(taskId, opts);
-        } else {
-            throw new UnsupportedOperationException("非阻塞模式仅支持 DoubaoVideoProvider");
-        }
+        VideoTaskStatus st = provider.pollTask(taskId, opts);
 
         if (logger == null) return st;
 
@@ -102,10 +92,7 @@ public class VideoTaskRunner {
     public IVideoProvider getProvider() { return provider; }
 
     private String curlOf(VideoRequest request) {
-        if (provider instanceof com.gdxsoft.ai.video.providers.doubao.DoubaoVideoProvider dp) {
-            return dp.curl(request);
-        }
-        return "";
+        return provider.curl(request);
     }
 
     private JSONObject buildOptsJson(VideoOptions opts) {

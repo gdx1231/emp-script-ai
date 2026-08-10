@@ -601,6 +601,11 @@ public class ChatManagerDb {
 	 */
 	public JSONObject checkProviderAndModel(String aiProvider, String aiModel, String apiOwnerId) {
 		JSONObject result = new JSONObject();
+		RequestValue rv = new RequestValue();
+		rv.addOrUpdateValue("ai_model", aiModel);
+		rv.addOrUpdateValue("ai_provider", aiProvider);
+		rv.addOrUpdateValue("api_owner_id", apiOwnerId);
+		
 		String sql = """
 				select a.*, b.ap_status from AI_PROVIDER_MODEL a
 				inner join AI_PROVIDER b on a.AP_CODE = b.AP_CODE
@@ -628,8 +633,7 @@ public class ChatManagerDb {
 			}
 			String sql1 = "select APU_URL, APU_KEY from AI_PROVIDER_URL where APU_STATUS='USED' and ap_code=@ai_provider ";
 			if (apiOwnerId != null) {
-				rv.addOrUpdateValue("_APU_OWN_ID", apiOwnerId);
-				sql1 += " and APU_OWN_ID = @_APU_OWN_ID ";
+				sql1 += " and APU_OWN_ID = @api_owner_id ";
 			}
 			sql1 += " order by APU_MDATE desc";
 			DTTable tb1 = DTTable.getJdbcTable(sql1, dbConfigName, rv);
