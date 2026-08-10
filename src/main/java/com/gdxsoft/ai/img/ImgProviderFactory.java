@@ -25,6 +25,7 @@ public final class ImgProviderFactory {
             case OPENAI_COMPAT -> new com.gdxsoft.ai.img.providers.openaiCompat.OpenAiCompatImgProvider();
             case STABILITY     -> new com.gdxsoft.ai.img.providers.stability.StabilityImgProvider();
             case QWEN          -> new com.gdxsoft.ai.img.providers.qwen.QwenImgProvider();
+            case WANX          -> new com.gdxsoft.ai.img.providers.qwen.QwenImgWanxProvider();
             case DOUBAO        -> new com.gdxsoft.ai.img.providers.doubao.DoubaoImgProvider();
             case GROK          -> new com.gdxsoft.ai.img.providers.grok.GrokImgProvider();
         };

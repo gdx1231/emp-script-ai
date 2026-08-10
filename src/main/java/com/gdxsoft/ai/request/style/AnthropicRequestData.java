@@ -15,6 +15,17 @@ import com.gdxsoft.ai.request.*;
 public abstract class AnthropicRequestData extends RequestDataBase {
 
 	private static final int DEFAULT_MAX_TOKENS = 4096;
+	/**
+	 * Anthropic 扩展思考支持的模型名称关键字（忽略大小写）。
+	 * <ul>
+	 *   <li>Claude 4 系列（opus / sonnet / 1 Opus）</li>
+	 *   <li>Claude 3.7 sonnet（命名实际为 {@code claude-3-7-sonnet-*}，故同时匹配连字符写法）</li>
+	 * </ul>
+	 * Claude 3.5 / 3 / Haiku / 老版本不接收 budget_tokens。
+	 */
+	private static final String[] EXTENDED_THINKING_MODEL_KEYWORDS = {
+			"claude-4", "claude-3-7", "claude-3.7", "claude-opus-4", "claude-sonnet-4"
+	};
 	protected JSONArray tools;
 	protected String toolChoice;
 
@@ -37,6 +48,56 @@ public abstract class AnthropicRequestData extends RequestDataBase {
 	@Override
 	public IRequestData thinking(boolean thinking) {
 		return this; // Anthropic 不直接支持顶层 thinking 参数
+	}
+
+	/**
+	 * 设置 Anthropic 扩展思考预算。
+	 * <p>
+	 * 当 {@code budgetToken > 0} 且 model 名包含 {@link #EXTENDED_THINKING_MODEL_KEYWORDS}
+	 * 之一时，写入 {@code {"thinking": {"type": "enabled", "budget_tokens": N}}}。
+	 * 否则视为不支持，原 thinking 字段保持不变。
+	 * 传入 &lt;= 0 视为清除预算（但 Anthropic 协议无单独 "budget_tokens 关闭" 语义，
+	 * 因此仅清空缓存的 thinkingBudget 字段，不主动发送 disabled）。
+	 */
+	@Override
+	public IRequestData thinkingBudget(int budgetToken) {
+		if (budgetToken <= 0) {
+			super.thinkingBudget(0);
+			return this;
+		}
+		if (!isExtendedThinkingModel(this.model)) {
+			// 模型不支持，记录缓存值但不写入请求体（避免 400 错误）
+			super.thinkingBudget(budgetToken);
+			return this;
+		}
+		JSONObject thinkingObj = parameters.optJSONObject("thinking");
+		if (thinkingObj == null) {
+			thinkingObj = new JSONObject();
+		}
+		thinkingObj.put("type", "enabled");
+		thinkingObj.put("budget_tokens", budgetToken);
+		parameters.put("thinking", thinkingObj);
+		super.thinkingBudget(budgetToken);
+		return this;
+	}
+
+	/**
+	 * 判断给定 model 名是否支持 Anthropic 扩展思考（关键词子串匹配，忽略大小写）。
+	 *
+	 * @param modelName 模型名（可为 null）
+	 * @return 支持返回 true
+	 */
+	public static boolean isExtendedThinkingModel(String modelName) {
+		if (modelName == null) {
+			return false;
+		}
+		String lower = modelName.toLowerCase();
+		for (String kw : EXTENDED_THINKING_MODEL_KEYWORDS) {
+			if (lower.contains(kw)) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	@Override

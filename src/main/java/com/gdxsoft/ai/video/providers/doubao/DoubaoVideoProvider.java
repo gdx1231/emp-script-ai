@@ -183,22 +183,39 @@ public class DoubaoVideoProvider extends VideoProviderBase {
         textBlock.put("text", opts.getPrompt());
         content.put(textBlock);
 
+        // 严格首帧（first_frame）：视频第一帧与该图一致，优先输出
+        if (opts.getFirstFrameUrl() != null && !opts.getFirstFrameUrl().isEmpty()) {
+            content.put(buildContentBlock("image_url", opts.getFirstFrameUrl(), "first_frame"));
+        }
+
+        // 严格尾帧（last_frame）：视频最后一帧与该图一致
+        if (opts.getLastFrameUrl() != null && !opts.getLastFrameUrl().isEmpty()) {
+            content.put(buildContentBlock("image_url", opts.getLastFrameUrl(), "last_frame"));
+        }
+
         // 参考图片（列表 + 单个兼容）
         List<String> imageUrls = collectUrls(opts.getRefImageUrls(), opts.getRefImageUrl());
         for (String url : imageUrls) {
-            content.put(buildContentBlock("image_url", "url", url, "reference_image"));
+            // 首帧/尾帧 URL 不重复以 reference_image 提交
+            if (opts.getFirstFrameUrl() != null && opts.getFirstFrameUrl().equals(url)) {
+                continue;
+            }
+            if (opts.getLastFrameUrl() != null && opts.getLastFrameUrl().equals(url)) {
+                continue;
+            }
+            content.put(buildContentBlock("image_url", url, "reference_image"));
         }
 
         // 参考视频（列表 + 单个兼容）
         List<String> videoUrls = collectUrls(opts.getRefVideoUrls(), opts.getRefVideoUrl());
         for (String url : videoUrls) {
-            content.put(buildContentBlock("video_url", "url", url, "reference_video"));
+            content.put(buildContentBlock("video_url", url, "reference_video"));
         }
 
         // 参考音频（列表 + 单个兼容）
         List<String> audioUrls = collectUrls(opts.getRefAudioUrls(), opts.getRefAudioUrl());
         for (String url : audioUrls) {
-            content.put(buildContentBlock("audio_url", "url", url, "reference_audio"));
+            content.put(buildContentBlock("audio_url", url, "reference_audio"));
         }
 
         body.put("content", content);
@@ -226,13 +243,15 @@ public class DoubaoVideoProvider extends VideoProviderBase {
 
     /**
      * 构造单个 content block。
+     * 外层键与 type 一致：image_url / video_url / audio_url 下挂 {"url": ...}
+     * （Seedance 要求 {"type":"image_url","image_url":{"url":"..."},"role":"reference_image"}）
      */
-    private JSONObject buildContentBlock(String type, String innerKey, String url, String role) {
+    private JSONObject buildContentBlock(String type, String url, String role) {
         JSONObject block = new JSONObject();
         block.put("type", type);
         JSONObject inner = new JSONObject();
         inner.put("url", url);
-        block.put(innerKey, inner);
+        block.put(type, inner);
         block.put("role", role);
         return block;
     }

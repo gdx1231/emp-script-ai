@@ -20,38 +20,33 @@ import com.gdxsoft.ai.img.ImgResponse;
 import com.gdxsoft.ai.img.ImgResponse.GeneratedImage;
 
 /**
- * Qwen (Tongyi Wanxiang / 通义万相) image generation provider.
+ * Qwen-image-3.0 multimodal-generation provider.
  * <p>
- * POSTs JSON to {@code https://dashscope.aliyuncs.com/api/v1/services/aigc/text2image/image-synthesis}.
+ * Uses the DashScope multimodal-generation API:
+ * {@code https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation}
  * <p>
- * Qwen's API differs from OpenAI in several ways:
- * <ul>
- *   <li>Prompt is nested under {@code input.prompt} (not top-level)</li>
- *   <li>Size uses {@code *} separator (e.g. {@code 1024*1024})</li>
- *   <li>Response uses {@code output.results[].url} (not {@code data[].url})</li>
- *   <li>Supports async task mode via {@code X-DashScope-Async} header</li>
- *   <li>Supports negative_prompt, seed, and prompt_extend</li>
- * </ul>
+ * Supports both T2I (text-to-image) and I2I (image-to-image, 1-3 reference images).
  * <p>
- * Supported models: {@code wanx2.1-t2i-turbo}, {@code wanx2.0-t2i-turbo}, {@code wanx-v1}
+ * Supported models: {@code qwen-image-3.0-pro}, {@code qwen-image-3.0}
+ * <p>
+ * For the legacy wanx (通义万相) text2image API, use {@link QwenImgWanxProvider}.
  *
  * @since 1.2.0
  */
 public class QwenImgProvider extends ImgProviderBase {
-    public static final String DEFAULT_URL =
-            "https://dashscope.aliyuncs.com/api/v1/services/aigc/text2image/image-synthesis";
-    public static final String DEFAULT_MODEL = "wanx2.1-t2i-turbo";
 
-    /** Max polling attempts for async tasks. */
-    private static final int MAX_POLL_COUNT = 60;
-    /** Delay between polls in milliseconds. */
-    private static final long POLL_DELAY_MS = 2000;
+    public static final String DEFAULT_URL =
+            "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation";
+    public static final String DEFAULT_MODEL = "qwen-image-3.0-pro";
 
     /**
-     * Qwen now requires async mode for most accounts. Default is true.
-     * When sync fails with "does not support synchronous calls", auto-falls back to async.
+     * Workspace ID for optimized domain.
+     * When set, calls use {@code https://{workspaceId}.cn-beijing.maas.aliyuncs.com/api/v1/...}
      */
-    private boolean asyncMode = true;
+    private String workspaceId;
+
+    /** API region: "cn-beijing" (default) or "ap-southeast-1". */
+    private String region = "cn-beijing";
 
     public QwenImgProvider() {
         this.apiUrl = DEFAULT_URL;
@@ -60,148 +55,180 @@ public class QwenImgProvider extends ImgProviderBase {
     @Override
     public ImgProviderType getProviderType() { return ImgProviderType.QWEN; }
 
-    /**
-     * Enable/disable async mode. When enabled, the provider submits a task and polls for
-     * completion. Default is true because Qwen has deprecated sync API for most accounts.
-     */
-    public void setAsyncMode(boolean asyncMode) { this.asyncMode = asyncMode; }
-    public boolean isAsyncMode() { return asyncMode; }
+    // ======================== Configuration ========================
+
+    /** Set workspace ID for optimized domain. */
+    public void setWorkspaceId(String workspaceId) { this.workspaceId = workspaceId; }
+    public String getWorkspaceId() { return workspaceId; }
+
+    /** Set region for workspace domain (default "cn-beijing"). */
+    public void setRegion(String region) { this.region = region; }
+    public String getRegion() { return region; }
+
+    // ======================== Generate (sync) ========================
 
     @Override
     public ImgResponse generate(ImgRequest request) throws IOException, InterruptedException {
         if (apiKey == null || apiKey.isEmpty()) {
-            throw new IllegalStateException("Qwen image generation requires an API key (DashScope API Key)");
+            throw new IllegalStateException(
+                    "Qwen-image generation requires an API key (DashScope API Key)");
         }
         JSONObject body = buildRequestBody(request.getOptions());
-
-        if (asyncMode) {
-            return generateAsync(body, request.getOptions());
-        }
-
-        // Try sync first, auto-fallback to async if sync is not supported
-        try {
-            String responseBody = postJson(body, false);
-            return parseResponse(new JSONObject(responseBody), request.getOptions());
-        } catch (IOException e) {
-            String msg = e.getMessage();
-            if (msg.contains("does not support synchronous calls")
-                    || msg.contains("AccessDenied")) {
-                LOGGER.info("Qwen sync not supported for this account, auto-falling back to async mode");
-                return generateAsync(body, request.getOptions());
-            }
-            throw e;
-        }
+        String url = resolveUrl();
+        String responseBody = postJson(url, body);
+        return parseResponse(new JSONObject(responseBody), request.getOptions());
     }
 
-    @Override
-    public String curl(ImgRequest request) {
-        JSONObject body = buildRequestBody(request.getOptions());
-        StringBuilder sb = new StringBuilder();
-        sb.append("curl -X POST '").append(apiUrl).append("' \\\n");
-        sb.append("  -H 'Authorization: Bearer ****' \\\n");
-        sb.append("  -H 'Content-Type: application/json' \\\n");
-        if (asyncMode) {
-            sb.append("  -H 'X-DashScope-Async: enable' \\\n");
-        }
-        sb.append("  -d '").append(body.toString().replace("'", "'\\''")).append("'");
-        return sb.toString();
-    }
+    // ======================== Request body ========================
 
     /**
-     * Build the JSON request body in Qwen DashScope format.
-     * Visible for testing.
+     * Build request body for qwen-image-3.0 multimodal-generation API.
+     *
+     * <pre>{@code
+     * // T2I
+     * {
+     *   "model": "qwen-image-3.0-pro",
+     *   "input": {
+     *     "messages": [{
+     *       "role": "user",
+     *       "content": [{"text": "prompt"}]
+     *     }]
+     *   },
+     *   "parameters": { "prompt_extend": true, "size": "1024*1024", "n": 1 }
+     * }
+     *
+     * // I2I (with reference images)
+     * {
+     *   ...,
+     *   "input": { "messages": [{ "role": "user", "content": [
+     *     {"image": "url1"}, {"image": "url2"}, {"text": "instruction"}
+     *   ]}]}
+     * }
+     * }</pre>
      */
     public JSONObject buildRequestBody(ImgOptions opts) {
         JSONObject body = new JSONObject();
         body.put("model", opts.getModel() != null ? opts.getModel() : DEFAULT_MODEL);
 
-        // input block
+        // ---- input.messages ----
         JSONObject input = new JSONObject();
-        input.put("prompt", opts.getPrompt());
-        if (opts.getNegativePrompt() != null) {
-            input.put("negative_prompt", opts.getNegativePrompt());
+        JSONArray messages = new JSONArray();
+        JSONObject userMsg = new JSONObject();
+        userMsg.put("role", "user");
+
+        JSONArray content = new JSONArray();
+
+        // Reference images (I2I): 1-3 images
+        List<String> refs = resolveRefImages(opts, 3);
+        if (refs != null) {
+            for (String refUrl : refs) {
+                JSONObject imgObj = new JSONObject();
+                imgObj.put("image", refUrl);
+                content.put(imgObj);
+            }
         }
-        // Image-to-image: reference image URL
-        if (opts.getRefImageUrl() != null && !opts.getRefImageUrl().isEmpty()) {
-            input.put("ref_image", opts.getRefImageUrl());
-        }
+
+        // Text prompt (required)
+        JSONObject textObj = new JSONObject();
+        textObj.put("text", opts.getPrompt());
+        content.put(textObj);
+
+        userMsg.put("content", content);
+        messages.put(userMsg);
+        input.put("messages", messages);
         body.put("input", input);
 
-        // parameters block
+        // ---- parameters ----
         JSONObject params = new JSONObject();
-        if (opts.getSize() != null) {
-            // Qwen uses * as separator (e.g., 1024*1024)
-            params.put("size", opts.getSize().replace("x", "*"));
+
+        if (opts.getPromptExtend() != null) {
+            params.put("prompt_extend", opts.getPromptExtend());
+        } else {
+            params.put("prompt_extend", true);
+        }
+        if (opts.getPromptExtendMode() != null) {
+            params.put("prompt_extend_mode", opts.getPromptExtendMode());
+        }
+        if (opts.getSize() != null && !opts.getSize().isBlank()) {
+            String size = opts.getSize().trim()
+                    .replace("x", "*").replace("X", "*");
+            if (!size.matches("\\d+\\*\\d+")) {
+                throw new IllegalArgumentException(
+                        "size must be '<width>*<height>', got: '" + opts.getSize() + "'");
+            }
+            params.put("size", size);
         }
         if (opts.getN() != null && opts.getN() > 0) {
             params.put("n", opts.getN());
         }
+        if (opts.getNegativePrompt() != null) {
+            params.put("negative_prompt", opts.getNegativePrompt());
+        }
         if (opts.getSeed() != null) {
-            params.put("seed", opts.getSeed());
+            long seed = opts.getSeed();
+            if (seed < 0 || seed > 2147483647L) {
+                throw new IllegalArgumentException(
+                        "seed must be in [0, 2147483647], got: " + seed);
+            }
+            params.put("seed", seed);
         }
-        if (opts.getSteps() != null) {
-            params.put("steps", opts.getSteps());
-        }
-        if (opts.getStyle() != null) {
-            params.put("style", opts.getStyle());
-        }
-        // Image-to-image: ref strength and mode
-        if (opts.getRefStrength() != null) {
-            params.put("ref_strength", opts.getRefStrength());
-        }
-        if (opts.getRefMode() != null) {
-            params.put("ref_mode", opts.getRefMode());
+        if (opts.getWatermark() != null) {
+            params.put("watermark", opts.getWatermark());
         }
         body.put("parameters", params);
 
         return body;
     }
 
+    // ======================== Response parsing ========================
+
     /**
-     * Parse the Qwen DashScope JSON response into a unified {@link ImgResponse}.
-     * <p>
-     * Handles both sync responses and async task responses.
+     * Parse qwen-image-3.0 response.
      *
-     * @param root Qwen API response JSON
-     * @param opts original options for model context
+     * <pre>{@code
+     * {
+     *   "output": {
+     *     "choices": [{
+     *       "finish_reason": "stop",
+     *       "message": {
+     *         "content": [{"image": "url"}], "role": "assistant"
+     *       }
+     *     }]
+     *   },
+     *   "usage": { "output_height": 1024, "output_width": 1024, ... },
+     *   "request_id": "..."
+     * }
+     * }</pre>
      */
     public ImgResponse parseResponse(JSONObject root, ImgOptions opts) {
-        // Check for async task status
-        JSONObject output = root.optJSONObject("output");
-        if (output != null) {
-            String taskStatus = output.optString("task_status", null);
-            if ("FAILED".equals(taskStatus) || "CANCELED".equals(taskStatus)
-                    || "UNKNOWN".equals(taskStatus)) {
-                String msg = output.optString("message", "Unknown error");
-                String code = output.optString("code", "");
-                throw new RuntimeException(
-                        "Qwen image generation " + taskStatus + ": [" + code + "] " + msg);
-            }
-            if ("PENDING".equals(taskStatus) || "RUNNING".equals(taskStatus)) {
-                // Async task not yet complete — return empty response with raw data
-                return new ImgResponse(new ArrayList<>(), null, null,
-                        opts.getModel(), null, root);
-            }
+        // Error response
+        if (root.has("code") && root.has("message")) {
+            String code = root.optString("code", "");
+            String message = root.optString("message", "Unknown error");
+            throw new RuntimeException("Qwen-image error: [" + code + "] " + message);
         }
 
         String model = root.optString("model", opts.getModel());
-        String requestId = root.optString("request_id", null);
 
         List<GeneratedImage> images = new ArrayList<>();
+        JSONObject output = root.optJSONObject("output");
         if (output != null) {
-            JSONArray results = output.optJSONArray("results");
-            if (results != null) {
-                for (int i = 0; i < results.length(); i++) {
-                    JSONObject item = results.getJSONObject(i);
-                    String url = item.optString("url", null);
-                    String code = item.optString("code", null);
-                    // Qwen partial failure: individual result may have code but no url
-                    if (url != null && !url.isEmpty()) {
-                        String revisedPrompt = item.optString("revised_prompt", null);
-                        images.add(new GeneratedImage(url, null, revisedPrompt));
-                    } else if (code != null) {
-                        LOGGER.warn("Qwen image {} failed: code={}, message={}",
-                                i, code, item.optString("message", ""));
+            JSONArray choices = output.optJSONArray("choices");
+            if (choices != null) {
+                for (int i = 0; i < choices.length(); i++) {
+                    JSONObject choice = choices.getJSONObject(i);
+                    JSONObject message = choice.optJSONObject("message");
+                    if (message != null) {
+                        JSONArray content = message.optJSONArray("content");
+                        if (content != null) {
+                            for (int j = 0; j < content.length(); j++) {
+                                JSONObject item = content.getJSONObject(j);
+                                String imgUrl = item.optString("image", null);
+                                if (imgUrl != null && !imgUrl.isEmpty()) {
+                                    images.add(new GeneratedImage(imgUrl, null, null));
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -211,96 +238,52 @@ public class QwenImgProvider extends ImgProviderBase {
         return new ImgResponse(images, null, null, model, usage, root);
     }
 
-    // --- Async task support ---
+    // ======================== URL resolution ========================
 
     /**
-     * Submit a task in async mode, then poll until completion.
+     * Resolve API URL, preferring workspace-specific domain when configured.
      */
-    private ImgResponse generateAsync(JSONObject body, ImgOptions opts)
-            throws IOException, InterruptedException {
-        // 1) Submit task
-        String submitBody = postJson(body, true);
-        JSONObject submitJson = new JSONObject(submitBody);
-        JSONObject output = submitJson.optJSONObject("output");
-        if (output == null) {
-            throw new IOException("Qwen async: no output in response: " + submitBody);
+    private String resolveUrl() {
+        if (apiUrl != null && !apiUrl.equals(DEFAULT_URL)) {
+            return apiUrl;
         }
-        String taskId = output.optString("task_id", null);
-        if (taskId == null || taskId.isEmpty()) {
-            // Might already be complete
-            return parseResponse(submitJson, opts);
+        if (workspaceId != null && !workspaceId.isEmpty()) {
+            String r = region != null ? region : "cn-beijing";
+            return "https://" + workspaceId + "." + r + ".maas.aliyuncs.com"
+                    + "/api/v1/services/aigc/multimodal-generation/generation";
         }
-
-        // 2) Poll for result — derive task URL from the same base as apiUrl
-        String taskUrl = deriveTaskUrl(taskId);
-        for (int i = 0; i < MAX_POLL_COUNT; i++) {
-            Thread.sleep(POLL_DELAY_MS);
-
-            HttpClient client = HttpUtils.createHttpClient();
-            HttpRequest pollReq = HttpRequest.newBuilder(URI.create(taskUrl))
-                    .header("Authorization", "Bearer " + apiKey)
-                    .GET()
-                    .build();
-
-            HttpResponse<String> pollResp = client.send(pollReq, HttpResponse.BodyHandlers.ofString());
-            if (pollResp.statusCode() / 100 != 2) {
-                throw new IOException("Qwen poll HTTP " + pollResp.statusCode() + ": " + pollResp.body());
-            }
-
-            JSONObject pollJson = new JSONObject(pollResp.body());
-            JSONObject pollOutput = pollJson.optJSONObject("output");
-            if (pollOutput != null) {
-                String status = pollOutput.optString("task_status", "");
-                if ("SUCCEEDED".equals(status)) {
-                    return parseResponse(pollJson, opts);
-                }
-                if ("FAILED".equals(status)) {
-                    String msg = pollOutput.optString("message", "Unknown");
-                    throw new IOException("Qwen task failed: " + msg);
-                }
-                // PENDING / RUNNING — continue polling
-            }
-        }
-        throw new IOException("Qwen async task timed out after " +
-                (MAX_POLL_COUNT * POLL_DELAY_MS / 1000) + "s, taskId=" + taskId);
+        return DEFAULT_URL;
     }
 
-    /**
-     * Derive the task poll URL from the same base domain as apiUrl.
-     * e.g. {@code https://dashscope.aliyuncs.com/api/v1/tasks/xxx}
-     * or   {@code https://xxx.cn-beijing.maas.aliyuncs.com/api/v1/tasks/xxx}
-     */
-    private String deriveTaskUrl(String taskId) {
-        try {
-            URI uri = URI.create(apiUrl);
-            String scheme = uri.getScheme();
-            String host = uri.getHost();
-            int port = uri.getPort();
-            String base = port > 0
-                    ? scheme + "://" + host + ":" + port
-                    : scheme + "://" + host;
-            return base + "/api/v1/tasks/" + taskId;
-        } catch (Exception e) {
-            // Fallback to default
-            return "https://dashscope.aliyuncs.com/api/v1/tasks/" + taskId;
-        }
-    }
+    // ======================== HTTP ========================
 
-    private String postJson(JSONObject body, boolean async) throws IOException, InterruptedException {
+    private String postJson(String url, JSONObject body) throws IOException, InterruptedException {
         HttpClient client = HttpUtils.createHttpClient();
-        HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(apiUrl))
+        HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(url))
                 .header("Content-Type", "application/json")
                 .header("Authorization", "Bearer " + apiKey)
                 .POST(HttpRequest.BodyPublishers.ofString(body.toString()));
-
-        if (async) {
-            builder.header("X-DashScope-Async", "enable");
-        }
 
         HttpResponse<String> resp = client.send(builder.build(), HttpResponse.BodyHandlers.ofString());
         if (resp.statusCode() / 100 != 2) {
             throw new IOException("HTTP " + resp.statusCode() + ": " + resp.body());
         }
         return resp.body();
+    }
+
+    // ======================== Helpers ========================
+
+    // ======================== curl (debug) ========================
+
+    @Override
+    public String curl(ImgRequest request) {
+        JSONObject body = buildRequestBody(request.getOptions());
+        String url = resolveUrl();
+        StringBuilder sb = new StringBuilder();
+        sb.append("curl -X POST '").append(url).append("' \\\n");
+        sb.append("  -H 'Authorization: Bearer ****' \\\n");
+        sb.append("  -H 'Content-Type: application/json' \\\n");
+        sb.append("  -d '").append(body.toString().replace("'", "'\\''")).append("'");
+        return sb.toString();
     }
 }

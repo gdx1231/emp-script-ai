@@ -30,6 +30,12 @@ public class Mode {
 	private double topP = 1.0; // default
 	// Whether to enable provider-specific "thinking" capability if supported
 	private boolean thinking = false; // default false
+	// Numeric thinking budget (tokens). 0 = use provider default (no override).
+	// Provider implementations translate this into their own format
+	// (e.g. Anthropic budget_tokens, Gemini thinkingConfig.thinkingBudget,
+	// Qwen thinking.budget, OpenRouter reasoning.max_tokens) and ignore
+	// it when the active model doesn't support a numeric budget.
+	private int thinkingBudget = 0; // default 0 (use provider/model default)
 	// Response format for mode outputs. Currently only 'text/json_object' is
 	// supported.
 	private String responseFormat;
@@ -452,6 +458,29 @@ public class Mode {
 	}
 
 	/**
+	 * 获取思考预算（token 数）。0 表示不覆盖 provider/model 的默认值。
+	 *
+	 * @return 思考预算 token 数
+	 */
+	public int getThinkingBudget() {
+		return thinkingBudget;
+	}
+
+	/**
+	 * 设置思考预算（token 数）。
+	 * <p>
+	 * 各 provider 会按自身协议转换为对应字段（如 Anthropic budget_tokens、
+	 * Gemini thinkingConfig.thinkingBudget、Qwen thinking.budget、
+	 * OpenRouter reasoning.max_tokens）。当 model 不支持数值化预算时被忽略。
+	 * 传入 0 表示清除覆盖，恢复 provider/model 的默认行为。
+	 *
+	 * @param thinkingBudget 思考预算 token 数（&lt;=0 表示不覆盖）
+	 */
+	public void setThinkingBudget(int thinkingBudget) {
+		this.thinkingBudget = thinkingBudget > 0 ? thinkingBudget : 0;
+	}
+
+	/**
 	 * 返回响应格式，目前仅支持 "text"
 	 * 
 	 * @return responseFormat
@@ -721,6 +750,7 @@ public class Mode {
 		copy.setTemperature(this.temperature);
 		copy.setTopP(this.topP);
 		copy.setThinking(this.thinking);
+		copy.setThinkingBudget(this.thinkingBudget);
 		copy.setResponseFormat(this.responseFormat);
 		copy.setUiWelcome(this.uiWelcome);
 		copy.setUiComplete(this.uiComplete);

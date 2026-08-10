@@ -1,5 +1,8 @@
 package com.gdxsoft.ai.img;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.Map;
 
@@ -48,6 +51,7 @@ public abstract class ImgProviderBase implements IImgProvider {
         return key == null ? null : extras.get(key);
     }
 
+
     /**
      * Build a debug curl line header. Sensitive headers are masked.
      */
@@ -57,5 +61,60 @@ public abstract class ImgProviderBase implements IImgProvider {
         else if (isSensitive) sb.append("****'");
         else sb.append(value.replace("'", "'\\''")).append("'");
         return sb;
+    }
+
+    // ======================== Reference image resolution ========================
+
+    /**
+     * Resolve reference images from {@link ImgOptions}.
+     * <p>
+     * Prefers {@code refImageUrls} (plural), falls back to {@code refImageUrl} (singular).
+     * Filters out {@code null} and empty entries. Returns {@code null} if no valid references.
+     *
+     * @param opts image options
+     * @return list of valid image URLs, or {@code null} if none
+     */
+    protected static List<String> resolveRefImages(ImgOptions opts) {
+        return resolveRefImages(opts, 0);
+    }
+
+    /**
+     * Resolve reference images with optional truncation.
+     * <p>
+     * Same as {@link #resolveRefImages(ImgOptions)} but limits the result to at most
+     * {@code maxCount} entries. Use {@code maxCount <= 0} for no limit.
+     *
+     * @param opts     image options
+     * @param maxCount max number of images to return; &lt;= 0 means no limit
+     * @return list of valid image URLs (size &lt;= maxCount if maxCount &gt; 0),
+     *         or {@code null} if none
+     */
+    protected static List<String> resolveRefImages(ImgOptions opts, int maxCount) {
+        if (opts == null) {
+            return null;
+        }
+        List<String> urls = opts.getRefImageUrls();
+        List<String> result = null;
+        if (urls != null) {
+            for (String u : urls) {
+                if (u != null && !u.isEmpty()) {
+                    if (result == null) {
+                        result = new ArrayList<>();
+                    }
+                    result.add(u);
+                    if (maxCount > 0 && result.size() >= maxCount) {
+                        break;
+                    }
+                }
+            }
+        }
+        if (result != null) {
+            return result;
+        }
+        String single = opts.getRefImageUrl();
+        if (single != null && !single.isEmpty()) {
+            return Collections.singletonList(single);
+        }
+        return null;
     }
 }

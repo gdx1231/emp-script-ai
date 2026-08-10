@@ -74,6 +74,8 @@ public class GenImgActionExample implements IAction {
 			if (urlAndKey[0] != null && !urlAndKey[0].isEmpty()) {
 				client.apiUrl(urlAndKey[0]);
 			}
+			// 自动记录到 AI_CHAT / AI_CHAT_MSG（从 rv 读取 ewa_db_config）
+			client.setRv(rv);
 
 			// 生成图片：URL 返回模式，避免 b64 大图撑爆内存
 			ImgResponse resp = client.generate(new ImgOptions(prompt).size("2K").n(1).responseFormat("url"));

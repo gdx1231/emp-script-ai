@@ -231,6 +231,13 @@ public class ChatManagerBase {
 	private String aiModel;
 	/** 是否开启思考模式 */
 	private boolean aiThinking;
+	/**
+	 * 思考预算 token 数。0 表示使用 Mode 的默认或 provider 自身默认；
+	 * &gt;0 时由各 provider 自行转换为对应字段（如 Anthropic budget_tokens、
+	 * Gemini thinkingConfig.thinkingBudget、Qwen thinking.budget、OpenRouter
+	 * reasoning.max_tokens、OpenAI o-series reasoning_effort），不支持的 model 忽略。
+	 */
+	private int aiThinkingBudget;
 
 	/** 是否开启流式输出 */
 	private boolean aiStream;
@@ -329,11 +336,29 @@ public class ChatManagerBase {
 
 	/**
 	 * 设置思考模式
-	 * 
+	 *
 	 * @param thinking 思考模式状态
 	 */
 	public void setAiThinking(boolean thinking) {
 		this.aiThinking = thinking;
+	}
+
+	/**
+	 * 获取思考预算 token 数。
+	 *
+	 * @return 思考预算 token 数，0 表示未设置或使用 mode/provider 默认
+	 */
+	public int getAiThinkingBudget() {
+		return aiThinkingBudget;
+	}
+
+	/**
+	 * 设置思考预算 token 数。
+	 *
+	 * @param aiThinkingBudget 思考预算 token 数，&lt;=0 视为清除
+	 */
+	public void setAiThinkingBudget(int aiThinkingBudget) {
+		this.aiThinkingBudget = aiThinkingBudget > 0 ? aiThinkingBudget : 0;
 	}
 
 	/**
@@ -415,6 +440,10 @@ public class ChatManagerBase {
 		 * 高Temperature（0.9-1.5）： 创意写作（如故事、诗歌）。 头脑风暴或生成多样化点子
 		 */
 		reqData.stream(this.isAiStream()).model(this.aiModel).thinking(this.isAiThinking());
+		int thinkingBudget = this.aiThinkingBudget > 0 ? this.aiThinkingBudget : mode.getThinkingBudget();
+		if (thinkingBudget > 0) {
+			reqData.thinkingBudget(thinkingBudget);
+		}
 		if (mode.getTemperature() != 0) {
 			reqData.temperature(mode.getTemperature());
 		}
@@ -483,6 +512,8 @@ public class ChatManagerBase {
 		// 将 action 的 aiProvider / aiModel 注入 rv
 		if (action.getAiProvider() != null) rv.addOrUpdateValue("ai_provider", action.getAiProvider());
 		if (action.getAiModel() != null) rv.addOrUpdateValue("ai_model", action.getAiModel());
+		// 将 dbConfigName 注入 rv，供 Action 中的子模块（图片/视频生成等）自动记录日志
+		rv.addOrUpdateValue("ewa_db_config", this.dbConfigName);
 
 		// 确保 ActionBase 能输出 SSE 事件（outEvents 是延迟初始化的）
 		if (stepAction instanceof ActionBase) {
@@ -816,6 +847,9 @@ public class ChatManagerBase {
 		// 构建请求：非流式，沿用当前 provider/model，采样参数取子 mode 的定义
 		IRequestData reqData = RequestDataFactory.createRequestData(aiProvider);
 		reqData.stream(false).model(this.aiModel).thinking(subMode.isThinking());
+		if (subMode.getThinkingBudget() > 0) {
+			reqData.thinkingBudget(subMode.getThinkingBudget());
+		}
 		if (subMode.getTemperature() != 0) {
 			reqData.temperature(subMode.getTemperature());
 		}
@@ -1222,6 +1256,22 @@ public class ChatManagerBase {
 			this.aiThinking = Utils.cvtBool(rv.s("ai_thinking"));
 		}
 
+		// 是否思考预算（请求参数 ai_thinking_budget 覆盖 mode 默认；0 或空表示使用 mode 默认）
+		String aiThinkingBudgetStr = rv.s("ai_thinking_budget");
+		if (StringUtils.isNotBlank(aiThinkingBudgetStr)) {
+			try {
+				this.aiThinkingBudget = Integer.parseInt(aiThinkingBudgetStr.trim());
+				if (this.aiThinkingBudget < 0) {
+					this.aiThinkingBudget = 0;
+				}
+			} catch (NumberFormatException ex) {
+				LOGGER.warn("Invalid ai_thinking_budget value: {}", aiThinkingBudgetStr);
+				this.aiThinkingBudget = mode.getThinkingBudget();
+			}
+		} else {
+			this.aiThinkingBudget = mode.getThinkingBudget();
+		}
+
 		String stepName = rv.s("step");
 		if (!StringUtils.isBlank(stepName)) {
 			step = mode.getStep(stepName);
@@ -1282,6 +1332,7 @@ public class ChatManagerBase {
 		rst.put("ai_provider", aiProvider);
 		rst.put("ai_model", aiModel);
 		rst.put("ai_thinking", this.aiThinking);
+		rst.put("ai_thinking_budget", this.aiThinkingBudget);
 		rst.put("ai_temperature", mode.getTemperature());
 		rst.put("ai_top_p", mode.getTopP());
 

@@ -54,14 +54,13 @@ public class VideoChatLogger {
     }
 
     /**
-     * 创建日志记录器。
+     * 创建日志记录器（与 ImgChatLogger.create 一致，不因 dbConfigName 为空而跳过）。
      *
      * @param rv           请求上下文（含 g_ADM_ID、G_WEB_USR_ID、g_SUP_ID 等用户信息）
      * @param dbConfigName 数据库配置名称（对应 ewa_conf.xml 中的配置节）
-     * @return 日志记录器实例；若 dbConfigName 为空则返回 null（调用方需判空）
+     * @return 日志记录器实例；初始化失败返回 null
      */
     public static VideoChatLogger create(RequestValue rv, String dbConfigName) {
-        if (dbConfigName == null || dbConfigName.isEmpty()) return null;
         try {
             ChatManagerDb db = new ChatManagerDb(rv, dbConfigName);
             return new VideoChatLogger(db, rv);
@@ -78,10 +77,9 @@ public class VideoChatLogger {
      *
      * @param aiId         已创建的 AI_CHAT ID
      * @param dbConfigName 数据库配置名称
-     * @return 日志记录器实例；若 dbConfigName 为空则返回 null
+     * @return 日志记录器实例；恢复失败返回 null
      */
     public static VideoChatLogger restore(long aiId, String dbConfigName) {
-        if (dbConfigName == null || dbConfigName.isEmpty()) return null;
         try {
             RequestValue newRv = new RequestValue();
             ChatManagerDb db = new ChatManagerDb(newRv, dbConfigName);

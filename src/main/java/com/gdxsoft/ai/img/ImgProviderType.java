@@ -15,6 +15,7 @@ public enum ImgProviderType {
     OPENAI_COMPAT("openai_compat_img"),
     STABILITY("stability_img"),
     QWEN("qwen_img"),
+    WANX("wanx_img"),
     DOUBAO("doubao_img"),
     GROK("grok_img");
 

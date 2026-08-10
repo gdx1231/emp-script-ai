@@ -56,8 +56,8 @@ class DoubaoImgProviderTest {
         assertEquals("test-user-123", body.getString("user"));
 
         // Doubao-specific fields
-        assertEquals("disabled", body.getString("sequential_image_generation"),
-                "default should be disabled");
+        assertFalse(body.has("sequential_image_generation"),
+                "sequential_image_generation should not be present when not set");
         assertTrue(body.getBoolean("watermark"),
                 "default watermark should be true");
         assertFalse(body.getBoolean("stream"),
@@ -71,10 +71,10 @@ class DoubaoImgProviderTest {
     @DisplayName("Sequential mode + no watermark")
     void buildRequestBodyWithCustomSettings() {
         DoubaoImgProvider provider = new DoubaoImgProvider();
-        provider.setSequentialImageGeneration("auto");
         provider.setWatermark(false);
 
-        ImgOptions opts = new ImgOptions("test");
+        ImgOptions opts = new ImgOptions("test")
+                .sequentialImageGeneration("auto");
         org.json.JSONObject body = provider.buildRequestBody(opts);
 
         assertEquals("auto", body.getString("sequential_image_generation"));
@@ -133,6 +133,92 @@ class DoubaoImgProviderTest {
 
         System.out.println("=== Stream Mode ===");
         System.out.println(body.toString(2));
+    }
+
+    @Test
+    @DisplayName("Ref image: refImageUrls (plural, 3 entries) → image is array of URLs")
+    void buildRequestBodyWithRefImageUrlsPlural() {
+        DoubaoImgProvider provider = new DoubaoImgProvider();
+        ImgOptions opts = new ImgOptions("test prompt")
+                .setRefImageUrls(java.util.Arrays.asList(
+                        "https://cdn.example.com/scene-1.png",
+                        "https://cdn.example.com/char-a.png",
+                        "https://cdn.example.com/char-b.png"));
+        org.json.JSONObject body = provider.buildRequestBody(opts);
+        org.json.JSONArray imgArr = body.getJSONArray("image");
+        assertEquals(3, imgArr.length(),
+                "all entries of refImageUrls should be sent as array (multi-reference I2I)");
+        assertEquals("https://cdn.example.com/scene-1.png", imgArr.getString(0));
+        assertEquals("https://cdn.example.com/char-a.png", imgArr.getString(1));
+        assertEquals("https://cdn.example.com/char-b.png", imgArr.getString(2));
+    }
+
+    @Test
+    @DisplayName("Ref image: refImageUrls with single entry → image is string (backward compat)")
+    void buildRequestBodyWithRefImageUrlsSingle() {
+        DoubaoImgProvider provider = new DoubaoImgProvider();
+        ImgOptions opts = new ImgOptions("test prompt")
+                .setRefImageUrls(java.util.Collections.singletonList(
+                        "https://cdn.example.com/scene-1.png"));
+        org.json.JSONObject body = provider.buildRequestBody(opts);
+        // 单图保持 string 形式（向后兼容旧 client）
+        assertTrue(body.get("image") instanceof String,
+                "single entry should be sent as string, not array");
+        assertEquals("https://cdn.example.com/scene-1.png", body.getString("image"));
+    }
+
+    @Test
+    @DisplayName("Ref image: refImageUrls with null/empty entries filtered out")
+    void buildRequestBodyWithRefImageUrlsMixedNullEmpty() {
+        DoubaoImgProvider provider = new DoubaoImgProvider();
+        java.util.List<String> urls = new java.util.ArrayList<>();
+        urls.add(null);
+        urls.add("");
+        urls.add("https://cdn.example.com/valid.png");
+        urls.add("");
+        ImgOptions opts = new ImgOptions("test prompt").setRefImageUrls(urls);
+        org.json.JSONObject body = provider.buildRequestBody(opts);
+        // 过滤后剩 1 个有效 URL → string
+        assertEquals("https://cdn.example.com/valid.png", body.getString("image"));
+    }
+
+    @Test
+    @DisplayName("Ref image: refImageUrl (singular) still works as fallback")
+    void buildRequestBodyWithRefImageUrlSingular() {
+        DoubaoImgProvider provider = new DoubaoImgProvider();
+        ImgOptions opts = new ImgOptions("test prompt")
+                .setRefImageUrl("https://cdn.example.com/legacy.png");
+        org.json.JSONObject body = provider.buildRequestBody(opts);
+        assertEquals("https://cdn.example.com/legacy.png", body.getString("image"),
+                "legacy singular refImageUrl should still be passed");
+    }
+
+    @Test
+    @DisplayName("Ref image: empty list → no image field")
+    void buildRequestBodyWithoutRefImage() {
+        DoubaoImgProvider provider = new DoubaoImgProvider();
+        ImgOptions opts = new ImgOptions("test prompt")
+                .setRefImageUrls(java.util.Collections.emptyList());
+        org.json.JSONObject body = provider.buildRequestBody(opts);
+        assertFalse(body.has("image"),
+                "no ref image → body should not include image field");
+    }
+
+    @Test
+    @DisplayName("Ref image: refImageUrls takes precedence over refImageUrl")
+    void buildRequestBodyRefImageUrlsWinsOverSingular() {
+        DoubaoImgProvider provider = new DoubaoImgProvider();
+        ImgOptions opts = new ImgOptions("test prompt")
+                .setRefImageUrls(java.util.Arrays.asList(
+                        "https://cdn.example.com/multi-1.png",
+                        "https://cdn.example.com/multi-2.png"))
+                .setRefImageUrl("https://cdn.example.com/legacy.png");
+        org.json.JSONObject body = provider.buildRequestBody(opts);
+        // plural wins
+        org.json.JSONArray imgArr = body.getJSONArray("image");
+        assertEquals(2, imgArr.length());
+        assertEquals("https://cdn.example.com/multi-1.png", imgArr.getString(0));
+        assertEquals("https://cdn.example.com/multi-2.png", imgArr.getString(1));
     }
 
     @Test
@@ -224,13 +310,13 @@ class DoubaoImgProviderTest {
 
         DoubaoImgProvider provider = new DoubaoImgProvider();
         provider.setApiKey(apiKey);
-        provider.setSequentialImageGeneration("auto");
 
         ImgRequest req = new ImgRequest(
                 new ImgOptions("一组不同季节的同一棵树的插画")
                         .model("doubao-seedream-5-0-260128")
                         .size("2K")
-                        .n(4));
+                        .n(4)
+                        .sequentialImageGeneration("auto"));
 
         ImgResponse resp = provider.generate(req);
 

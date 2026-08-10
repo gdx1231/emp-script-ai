@@ -107,6 +107,12 @@ public class MaterialsPhase implements IPhaseHandler {
                 .maxConcurrency(concurrency)
                 .maxRetries(ctx.getConfig().getLimits().getMaxRetries());
 
+        // 自动记录到 AI_CHAT / AI_CHAT_MSG
+        if (ctx.getRv() != null) {
+            ctx.getRv().addOrUpdateValue("ewa_db_config", ctx.getConfig().getDbConfigName());
+            concur.setRv(ctx.getRv());
+        }
+
         int[] successCount = {0};
         int[] failCount = {0};
 

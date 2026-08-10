@@ -4,6 +4,10 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
 
+import org.json.JSONObject;
+
+import com.gdxsoft.easyweb.script.RequestValue;
+
 /**
  * High-level facade for image generation.
  * <p>
@@ -25,6 +29,8 @@ import java.util.List;
  */
 public final class ImgClient {
     private final IImgProvider provider;
+    /** 可选的聊天日志记录器，将图片生成任务记录到 AI_CHAT / AI_CHAT_MSG */
+    private ImgChatLogger chatLogger;
 
     public ImgClient(IImgProvider provider) {
         if (provider == null) throw new IllegalArgumentException("provider is null");
@@ -59,6 +65,40 @@ public final class ImgClient {
         return this;
     }
 
+    /**
+     * 设置聊天日志记录器（fluent）。
+     * 设置后，generate 调用会自动记录到 AI_CHAT / AI_CHAT_MSG。
+     *
+     * @param logger 日志记录器，null 则不记录
+     * @return this
+     */
+    public ImgClient setChatLogger(ImgChatLogger logger) {
+        this.chatLogger = logger;
+        return this;
+    }
+
+    /** @return 当前聊天日志记录器（可能为 null） */
+    public ImgChatLogger getChatLogger() { return chatLogger; }
+
+    /**
+     * 设置请求上下文，自动从 rv 中读取 {@code ewa_db_config} 创建日志记录器。
+     * <p>
+     * 框架（ChatManagerBase）在调用 Action 前会将 dbConfigName 注入 rv，
+     * 调用此方法后无需再手动 setChatLogger。
+     *
+     * @param rv 请求上下文
+     * @return this
+     */
+    public ImgClient setRv(RequestValue rv) {
+        if (rv != null && chatLogger == null) {
+            String dbConfig = rv.getString("ewa_db_config");
+            if (dbConfig != null && !dbConfig.isEmpty()) {
+                this.chatLogger = ImgChatLogger.create(dbConfig);
+            }
+        }
+        return this;
+    }
+
     /** Generate an image from a prompt with default options. */
     public ImgResponse generate(String prompt) throws IOException, InterruptedException {
         return provider.generate(new ImgRequest(new ImgOptions(prompt)));
@@ -71,7 +111,23 @@ public final class ImgClient {
 
     /** Generate with a fully-formed request. */
     public ImgResponse generate(ImgRequest request) throws IOException, InterruptedException {
-        return provider.generate(request);
+        ImgOptions opts = request.getOptions();
+        if (chatLogger != null) {
+            chatLogger.logStart(provider.getProviderType().getName(),
+                    opts.getModel(), opts.getPrompt(), buildOptsJson(opts));
+        }
+        try {
+            ImgResponse resp = provider.generate(request);
+            if (chatLogger != null) {
+                chatLogger.logSuccess(resp);
+            }
+            return resp;
+        } catch (Exception e) {
+            if (chatLogger != null) {
+                chatLogger.logError(e);
+            }
+            throw e;
+        }
     }
 
     // ==== OOM-safe convenience methods ====
@@ -108,4 +164,20 @@ public final class ImgClient {
     }
 
     public IImgProvider getProvider() { return provider; }
+
+    private static JSONObject buildOptsJson(ImgOptions opts) {
+        JSONObject j = new JSONObject();
+        if (opts.getSize() != null) j.put("size", opts.getSize());
+        if (opts.getQuality() != null) j.put("quality", opts.getQuality());
+        if (opts.getStyle() != null) j.put("style", opts.getStyle());
+        if (opts.getN() != null) j.put("n", opts.getN());
+        if (opts.getResponseFormat() != null) j.put("response_format", opts.getResponseFormat());
+        if (opts.getNegativePrompt() != null) j.put("negative_prompt", opts.getNegativePrompt());
+        if (opts.getSteps() != null) j.put("steps", opts.getSteps());
+        if (opts.getSeed() != null) j.put("seed", opts.getSeed());
+        if (opts.getRefImageUrl() != null) j.put("ref_image", opts.getRefImageUrl());
+        if (opts.getRefStrength() != null) j.put("ref_strength", opts.getRefStrength());
+        if (opts.getRefMode() != null) j.put("ref_mode", opts.getRefMode());
+        return j.length() > 0 ? j : null;
+    }
 }

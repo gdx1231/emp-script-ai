@@ -34,6 +34,39 @@ public interface IRequestData {
 	IRequestData thinking(boolean thinking);
 
 	/**
+	 * 设置思考预算（thinking_budget）最大 token 数。
+	 * <p>
+	 * 不同 provider 会按自身协议转换为对应字段，并在 model 不支持数值化预算时忽略：
+	 * <ul>
+	 *   <li>Anthropic：{@code thinking.budget_tokens}（Claude Sonnet 4 / Opus 4 / Sonnet 3.7+ 扩展思考）</li>
+	 *   <li>Google Gemini：{@code generationConfig.thinkingConfig.thinkingBudget}（2.5 系列思考模型）</li>
+	 *   <li>Qwen：{@code thinking.max_thinking_tokens}（DashScope 原生字段，qwen3-thinking / qwq / qvq）</li>
+	 *   <li>Doubao：自动映射为 {@code thinking.level}（low/medium/high，doubao-thinking / deepseek-r1）</li>
+	 *   <li>OpenRouter：{@code reasoning.max_tokens}（透传）</li>
+	 *   <li>OpenAI o-series / gpt-5：自动映射为 {@code reasoning_effort}（low/medium/high）</li>
+	 *   <li>其它 provider：默认无操作（no-op）</li>
+	 * </ul>
+	 * 传入 &lt;= 0 表示清除之前设置的预算覆盖，恢复 provider/model 默认行为。
+	 *
+	 * @param budgetToken 思考预算 token 数
+	 * @return this
+	 */
+	default IRequestData thinkingBudget(int budgetToken) {
+		// 默认空实现：未覆写此方法的 provider 忽略 thinking_budget。
+		return this;
+	}
+
+	/**
+	 * 获取当前请求体的思考预算（仅返回应用层缓存值；provider 实际写入的字段取决于
+	 * {@link #thinkingBudget(int)} 实现）。
+	 *
+	 * @return 思考预算 token 数；0 表示未设置
+	 */
+	default int getThinkingBudget() {
+		return 0;
+	}
+
+	/**
 	 * 添加消息
 	 */
 	IRequestData addMessage(String content, String role);

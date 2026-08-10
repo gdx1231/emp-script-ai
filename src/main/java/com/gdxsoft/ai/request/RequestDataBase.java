@@ -13,6 +13,12 @@ public abstract class RequestDataBase implements IRequestData {
     protected String model;
     protected final JSONArray messages;
     protected final JSONObject parameters;
+    /**
+     * 思考预算 token 数（应用层缓存）。各子类按自身协议在
+     * {@link #thinkingBudget(int)} 中转换为对应字段。
+     * 0 表示未设置（不写入请求体）。
+     */
+    protected int thinkingBudget;
 
     public RequestDataBase(String defaultModel) {
         this.model = defaultModel;
@@ -142,6 +148,22 @@ public abstract class RequestDataBase implements IRequestData {
     public IRequestData thinking(boolean thinking) {
         parameters.put("thinking", thinking);
         return this;
+    }
+
+    /**
+     * 默认 thinkingBudget 实现：仅缓存到应用层字段，不直接写入 parameters。
+     * 支持数值化预算的 provider 必须在子类中覆写此方法，按自身协议转换。
+     * 传入 &lt;= 0 视为清除。
+     */
+    @Override
+    public IRequestData thinkingBudget(int budgetToken) {
+        this.thinkingBudget = budgetToken > 0 ? budgetToken : 0;
+        return this;
+    }
+
+    @Override
+    public int getThinkingBudget() {
+        return this.thinkingBudget;
     }
 
     /**

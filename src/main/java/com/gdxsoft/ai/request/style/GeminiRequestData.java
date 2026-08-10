@@ -15,6 +15,17 @@ import com.gdxsoft.ai.request.*;
  */
 public abstract class GeminiRequestData extends RequestDataBase {
 
+	/**
+	 * Gemini 支持 {@code thinkingConfig} 的模型名称关键字（忽略大小写）。
+	 * <ul>
+	 *   <li>{@code gemini-2.5-pro} / {@code gemini-2.5-flash} / {@code gemini-2.5-flash-lite}</li>
+	 * </ul>
+	 * 2.0 / 1.5 / 1.0 系列忽略 {@code thinkingBudget}。
+	 */
+	private static final String[] THINKING_MODEL_KEYWORDS = {
+			"gemini-2.5"
+	};
+
 	protected JSONArray tools;
 
 	protected GeminiRequestData(String defaultModel) {
@@ -44,6 +55,56 @@ public abstract class GeminiRequestData extends RequestDataBase {
 			this.tools = AiTool.toGeminiArray(aiTools);
 		}
 		return this;
+	}
+
+	/**
+	 * 设置 Gemini 思考预算。
+	 * <p>
+	 * 当 {@code budgetToken > 0} 且 model 名匹配 {@link #THINKING_MODEL_KEYWORDS} 时，
+	 * 在 {@code generationConfig.thinkingConfig} 中写入
+	 * {@code {"thinkingBudget": N, "includeThoughts": true}}。
+	 * 当 model 不支持时仅记录缓存值、不写入请求体（避免 400 错误）。
+	 * 传入 &lt;= 0 视为清除预算（清空缓存并从 generationConfig 中删除 thinkingConfig 子对象）。
+	 */
+	@Override
+	public IRequestData thinkingBudget(int budgetToken) {
+		if (budgetToken <= 0) {
+			super.thinkingBudget(0);
+			// 主动从 parameters 中删除 thinkingConfig
+			if (parameters.has("thinkingConfig")) {
+				parameters.remove("thinkingConfig");
+			}
+			return this;
+		}
+		super.thinkingBudget(budgetToken);
+		if (!isThinkingModel(this.model)) {
+			// 模型不支持：缓存值保留但不写入请求体
+			return this;
+		}
+		JSONObject thinkingConfig = new JSONObject();
+		thinkingConfig.put("thinkingBudget", budgetToken);
+		thinkingConfig.put("includeThoughts", true);
+		parameters.put("thinkingConfig", thinkingConfig);
+		return this;
+	}
+
+	/**
+	 * 判断给定 model 名是否支持 Gemini 思考预算（关键词子串匹配，忽略大小写）。
+	 *
+	 * @param modelName 模型名（可为 null）
+	 * @return 支持返回 true
+	 */
+	public static boolean isThinkingModel(String modelName) {
+		if (modelName == null) {
+			return false;
+		}
+		String lower = modelName.toLowerCase();
+		for (String kw : THINKING_MODEL_KEYWORDS) {
+			if (lower.contains(kw)) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	@Override

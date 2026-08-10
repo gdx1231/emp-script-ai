@@ -44,9 +44,12 @@ public class ImgChatLogger {
 	private final ChatManagerDb db;
 	private final RequestValue rv;
 	private long aiId;
-	private long userMsgId;
 	private String requestId;
 	private short noi = 1;
+	private String ref;
+	private String refId;
+
+	private long userMsgId;
 
 	private ImgChatLogger(ChatManagerDb db, RequestValue rv) {
 		this.db = db;
@@ -54,14 +57,33 @@ public class ImgChatLogger {
 	}
 
 	/**
+	 * 创建日志记录器（无用户上下文）。
+	 * <p>
+	 * 使用独立的空 RequestValue，聊天记录的 AI_UID 等用户字段为空。
+	 * 适用于 Action 中自动记录图片生成任务的场景。
+	 *
+	 * @param dbConfigName 数据库配置名称
+	 * @return 日志记录器实例 
+	 */
+	public static ImgChatLogger create(String dbConfigName) {
+		try {
+			RequestValue newRv = new RequestValue();
+			ChatManagerDb db = new ChatManagerDb(newRv, dbConfigName);
+			return new ImgChatLogger(db, newRv);
+		} catch (Exception e) {
+			LOGGER.warn("ImgChatLogger 初始化失败，日志记录已跳过: {}", e.getMessage());
+			return null;
+		}
+	}
+
+	/**
 	 * 创建日志记录器。
 	 *
 	 * @param rv           请求上下文（含 g_ADM_ID、G_WEB_USR_ID、g_SUP_ID 等用户信息）
 	 * @param dbConfigName 数据库配置名称（对应 ewa_conf.xml 中的配置节）
-	 * @return 日志记录器实例；若 dbConfigName 为空则返回 null（调用方需判空）
+	 * @return 日志记录器实例； 
 	 */
 	public static ImgChatLogger create(RequestValue rv, String dbConfigName) {
-		if (dbConfigName == null || dbConfigName.isEmpty()) return null;
 		try {
 			ChatManagerDb db = new ChatManagerDb(rv, dbConfigName);
 			return new ImgChatLogger(db, rv);
@@ -81,7 +103,6 @@ public class ImgChatLogger {
 	 * @return 日志记录器实例；若 dbConfigName 为空则返回 null
 	 */
 	public static ImgChatLogger restore(long aiId, String dbConfigName) {
-		if (dbConfigName == null || dbConfigName.isEmpty()) return null;
 		try {
 			RequestValue newRv = new RequestValue();
 			ChatManagerDb db = new ChatManagerDb(newRv, dbConfigName);
@@ -106,7 +127,7 @@ public class ImgChatLogger {
 		try {
 			String requestId = UUID.randomUUID().toString();
 			this.requestId = requestId;
-			rv.addOrUpdateValue("request_id", requestId);
+			rv.addOrUpdateValue("request_id", requestId );
 			rv.addOrUpdateValue("p_ai_pid", 0);
 			rv.addOrUpdateValue("AI_PROVIDER", provider);
 			rv.addOrUpdateValue("AI_MODEL", model);
@@ -115,8 +136,8 @@ public class ImgChatLogger {
 			rv.addOrUpdateValue("AIM_STEP", "img_generate");
 			rv.addOrUpdateValue("MODE", "img");
 			rv.addOrUpdateValue("AI_MAX_TOKEN", 0);
-			rv.addOrUpdateValue("AI_REF", "img");
-			rv.addOrUpdateValue("AI_REF_ID", requestId);
+			rv.addOrUpdateValue("AI_REF", this.ref);
+			rv.addOrUpdateValue("AI_REF_ID", this.refId);
 
 			aiId = db.createChat(rv);
 
@@ -234,4 +255,39 @@ public class ImgChatLogger {
 
 	/** @return 请求 ID（UUID），logStart 后有效 */
 	public String getRequestId() { return requestId; }
+
+	/**
+	 * @return the ref
+	 */
+	public String getRef() {
+		return ref;
+	}
+
+	/**
+	 * @param ref the ref to set
+	 */
+	public void setRef(String ref) {
+		this.ref = ref;
+	}
+
+	/**
+	 * @return the refId
+	 */
+	public String getRefId() {
+		return refId;
+	}
+
+	/**
+	 * @param refId the refId to set
+	 */
+	public void setRefId(String refId) {
+		this.refId = refId;
+	}
+
+	/**
+	 * @return the userMsgId
+	 */
+	public long getUserMsgId() {
+		return userMsgId;
+	}
 }

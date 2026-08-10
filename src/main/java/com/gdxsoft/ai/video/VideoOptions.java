@@ -53,6 +53,12 @@ public class VideoOptions {
     /** 单张参考图片 URL（图生视频），兼容字段；多张时优先使用 {@link #refImageUrls} */
     private String refImageUrl;
 
+    /** 严格首帧图片 URL（Seedance first_frame role）：视频第一帧与该图一致，优先于 refImageUrls */
+    private String firstFrameUrl;
+
+    /** 严格尾帧图片 URL（Seedance last_frame role）：视频最后一帧与该图一致 */
+    private String lastFrameUrl;
+
     /** 单个参考视频 URL，兼容字段；多个时优先使用 {@link #refVideoUrls} */
     private String refVideoUrl;
 
@@ -197,6 +203,24 @@ public class VideoOptions {
 
     /** 设置单张参考图片 URL（setter） */
     public VideoOptions setRefImageUrl(String v) { this.refImageUrl = v; return this; }
+
+    /** @return 严格首帧图片 URL */
+    public String getFirstFrameUrl() { return firstFrameUrl; }
+
+    /** 设置严格首帧图片 URL（fluent）：视频第一帧与该图一致 */
+    public VideoOptions firstFrameUrl(String v) { this.firstFrameUrl = v; return this; }
+
+    /** 设置严格首帧图片 URL（setter） */
+    public VideoOptions setFirstFrameUrl(String v) { this.firstFrameUrl = v; return this; }
+
+    /** @return 严格尾帧图片 URL */
+    public String getLastFrameUrl() { return lastFrameUrl; }
+
+    /** 设置严格尾帧图片 URL（fluent）：视频最后一帧与该图一致 */
+    public VideoOptions lastFrameUrl(String v) { this.lastFrameUrl = v; return this; }
+
+    /** 设置严格尾帧图片 URL（setter） */
+    public VideoOptions setLastFrameUrl(String v) { this.lastFrameUrl = v; return this; }
 
     /** @return 单个参考视频 URL */
     public String getRefVideoUrl() { return refVideoUrl; }

@@ -36,6 +36,7 @@ public class ModeParser {
 		String temperatureAttr = root.getAttribute("temperature");
 		String topPAttr = root.getAttribute("topP");
 		String thinkingAttr = root.getAttribute("thinking");
+		String thinkingBudgetAttr = root.getAttribute("thinkingBudget");
 		String responseFormatAttr = root.getAttribute("responseFormat");
 		String debugOutputAttr = root.getAttribute("debugOutput");
 
@@ -164,6 +165,13 @@ public class ModeParser {
 		}
 		if (thinkingAttr != null && thinkingAttr.trim().length() > 0) {
 			mode.setThinking(Boolean.parseBoolean(thinkingAttr.trim()));
+		}
+		if (thinkingBudgetAttr != null && thinkingBudgetAttr.trim().length() > 0) {
+			try {
+				mode.setThinkingBudget(Integer.parseInt(thinkingBudgetAttr.trim()));
+			} catch (NumberFormatException ex) {
+				LOGGER.warn("Invalid thinkingBudget attribute: {}", thinkingBudgetAttr);
+			}
 		}
 		if (responseFormatAttr != null && responseFormatAttr.trim().length() > 0) {
 			mode.setResponseFormat(responseFormatAttr.trim());
