@@ -44,7 +44,7 @@ public class DoubaoImgProvider extends ImgProviderBase {
 	public static final String DEFAULT_MODEL = "doubao-seedream-5-0-260128";
 
 	/** Whether the API adds a watermark. */
-	private boolean watermark = true;
+	private boolean watermark = false;
 	/** Whether to use SSE streaming response. */
 	private boolean stream = false;
 

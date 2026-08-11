@@ -49,7 +49,7 @@ public class DoubaoVideoProvider extends VideoProviderBase {
             "https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks";
     public static final String DEFAULT_MODEL = "doubao-seedance-2-0-260128";
 
-    private boolean watermark = true;
+    private boolean watermark = false;
 
     public DoubaoVideoProvider() { this.apiUrl = DEFAULT_URL; }
 
