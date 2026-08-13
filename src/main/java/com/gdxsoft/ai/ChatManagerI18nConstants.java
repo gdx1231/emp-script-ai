@@ -99,6 +99,13 @@ public final class ChatManagerI18nConstants {
             put("AVAILABLE_TOOLS", new String[] { "可用工具：", "Available tools:" });
             put("CURRENT_TIME", new String[] { "当前时间：", "Current time: " });
             put("USER_INPUT", new String[] { "用户输入：", "User input: " });
+
+            // ========== mode=auto 自动路由 ==========
+            put("ERROR_MODE_ROUTE_FAILED", new String[] { "无法根据输入确定场景模式：", "Cannot determine mode from input: " });
+            put("ROUTE_INSTRUCTION", new String[] {
+                    "根据用户输入，从下列场景模式中选择最合适的一个。只返回JSON：{\"mode\":\"模式名称\"}，不要返回其他内容。",
+                    "Choose the most suitable mode for the user input from the list below. Return ONLY JSON: {\"mode\":\"mode name\"}, nothing else." });
+            put("ROUTE_CANDIDATES", new String[] { "可选场景模式：", "Available modes:" });
         }
     };
 
@@ -133,6 +140,7 @@ public final class ChatManagerI18nConstants {
         public static final String ERROR_GENERAL = "ERROR_GENERAL";
         public static final String ERROR_AI_CHAT_CREATE_FAILED = "ERROR_AI_CHAT_CREATE_FAILED";
         public static final String ERROR_API_NOT_FOUND = "ERROR_API_NOT_FOUND";
+        public static final String ERROR_MODE_ROUTE_FAILED = "ERROR_MODE_ROUTE_FAILED";
     }
 
     /** 状态提示类常量 */
@@ -146,6 +154,8 @@ public final class ChatManagerI18nConstants {
         public static final String AVAILABLE_TOOLS = "AVAILABLE_TOOLS";
         public static final String CURRENT_TIME = "CURRENT_TIME";
         public static final String USER_INPUT = "USER_INPUT";
+        public static final String ROUTE_INSTRUCTION = "ROUTE_INSTRUCTION";
+        public static final String ROUTE_CANDIDATES = "ROUTE_CANDIDATES";
     }
 
     /** STT 错误信息类常量 */

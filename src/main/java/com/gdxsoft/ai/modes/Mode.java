@@ -268,7 +268,7 @@ public class Mode {
 		return true;
 	}
 
-	public String createApiUrl(Api api, RequestValue rv) {
+	public static String createApiUrl(Api api, RequestValue rv) {
 		String url = rv.replaceParameters(api.getUrl());
 		if (api.getParameters() != null && api.getParameters().trim().length() > 0) {
 			String paras = rv.replaceParameters(api.getParameters().trim());
@@ -296,7 +296,27 @@ public class Mode {
 		if (api == null) {
 			throw new Exception("API not found for name: " + apiName);
 		}
+		String result = executeApi(api, rv, refHeaders, prompt);
+		prompt.setContent(result);
+		return true;
+	}
 
+	/**
+	 * 执行一个已解析的 Api/Tool 调用（不含 useMode 子 mode 调用），返回响应内容。
+	 * <p>
+	 * 供 {@link #createStepPromptByApi(Prompt, RequestValue, Map)} 与
+	 * {@code <reminder api="...">} 等场景复用：Tool 定义了 command 时执行本地程序，
+	 * 否则按 URL 方式发起 HTTP 调用。调用产生的 curl 命令写入 {@code prompt.apiCurl}。
+	 *
+	 * @param api        API/Tool 定义
+	 * @param rv         请求参数容器（用于 @占位符 替换）
+	 * @param refHeaders 引用的 Http headers（可空，仅在 api.refRequest=true 时使用）
+	 * @param prompt     承载 apiCurl 的 Prompt（不可空）
+	 * @return API 响应内容；HTTP 状态码非 200 时返回 rstFalse JSON 字符串
+	 * @throws Exception 执行失败时抛出
+	 */
+	public static String executeApi(Api api, RequestValue rv, Map<String, String> refHeaders, Prompt prompt)
+			throws Exception {
 		// Tool 且定义了 command 时执行本地程序，否则走 URL 调用
 		if (api instanceof Tool) {
 			Tool tool = (Tool) api;
@@ -304,14 +324,13 @@ public class Mode {
 				Tool.ExecResult execResult = tool.executeCommand(rv);
 				// 记录实际执行的命令行（占用 apiCurl 字段，便于统一记录到 api_call_curl）
 				prompt.setApiCurl(execResult.getCommandLine());
-				prompt.setContent(execResult.getOutput());
-				return true;
+				return execResult.getOutput();
 			}
 		}
 
-		String url = this.createApiUrl(api, rv);
+		String url = createApiUrl(api, rv);
 
-		LOGGER.info("调用 API: " + apiName + ", URL: " + url);
+		LOGGER.info("调用 API: " + api.getName() + ", URL: " + url);
 
 		UNet net = new UNet();
 		if (api.getTimeout() > 0) {
@@ -379,10 +398,7 @@ public class Mode {
 			result = UJSon.rstFalse(net.getLastErr()).put("HTTP_CODE", net.getLastStatusCode()).toString();
 		}
 
-		// 暂时返回一个占位符内容
-		prompt.setContent(result);
-
-		return true;
+		return result;
 	}
 
 	 

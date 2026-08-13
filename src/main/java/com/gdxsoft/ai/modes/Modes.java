@@ -19,6 +19,7 @@ public class Modes {
     private static final Logger LOGGER = Logger.getLogger(Modes.class.getName());
     private static final Map<String, Mode> MODES = new ConcurrentHashMap<String, Mode>();
     private static final Map<String, List<Mode>> XML_MD5 = new ConcurrentHashMap<>();
+    private static final Map<String, RouterMode> ROUTER_MODES = new ConcurrentHashMap<>();
 
     /**
      * 获取指定名称的模式（返回克隆体以避免外部修改缓存原件）。
@@ -28,6 +29,41 @@ public class Modes {
     public static Mode getMode(String name) {
         Mode m = MODES.get(name);
         return m == null ? null : m.cloneMode();
+    }
+
+    /**
+     * 获取指定名称的路由声明（忽略大小写，返回克隆体）。
+     * <p>
+     * Get a router mode by name (case-insensitive, returns a clone).
+     */
+    public static RouterMode getRouterMode(String name) {
+        if (name == null) {
+            return null;
+        }
+        RouterMode m = ROUTER_MODES.get(name);
+        if (m != null) {
+            return m.cloneRouterMode();
+        }
+        for (RouterMode rm : ROUTER_MODES.values()) {
+            if (rm.getName().equalsIgnoreCase(name)) {
+                return rm.cloneRouterMode();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 列出全部已加载的模式（返回克隆体以避免外部修改缓存原件）。
+     * <p>
+     * List all loaded modes (returns clones to prevent external mutation of cache).
+     * 供 mode=auto 自动路由枚举候选使用。
+     */
+    public static List<Mode> listModes() {
+        List<Mode> list = new ArrayList<>();
+        for (Mode m : MODES.values()) {
+            list.add(m.cloneMode());
+        }
+        return list;
     }
 
     private Document document;
@@ -65,6 +101,18 @@ public class Modes {
             MODES.put(mode.getName(), mode);
             modes.add(mode);
             LOGGER.info("Mode: " + mode.getName());
+        }
+
+        // 解析 <routerMode> 路由声明（mode=auto 的候选 mode 集合）
+        NodeList routerNodes = document.getElementsByTagName("routerMode");
+        for (int i = 0; i < routerNodes.getLength(); i++) {
+            Element routerElement = (Element) routerNodes.item(i);
+            RouterMode routerMode = RouterMode.parseRouterMode(routerElement, commonApis);
+            if (routerMode.getName() != null && !routerMode.getName().trim().isEmpty()) {
+                ROUTER_MODES.put(routerMode.getName(), routerMode);
+                LOGGER.info("RouterMode: " + routerMode.getName() + " -> " + routerMode.getRoutes()
+                        + (routerMode.getDefaultMode() != null ? ", default=" + routerMode.getDefaultMode() : ""));
+            }
         }
         XML_MD5.put(this.xmlMd5, modes);
         return modes;

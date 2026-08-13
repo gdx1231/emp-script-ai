@@ -1,6 +1,6 @@
 ---
 name: ai-mode-xml-authoring
-description: emp-script-ai 及其下游项目（travelagent、pf2023）所用 AI Mode XML schema 的撰写参考。覆盖 `<mode>` / `<step>` / `<prompt>` / `<apis>` / `<tools>` / `<common>` / `<sqls>` / `<actions>` / `<paramChecks>` / `<ui>` 各块结构、prompt 数据源（sqlRef / api / tool / action / CDATA）、函数调用 prompt（`apisCheck` / `toolsCheck`，工具调用说明自动附加）、URL / 请求占位符、本地程序工具（command）、输出自定义标签（`<day>`、`<rq>`、`<cid>`、`<enj>`、`<id>`、`<num>`、`<sersday>`、`<prices>`、`<gn>`）以及 step 控制属性（`innerCall`、`validateParams`、`multiOnlyUserMsg`、`action`、`actionSqlRef`）。
+description: emp-script-ai 及其下游项目（travelagent、pf2023）所用 AI Mode XML schema 的撰写参考。覆盖 `<mode>` / `<step>` / `<prompt>` / `<apis>` / `<tools>` / `<common>` / `<routerMode>` / `<sqls>` / `<actions>` / `<paramChecks>` / `<ui>` 各块结构、prompt 数据源（sqlRef / api / tool / action / CDATA）、函数调用 prompt（`apisCheck` / `toolsCheck`，工具调用说明自动附加）、URL / 请求占位符、本地程序工具（command）、输出自定义标签（`<day>`、`<rq>`、`<cid>`、`<enj>`、`<id>`、`<num>`、`<sersday>`、`<prices>`、`<gn>`）以及 step 控制属性（`innerCall`、`validateParams`、`multiOnlyUserMsg`、`action`、`actionSqlRef`）。
 source: synthesized
 extracted_at: '2026-06-22'
 synthesized_from:
@@ -45,8 +45,8 @@ Mode XML 文件由 `emp-script-ai` 的 `Modes.loadModes(xml)` 解析。它定义
 
 | 属性 | 必填 | 说明 |
 |------|------|------|
-| `name` | 是 | 查找键，`Modes.getMode(name)` 返回克隆体。 |
-| `description` | 是 | 中文描述。 |
+| `name` | 是 | 查找键，`Modes.getMode(name)` 返回克隆体。与 `<routerMode>` 同名时 routerMode 优先（见下文自动路由）。 |
+| `description` | 是 | 中文描述。作为 `mode=auto` 路由候选时，会连同 name 一起发给 LLM 做分类，应写清适用场景。 |
 | `temperature` | 否 | 小数；结构化抽取建议 `0.1`，对话建议 `0.7`。 |
 | `topP` | 否 | 小数。 |
 | `thinking` | 否 | `"true"` 启用推理模式（provider 支持时）。 |
@@ -55,6 +55,42 @@ Mode XML 文件由 `emp-script-ai` 的 `Modes.loadModes(xml)` 解析。它定义
 | `maxHistoryTokensK` | 否 | 历史 token 上限，单位 K（默认 100），超限会截断并打 WARN。 |
 | `debugOutput` | 否 | 回显 LLM 原始输出，便于调试。 |
 | `enableSearch` | 否 | `"true"` 时请求体附加 `enable_search: true` 启用联网搜索（qwen/DashScope 兼容模式等支持的 provider 生效，不支持的 provider 会忽略或报错，按需开启）。适合「工具 = 联网查询」的 useMode 子 mode。 |
+
+## `<routerMode>` 自动路由
+
+`<modes>` 根下可放 `<routerMode>`，显式声明「根据用户自然语言自动切换 mode」的候选集合。请求参数 `mode=<routerMode name>`（如 `mode=auto`）命中后，框架每轮先用一次轻量 LLM 分类调用，从候选 mode 中选出最合适的一个并真正切换（step/action/采样参数随目标 mode 生效）。
+
+```xml
+<routerMode name="auto" default="chat">
+    <route>chat</route>
+    <route>translate</route>
+    <route>travel_plan</route>
+    <reminder><![CDATA[抱歉，我没能判断出你的意图，请换个说法描述需求。]]></reminder>
+</routerMode>
+```
+
+| 属性/子元素 | 必填 | 说明 |
+|------|------|------|
+| `name` | 是 | 路由名，请求参数 `mode` 用它触发（忽略大小写）。与 `<mode>` 同名时 routerMode 优先。 |
+| `default` | 否 | 分类失败/返回无效 mode 时的兜底 mode 名。未配置时已有会话沿用 DB 中的 AI_MODE，新会话报错。 |
+| `<route>` 子元素 | 是 | 候选 mode 名，逐个列出；未列出的 mode 不参与本路由（如 useMode 子 mode、innerCall 辅助 mode 不应列出）。 |
+| `<reminder>` 子元素 | 否 | 分类失败且无 default、无已有会话可回退时，展示给用户的提醒词（可用 CDATA 多行）。内容支持 `@para` 占位符替换；`api`（别名 `tool`）属性可引用 `<common>` 下的共享 API，调用结果作为提醒词。未配置时回退到内置 i18n 文案。 |
+
+`<reminder>` 的 API 引用示例（API 定义在 `<common>` 下）：
+
+```xml
+<common>
+    <apis>
+        <api name="fallbackTip" url="https://example.com/tip?uid=@uid" method="GET" />
+    </apis>
+</common>
+<routerMode name="auto" default="chat">
+    <route>chat</route>
+    <reminder api="fallbackTip">抱歉，请换个说法（@uid）。</reminder>
+</routerMode>
+```
+
+注意：候选 mode 的 `description` 是分类语义来源，务必写清「什么情况下选它」。
 
 ## `<step>` 属性
 

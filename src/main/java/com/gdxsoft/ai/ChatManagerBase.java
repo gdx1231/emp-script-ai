@@ -251,6 +251,11 @@ public class ChatManagerBase {
 	/** API工具检查结果缓存 (promptName -> apiResult)，避免修改共享Prompt对象 */
 	private Map<String, String> apiCheckResults = new HashMap<>();
 
+	/** mode=auto 路由结果详情（JSON 字符串），非 null 表示本轮发生了自动路由 */
+	private String routeInfo;
+	/** mode=auto 路由分类调用的 token 用量 */
+	private JSONObject routeUsage;
+
 	private String apiOwnerId = null;
 
 	/**
@@ -474,6 +479,193 @@ public class ChatManagerBase {
 
 		LOGGER.info(getText(LogMessages.MODEL_REQUEST_PARAMS), reqData.buildJson());
 		return reqData;
+	}
+
+	/**
+	 * mode=auto 自动路由：根据用户输入 prompt，用一次轻量 LLM 分类调用（非流式、json_object）
+	 * 从 {@link RouterMode} 声明的候选 mode 中选出最合适的一个，并替换 this.modeName / this.mode。
+	 * <p>
+	 * 分类失败或返回无效 mode 时的兜底顺序：
+	 * <ol>
+	 * <li>routerMode 的 {@code default} 指定的默认 mode；</li>
+	 * <li>已有会话沿用数据库中记录的 AI_MODE；</li>
+	 * <li>新会话返回错误：有 {@code <reminder>} 提醒词则用它，否则用 i18n 文案。</li>
+	 * </ol>
+	 *
+	 * @param routerMode 路由声明（候选 mode 集合 + 默认 mode）
+	 * @return 成功返回 null（this.mode 已设置），失败返回 RST=false 的 JSONObject
+	 * @throws Exception 调用 AI 接口失败时抛出
+	 */
+	private JSONObject routeModeByPrompt(RouterMode routerMode) throws Exception {
+		if (StringUtils.isBlank(this.prompt)) {
+			return UJSon.rstFalse(getText(ErrorMessages.ERROR_MODE_ROUTE_FAILED) + "(prompt is empty)");
+		}
+		List<String> routeNames = routerMode.getRoutes();
+		if (routeNames == null || routeNames.isEmpty()) {
+			return UJSon.rstFalse(
+					getText(ErrorMessages.ERROR_MODE_ROUTE_FAILED) + "(no routes in routerMode: " + routerMode.getName() + ")");
+		}
+		// 候选：routerMode 显式声明的 mode（不存在的给出 WARN 并跳过）
+		List<Mode> candidates = new ArrayList<>();
+		for (String routeName : routeNames) {
+			Mode m = Modes.getMode(routeName);
+			if (m == null) {
+				LOGGER.warn("routerMode {} 声明的候选 mode 不存在：{}", routerMode.getName(), routeName);
+				continue;
+			}
+			candidates.add(m);
+		}
+		if (candidates.isEmpty()) {
+			return UJSon.rstFalse(getText(ErrorMessages.ERROR_MODE_ROUTE_FAILED)
+					+ "(no valid routes in routerMode: " + routerMode.getName() + ")");
+		}
+
+		StringBuilder sb = new StringBuilder();
+		sb.append(getText(ChatManagerI18nConstants.ToolMessages.ROUTE_INSTRUCTION)).append("\n");
+		sb.append(getText(ChatManagerI18nConstants.ToolMessages.ROUTE_CANDIDATES)).append("\n");
+		for (Mode m : candidates) {
+			// description 为空时用 name 兜底，保证分类仍有语义
+			String desc = StringUtils.isBlank(m.getDescription()) ? m.getName() : m.getDescription();
+			sb.append("- ").append(m.getName()).append(": ").append(desc).append("\n");
+		}
+		sb.append(getText(ChatManagerI18nConstants.ToolMessages.USER_INPUT)).append(this.prompt);
+
+		IRequestData reqData = this.createRequestDataForApiCheck();
+		reqData.addMessage(sb.toString(), "user");
+		IRequestAI req = this.createRequestAI();
+		String fullText = req.doPost(reqData);
+		JSONObject json = req.extraceJson(fullText, true);
+		String content = json.optString("content").trim();
+		// 分类调用的 token 用量（无论最终命中哪种兜底都记录）
+		this.routeUsage = req.getTokensUsage();
+
+		String routedName = extractRoutedModeName(content);
+		Mode routed = routedName == null ? null : Modes.getMode(routedName);
+		if (routed == null && routedName != null) {
+			// 容忍大小写差异
+			for (Mode m : candidates) {
+				if (m.getName().equalsIgnoreCase(routedName)) {
+					routed = m;
+					break;
+				}
+			}
+		}
+
+		if (routed == null) {
+			// 兜底 1：routerMode.default 指定的默认 mode
+			String defName = routerMode.getDefaultMode();
+			Mode defMode = StringUtils.isBlank(defName) ? null : Modes.getMode(defName);
+			if (defMode != null) {
+				LOGGER.warn("mode route failed, use default mode={}, content: {}", defName, content);
+				this.modeName = defMode.getName();
+				this.mode = defMode;
+				this.recordRouteInfo(defMode.getName(), "default", content);
+				return null;
+			}
+			// 兜底 2：已有会话沿用数据库中记录的 AI_MODE，保证多轮对话不中断
+			JSONObject chat = db.queryChatByRequestId(this.requestId);
+			String curMode = chat == null ? null : chat.optString("AI_MODE");
+			Mode fallback = StringUtils.isBlank(curMode) ? null : Modes.getMode(curMode);
+			if (fallback == null) {
+				LOGGER.warn("mode route failed, content: {}", content);
+				// 有自定义提醒词则优先用它作为用户可见提示，否则回退到 i18n 文案
+				String reminder = resolveReminder(routerMode);
+				if (!StringUtils.isBlank(reminder)) {
+					return UJSon.rstFalse(reminder);
+				}
+				return UJSon.rstFalse(getText(ErrorMessages.ERROR_MODE_ROUTE_FAILED) + content);
+			}
+			LOGGER.warn("mode route failed, fallback to current mode={}, content: {}", curMode, content);
+			this.modeName = fallback.getName();
+			this.mode = fallback;
+			this.recordRouteInfo(fallback.getName(), "db", content);
+			return null;
+		}
+
+		this.modeName = routed.getName();
+		this.mode = routed;
+		this.recordRouteInfo(routed.getName(), "llm", content);
+		LOGGER.info("mode routed to mode: {}", routed.getName());
+		return null;
+	}
+
+	/**
+	 * 解析 {@code <reminder>} 提醒词：支持 {@code api}/{@code tool} 属性调用共享 API
+	 * 并把结果作为提醒词；最终内容统一做 {@code @para} 占位符替换。
+	 *
+	 * @param routerMode 路由声明（含 reminder 文本、reminder 引用的共享 API）
+	 * @return 解析后的提醒词文本，无 reminder 时返回空串
+	 * @throws Exception API 调用失败时抛出
+	 */
+	private String resolveReminder(RouterMode routerMode) throws Exception {
+		String content = null;
+		String apiName = routerMode.getReminderApi();
+		if (!StringUtils.isBlank(apiName)) {
+			Api api = routerMode.getApi(apiName);
+			if (api == null) {
+				LOGGER.warn("routerMode {} 的 reminder 引用的共享 API 不存在：{}", routerMode.getName(), apiName);
+			} else if (api instanceof Tool && ((Tool) api).isUseMode()) {
+				// reminder 仅支持 URL / 本地程序调用，不支持 useMode 子 mode 调用
+				LOGGER.warn("routerMode {} 的 reminder 引用的是 useMode 工具，已忽略：{}", routerMode.getName(), apiName);
+			} else {
+				Map<String, String> refHeaders = new HashMap<>();
+				if (this.rv.getHttpHeaders() != null) {
+					refHeaders.putAll(this.rv.getHttpHeaders());
+				}
+				Prompt apiPrompt = new Prompt();
+				apiPrompt.setApi(apiName);
+				content = Mode.executeApi(api, this.rv, refHeaders, apiPrompt);
+			}
+		}
+		if (content == null) {
+			content = routerMode.getReminder();
+		}
+		if (content == null) {
+			return "";
+		}
+		// reminder 支持 @para 占位符替换（与 prompt 内容一致）
+		return this.rv.replaceParameters(content);
+	}
+
+	/**
+	 * 暂存路由详情（待 chat 建立后落库为 mode_route 隐藏消息；此时新会话还没有 aiId）。
+	 */
+	private void recordRouteInfo(String modeName, String source, String content) {
+		JSONObject info = UJSon.rstTrue("");
+		info.put("route_mode", modeName);
+		info.put("route_source", source);
+		info.put("route_llm_content", content);
+		this.routeInfo = info.toString();
+	}
+
+	/**
+	 * 从 LLM 分类返回内容中解析路由的 mode 名称。
+	 * <p>
+	 * 期望格式 {@code {"mode":"名称"}}，容忍 markdown 代码块包裹。
+	 *
+	 * @param content LLM 返回内容
+	 * @return mode 名称，解析失败返回 null
+	 */
+	static String extractRoutedModeName(String content) {
+		if (content == null) {
+			return null;
+		}
+		String c = content.trim();
+		// 去掉 markdown 代码块包裹（```json ... ```）
+		if (c.startsWith("```")) {
+			int first = c.indexOf('\n');
+			int last = c.lastIndexOf("```");
+			if (first > 0 && last > first) {
+				c = c.substring(first + 1, last).trim();
+			}
+		}
+		try {
+			JSONObject obj = new JSONObject(c);
+			String name = obj.optString("mode", "").trim();
+			return name.isEmpty() ? null : name;
+		} catch (Exception e) {
+			return null;
+		}
 	}
 
 	/**
@@ -1240,14 +1432,24 @@ public class ChatManagerBase {
 			return rst;
 		}
 		this.modeName = modeName;
-		Mode mode = Modes.getMode(modeName);
-		if (mode == null) {
-			return UJSon.rstFalse(getText(ErrorMessages.ERROR_MODE_NOT_FOUND) + modeName);
-		}
-		this.mode = mode;
 
 		String prompt = rv.s("prompt");
 		this.prompt = prompt;
+
+		RouterMode routerMode = Modes.getRouterMode(modeName.trim());
+		if (routerMode != null) {
+			// 命中 routerMode：根据用户输入做 LLM 分类，路由到 routerMode 声明的候选 mode（每轮都分类）
+			JSONObject routeRst = this.routeModeByPrompt(routerMode);
+			if (routeRst != null) {
+				return routeRst;
+			}
+		} else {
+			Mode mode = Modes.getMode(modeName);
+			if (mode == null) {
+				return UJSon.rstFalse(getText(ErrorMessages.ERROR_MODE_NOT_FOUND) + modeName);
+			}
+			this.mode = mode;
+		}
 
 		// 是否思考模式
 		if (StringUtils.isBlank(rv.s("ai_thinking"))) {
@@ -1319,6 +1521,18 @@ public class ChatManagerBase {
 			return chat;
 		}
 		LOGGER.info(getText(LogMessages.AI_CHAT_RECORD), chat.toString(2));
+
+		// mode=auto 路由落库：记录隐藏消息与分类 token 用量；已有会话 mode 变化时切换 AI_MODE
+		if (this.routeInfo != null) {
+			long routeAimId = this.addAiChatMsg(this.routeInfo, "mode_route", true);
+			if (this.routeUsage != null) {
+				this.updateAiChatMsgTokens(routeAimId, this.routeUsage);
+			}
+			if (!this.isNew && !this.modeName.equalsIgnoreCase(chat.optString("AI_MODE"))) {
+				db.updateChatMode(this.aiId, this.modeName);
+				LOGGER.info("mode=auto switch AI_CHAT.AI_MODE to {} (aiId={})", this.modeName, this.aiId);
+			}
+		}
 
 		rv.addOrUpdateValue("ai_id", this.aiId, "bigint", 100);
 

@@ -79,7 +79,7 @@ public class ChatManagerDb {
 	 */
 	public JSONObject queryChatByRequestId(String requestId) {
 		rv.addOrUpdateValue("request_id", requestId, "uuid", 36);
-		String sql = "select AI_ID, AI_CUR_STEP as AI_STEP_PREV, AI_UID, AI_REF, AI_REF_ID from ai_chat where ai_uid=@request_id";
+		String sql = "select AI_ID, AI_CUR_STEP as AI_STEP_PREV, AI_UID, AI_REF, AI_REF_ID, AI_MODE from ai_chat where ai_uid=@request_id";
 		DTTable tb = DTTable.getJdbcTable(sql, dbConfigName, rv);
 		if (tb.getCount() == 0) {
 			return null;
@@ -97,6 +97,19 @@ public class ChatManagerDb {
 		rv.addOrUpdateValue("AIM_STEP", stepName);
 		rv.addOrUpdateValue("ai_id", aiId, "bigint", 100);
 		String sql = "update AI_CHAT set AI_CUR_STEP=@AIM_STEP, AI_MDATE=@sys_date where AI_ID=@ai_id";
+		DataConnection.updateAndClose(sql, dbConfigName, rv);
+	}
+
+	/**
+	 * 更新 AI_CHAT 的场景模式（mode=auto 自动路由切换 mode 时调用）。
+	 *
+	 * @param aiId     聊天会话 ID
+	 * @param modeName 新的模式名称
+	 */
+	public void updateChatMode(long aiId, String modeName) {
+		rv.addOrUpdateValue("AIM_MODE", modeName);
+		rv.addOrUpdateValue("ai_id", aiId, "bigint", 100);
+		String sql = "update AI_CHAT set AI_MODE=@AIM_MODE, AI_MDATE=@sys_date where AI_ID=@ai_id";
 		DataConnection.updateAndClose(sql, dbConfigName, rv);
 	}
 
