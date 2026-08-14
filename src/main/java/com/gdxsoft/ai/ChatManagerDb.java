@@ -233,6 +233,17 @@ public class ChatManagerDb {
 	}
 
 	/**
+	 * 删除一条聊天消息（用于清理无内容的占位消息）。
+	 *
+	 * @param aimId 消息 ID
+	 */
+	public void deleteMessage(long aimId) {
+		rv.addOrUpdateValue("_aim_id", aimId, "bigint", 100);
+		String sql = "delete from AI_CHAT_MSG where AIM_ID = @_aim_id";
+		DataConnection.updateAndClose(sql, dbConfigName, rv);
+	}
+
+	/**
 	 * 更新消息的 Token 使用情况（从 JSON usage 对象中提取）。
 	 * <p>
 	 * 自动解析 {@code total_tokens}、{@code completion_tokens}、{@code prompt_tokens}， 以及

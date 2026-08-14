@@ -24,6 +24,8 @@ public class Prompt {
     private String api;
     // Whether to check APIs
     private boolean apisCheck = false;
+    // Whether to append this prompt's content to the toolsCheck prompt
+    private boolean appendToolCheck = false;
     // API curl command
     private String apiCurl;
 
@@ -107,11 +109,20 @@ public class Prompt {
 
     /**
      * 获取是否检查APIs
-     * 
+     *
      * @return 是否检查APIs
      */
     public boolean isApisCheck() {
         return apisCheck;
+    }
+
+    /**
+     * 获取是否追加到toolsCheck prompt
+     *
+     * @return 是否追加到toolsCheck
+     */
+    public boolean isAppendToolCheck() {
+        return appendToolCheck;
     }
 
     // Setters
@@ -166,11 +177,20 @@ public class Prompt {
 
     /**
      * 设置是否检查APIs
-     * 
+     *
      * @param apisCheck 是否检查APIs
      */
     public void setApisCheck(boolean apisCheck) {
         this.apisCheck = apisCheck;
+    }
+
+    /**
+     * 设置是否追加到toolsCheck prompt
+     *
+     * @param appendToolCheck 是否追加到toolsCheck
+     */
+    public void setAppendToolCheck(boolean appendToolCheck) {
+        this.appendToolCheck = appendToolCheck;
     }
 
     public String getApiCurl() {
@@ -190,6 +210,7 @@ public class Prompt {
         np.setDataGroupField(dataGroupField);
         np.setApi(api);
         np.setApisCheck(apisCheck);
+        np.setAppendToolCheck(appendToolCheck);
         return np;
     }
 }

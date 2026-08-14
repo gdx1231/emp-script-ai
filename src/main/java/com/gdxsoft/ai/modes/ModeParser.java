@@ -329,6 +329,10 @@ public class ModeParser {
 		if (apisCheckAttr != null && apisCheckAttr.trim().length() > 0) {
 			p.setApisCheck(Boolean.parseBoolean(apisCheckAttr.trim()));
 		}
+		String appendToolCheckAttr = promptElement.getAttribute("appendToolCheck");
+		if (appendToolCheckAttr != null && appendToolCheckAttr.trim().length() > 0) {
+			p.setAppendToolCheck(Boolean.parseBoolean(appendToolCheckAttr.trim()));
+		}
 		return p;
 	}
 
@@ -483,6 +487,16 @@ public class ModeParser {
 		String useMode = toolElement.getAttribute("useMode");
 		if (useMode != null && useMode.trim().length() > 0) {
 			tool.setUseMode(useMode.trim());
+		}
+		// postSubmitSqlRef: 表单提交后执行的 SQL 引用名（引用 sqls 中的 sql name）
+		String postSubmitSqlRef = toolElement.getAttribute("postSubmitSqlRef");
+		if (postSubmitSqlRef != null && postSubmitSqlRef.trim().length() > 0) {
+			tool.setPostSubmitSqlRef(postSubmitSqlRef.trim());
+		}
+		// postSubmitApiRef: 表单提交后调用的 API 引用名（引用 tools/apis 中的 name）
+		String postSubmitApiRef = toolElement.getAttribute("postSubmitApiRef");
+		if (postSubmitApiRef != null && postSubmitApiRef.trim().length() > 0) {
+			tool.setPostSubmitApiRef(postSubmitApiRef.trim());
 		}
 		return tool;
 	}

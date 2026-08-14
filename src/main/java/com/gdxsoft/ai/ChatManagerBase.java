@@ -761,11 +761,20 @@ public class ChatManagerBase {
 		this.apiToolsChecks(refHeaders);
 		// mode.createStepPrompts(step, "", g_rv);
 		// 分两阶段处理提示词：先处理非apisCheck的提示词，再处理apisCheck=true的提示词
-
+		// toolsCheck prompt 延迟到最后处理（确保在用户输入之后添加工具结果）
+		Prompt toolsCheckPrompt = null;
 		for (int i = 0; i < step.getPrompts().size(); i++) {
 			Prompt p = step.getPrompts().get(i);
+			if (p.isApisCheck()) {
+				toolsCheckPrompt = p; // 延迟处理
+				continue;
+			}
 			// 处理单个提示词
 			processPrompt(p, promptSet, existsMessages, reqData, refHeaders);
+		}
+		// 最后处理 toolsCheck prompt（工具结果在用户输入之后添加）
+		if (toolsCheckPrompt != null) {
+			processPrompt(toolsCheckPrompt, promptSet, existsMessages, reqData, refHeaders);
 		}
 
 		// 确保 system 消息在最前面（缓存过期重建时 system 可能被追加到 user/assistant 之后）
@@ -883,6 +892,19 @@ public class ChatManagerBase {
 		if (!StringUtils.isBlank(prompt.getPrefix())) {
 			promptContent = prompt.getPrefix() + promptContent;
 		}
+		// 追加标记了 appendToolCheck 的 prompt 内容（先执行其 sqlRef/api）
+		for (Prompt other : step.getPrompts()) {
+			if (other.isAppendToolCheck() && other != prompt) {
+				mode.createStepPrompt(other, "", rv, refHeaders);
+				String appendContent = other.getContent();
+				if (!StringUtils.isBlank(appendContent)) {
+					if (!StringUtils.isBlank(other.getPrefix())) {
+						appendContent = other.getPrefix() + appendContent;
+					}
+					promptContent += "\n\n" + appendContent;
+				}
+			}
+		}
 		promptContent = this.rv.replaceParameters(promptContent);
 		// 自动附加本 mode 所有带调用说明（usage）的工具清单，无需在 prompt 中手写
 		String apisUsage = mode.getApisUsage();
@@ -991,6 +1013,38 @@ public class ChatManagerBase {
 		String apiCallCurl = apiPrompt.getApiCurl();
 		// 添加一条 curl 命令记录
 		this.addAiChatMsg(apiCallCurl, "api_call_curl", true);
+
+		// 如果工具定义了 postSubmitSqlRef，表单提交后执行 SQL 获取新记录
+		if (apiDef instanceof Tool) {
+			String sqlRef = ((Tool) apiDef).getPostSubmitSqlRef();
+			if (sqlRef != null && !sqlRef.trim().isEmpty()) {
+				try {
+					com.gdxsoft.ai.modes.SqlQuery sqlQuery = mode.findSqlQueryByRef(sqlRef);
+					if (sqlQuery != null) {
+						String resolvedSql = rv.replaceParameters(sqlQuery.getContent());
+						com.gdxsoft.easyweb.data.DTTable tb = com.gdxsoft.easyweb.data.DTTable.getJdbcTable(resolvedSql, rv);
+						String postResult = tb.toJSONArray().toString();
+						calledContent += "\n\n【新建记录】" + postResult;
+					} else {
+						calledContent += "\n\n【postSubmitSqlRef 未找到】" + sqlRef;
+					}
+				} catch (Exception e) {
+					calledContent += "\n\n【postSubmitSqlRef 执行失败】" + e.getMessage();
+				}
+			}
+			// 如果工具定义了 postSubmitApiRef，表单提交后调用引用的 API
+			String apiRef = ((Tool) apiDef).getPostSubmitApiRef();
+			if (apiRef != null && !apiRef.trim().isEmpty()) {
+				try {
+					// 传递当前工具的参数给引用的 API
+					String apiResult = executeApiCall(apiRef, args, refHeaders);
+					calledContent += "\n\n" + apiResult;
+				} catch (Exception e) {
+					calledContent += "\n\n【postSubmitApiRef 调用失败】" + e.getMessage();
+				}
+			}
+		}
+
 		// 记录api调用的结果
 		this.addAiChatMsg(calledContent, "api_call_content", true);
 
@@ -1849,6 +1903,15 @@ public class ChatManagerBase {
 	 */
 	public void updateAiChatMsg(long aimId, String msg) {
 		db.updateMessage(aimId, msg);
+	}
+
+	/**
+	 * 删除AI聊天消息
+	 *
+	 * @param aimId 消息ID
+	 */
+	public void deleteAiChatMsg(long aimId) {
+		db.deleteMessage(aimId);
 	}
 
 	/**

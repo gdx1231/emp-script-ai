@@ -65,6 +65,8 @@ public class Tool extends Api {
 
 	private String command; // 本地程序命令模板，支持 @占位符
 	private String useMode; // 子 mode 名称，非空时工具执行为进程内调用指定 mode
+	private String postSubmitSqlRef; // 表单提交后执行的 SQL 引用名（引用 sqls 中的 sql name）
+	private String postSubmitApiRef; // 表单提交后调用的 API 引用名（引用 tools/apis 中的 name）
 
 	public Tool() {
 		super();
@@ -128,6 +130,42 @@ public class Tool extends Api {
 		return useMode != null && useMode.trim().length() > 0;
 	}
 
+	/**
+	 * 获取表单提交后执行的 SQL 引用名
+	 *
+	 * @return SQL 引用名（对应 sqls 中的 sql name），未定义返回 null
+	 */
+	public String getPostSubmitSqlRef() {
+		return postSubmitSqlRef;
+	}
+
+	/**
+	 * 设置表单提交后执行的 SQL 引用名
+	 *
+	 * @param postSubmitSqlRef SQL 引用名
+	 */
+	public void setPostSubmitSqlRef(String postSubmitSqlRef) {
+		this.postSubmitSqlRef = postSubmitSqlRef;
+	}
+
+	/**
+	 * 获取表单提交后调用的 API 引用名
+	 *
+	 * @return API 引用名（引用 tools/apis 中的 name），未定义返回 null
+	 */
+	public String getPostSubmitApiRef() {
+		return postSubmitApiRef;
+	}
+
+	/**
+	 * 设置表单提交后调用的 API 引用名
+	 *
+	 * @param postSubmitApiRef API 引用名
+	 */
+	public void setPostSubmitApiRef(String postSubmitApiRef) {
+		this.postSubmitApiRef = postSubmitApiRef;
+	}
+
 	@Override
 	public Tool clone() {
 		Tool copy = new Tool(getName(), getDescription(), getUrl());
@@ -140,6 +178,8 @@ public class Tool extends Api {
 		copy.setUsage(getUsage());
 		copy.setCommand(command);
 		copy.setUseMode(useMode);
+		copy.setPostSubmitSqlRef(postSubmitSqlRef);
+		copy.setPostSubmitApiRef(postSubmitApiRef);
 		if (getHeaders() != null) {
 			List<ApiHeader> headersCopy = new ArrayList<>();
 			for (ApiHeader h : getHeaders()) {

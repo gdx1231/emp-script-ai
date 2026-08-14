@@ -104,10 +104,19 @@ public interface IRequestAI {
 
 	/**
 	 * 获取输出事件接口| Get the output events interface.
-	 * 
+	 *
 	 * @return
 	 */
 	IOutEvents getOutEvents();
+
+	/**
+	 * 获取累计的思考（reasoning）文本缓冲区。
+	 * <p>
+	 * 流式响应中 {@code reasoning_content} 字段单独缓冲，与正文 {@code content} 分开。
+	 *
+	 * @return 思考内容缓冲 | the reasoning buffer
+	 */
+	StringBuilder getReasoningText();
 
 	/**
 	 * 设置输出事件接口| Set the output events interface.

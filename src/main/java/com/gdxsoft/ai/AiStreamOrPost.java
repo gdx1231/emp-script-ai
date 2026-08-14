@@ -5,6 +5,7 @@ import java.io.PrintWriter;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.apache.commons.lang3.StringUtils;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -508,6 +509,7 @@ public class AiStreamOrPost {
 		String fullText = null;
 		IRequestAI req = null;
 		long aimId = -1;
+		long thinkingAimId = -1;
 
 		try {
 			// 创建AI请求实例
@@ -520,15 +522,27 @@ public class AiStreamOrPost {
 			ChatManagerBase.putRequestAI(chatManager.getRequestId(), req);
 			chatManager.addAiChatMsg(req.curl(reqData), "curl", true);
 
+			// 先创建思考占位消息，再创建 assistant 占位消息，保证日志顺序：思考过程在前、结果在后
+			if (chatManager.isAiThinking()) {
+				thinkingAimId = chatManager.addAiChatMsg("", "thinking", true);
+			}
 			aimId = chatManager.addAiChatMsg("", "assistant", false);
 
 			// 执行请求
 			fullText = executeRequest(req, reqData);
 
 			// 处理响应
-			processAiResponse(req, fullText, aimId);
+			processAiResponse(req, fullText, aimId, thinkingAimId);
 
 		} catch (Exception err) {
+			// 请求失败时清理未使用的思考占位消息，避免留下空记录
+			if (thinkingAimId > 0) {
+				try {
+					chatManager.deleteAiChatMsg(thinkingAimId);
+				} catch (Exception deleteErr) {
+					LOGGER.warn("Failed to delete empty thinking placeholder: {}", deleteErr.getMessage());
+				}
+			}
 			handleAiRequestException(req, err, aimId, fullText);
 		} finally {
 			// 清理资源
@@ -600,17 +614,34 @@ public class AiStreamOrPost {
 
 	/**
 	 * 处理AI响应
-	 * 
-	 * @param req      AI请求对象，包含令牌使用信息
-	 * @param fullText AI响应的完整文本
-	 * @param aimId    AI消息记录ID
+	 *
+	 * @param req            AI请求对象，包含令牌使用信息
+	 * @param fullText       AI响应的完整文本
+	 * @param aimId          AI消息记录ID（结果消息）
+	 * @param thinkingAimId  思考消息记录ID（-1 表示未创建占位）
 	 */
-	private void processAiResponse(IRequestAI req, String fullText, long aimId) {
+	private void processAiResponse(IRequestAI req, String fullText, long aimId, long thinkingAimId) {
 		// 记录令牌使用情况
 		recordTokenUsage(req, aimId);
 
-		// 更新AI消息记录
-		chatManager.updateAiChatMsg(aimId, fullText);
+		// 分离思考过程与输出结果：先记录思考过程，再记录结果
+		String reasoning = extractReasoning(req, fullText);
+		String content = extractContent(req, fullText);
+
+		if (!StringUtils.isBlank(reasoning)) {
+			if (thinkingAimId > 0) {
+				chatManager.updateAiChatMsg(thinkingAimId, reasoning);
+			} else {
+				// 未预留占位（例如非流式 + thinking 关闭时仍返回了 reasoning），补记一条思考消息
+				chatManager.addAiChatMsg(reasoning, "thinking", true);
+			}
+		} else if (thinkingAimId > 0) {
+			// 没有思考内容，清理空占位
+			chatManager.deleteAiChatMsg(thinkingAimId);
+		}
+
+		// 更新AI消息记录（仅记录结果正文）
+		chatManager.updateAiChatMsg(aimId, content);
 
 		// 处理步骤动作
 		handleStepAction(fullText, writer);
@@ -622,6 +653,49 @@ public class AiStreamOrPost {
 		if (evaluateUiTest(chatManager.getMode().getUiCompleteTest(), fullText)) {
 			sendUiHtmlEvent("complete");
 		}
+	}
+
+	/**
+	 * 从响应中提取思考过程（reasoning）内容。
+	 * <p>
+	 * 流式响应时，思考内容由 {@code RequestAIBase} 单独缓冲（{@code reasoning_content}）；
+	 * 非流式响应时，从原始 JSON 响应的 {@code reasoning_content} 字段提取。
+	 *
+	 * @param req      AI请求对象
+	 * @param fullText AI响应文本
+	 * @return 思考内容，无则返回 null
+	 */
+	private String extractReasoning(IRequestAI req, String fullText) {
+		if (chatManager.getStep().isStream()) {
+			StringBuilder reasoningBuf = req.getReasoningText();
+			return reasoningBuf != null ? reasoningBuf.toString().trim() : null;
+		}
+		JSONObject json = req.extraceJson(fullText, true);
+		if (json != null && json.has("reasoning_content")) {
+			return json.optString("reasoning_content", null);
+		}
+		return null;
+	}
+
+	/**
+	 * 从响应中提取正文（content）内容。
+	 * <p>
+	 * 流式响应时 {@code fullText} 已是纯正文；非流式响应时从原始 JSON 响应的 {@code content}
+	 * 字段提取，提取失败则回退为原始文本。
+	 *
+	 * @param req      AI请求对象
+	 * @param fullText AI响应文本
+	 * @return 正文内容
+	 */
+	private String extractContent(IRequestAI req, String fullText) {
+		if (chatManager.getStep().isStream()) {
+			return fullText;
+		}
+		JSONObject json = req.extraceJson(fullText, true);
+		if (json != null && json.has("content")) {
+			return json.optString("content", fullText);
+		}
+		return fullText;
 	}
 
 	/**

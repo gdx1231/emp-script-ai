@@ -216,6 +216,8 @@ public abstract class RequestAIBase implements IRequestAI {
 	private String apiKey;
 
 	private StringBuilder fullText = new StringBuilder();
+	// 思考（reasoning）内容单独缓冲，避免与正文（content）混在一起
+	private StringBuilder reasoningText = new StringBuilder();
 
 	// --- Cancellation support for streaming ---
 	private volatile boolean cancelRequested = false;
@@ -230,6 +232,18 @@ public abstract class RequestAIBase implements IRequestAI {
 	 */
 	public StringBuilder getFullText() {
 		return fullText;
+	}
+
+	/**
+	 * 获取累计的思考（reasoning）文本缓冲区。
+	 * <p>
+	 * 流式响应中 {@code reasoning_content} 字段会单独缓冲到这里，与正文 {@code content}
+	 * 分开，便于日志记录时先记录思考过程、再记录结果。
+	 *
+	 * @return StringBuilder 思考内容缓冲 | the reasoning buffer
+	 */
+	public StringBuilder getReasoningText() {
+		return reasoningText;
 	}
 
 	protected ProviderType providerType;
@@ -382,11 +396,12 @@ public abstract class RequestAIBase implements IRequestAI {
 		String content = json.optString("content", null);
 		if (content != null && !content.isEmpty()) {
 			this.getFullText().append(content);
-		} else if (json.has("reasoning_content")) {
-			// Qwen3/DeepSeek: thinking content field (fallback when content is absent)
+		}
+		// Qwen3/DeepSeek 等：思考内容单独缓冲，与正文分开记录
+		if (json.has("reasoning_content")) {
 			String reasoning = json.optString("reasoning_content", "");
 			if (!reasoning.isEmpty()) {
-				this.getFullText().append(reasoning);
+				this.reasoningText.append(reasoning);
 			}
 		}
 
