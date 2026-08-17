@@ -20,6 +20,8 @@ import com.gdxsoft.ai.img.ImgProviderType;
 import com.gdxsoft.ai.img.ImgRequest;
 import com.gdxsoft.ai.img.ImgResponse;
 import com.gdxsoft.ai.img.ImgResponse.GeneratedImage;
+import com.gdxsoft.ai.img.ImgTaskStatus;
+import com.gdxsoft.ai.img.ImgTaskSubmit;
 
 /**
  * Qwen Wanx 2.7 image generation/editing provider.
@@ -43,6 +45,9 @@ import com.gdxsoft.ai.img.ImgResponse.GeneratedImage;
  *       {@code /api/v1/services/aigc/image-generation/generation}（带
  *       {@code X-DashScope-Async: enable} 头），返回 {@code task_id}，
  *       轮询 {@code GET /api/v1/tasks/{task_id}}。适用于耗时较长的任务。</li>
+ *   <li><b>非阻塞（统一异步模式）</b>：{@link #submitTask(ImgRequest)} 提交后立即返回
+ *       task_id，调用方自行通过 {@link #pollTask(String, ImgOptions)} 轮询，
+ *       配合 {@code ImgTaskRunner} 使用（不受 syncMode 影响，恒走异步端点）。</li>
  * </ul>
  *
  * <h2>URL</h2>
@@ -133,13 +138,92 @@ public class QwenImgWanxProvider extends ImgProviderBase {
 
     private ImgResponse generateAsync(JSONObject body, ImgOptions opts)
             throws IOException, InterruptedException {
+        JSONObject submitJson = submitAsyncTask(body);
+        JSONObject output = submitJson.getJSONObject("output");
+        String taskId = output.getString("task_id");
+        LOGGER.info("Wanx 2.7 async task submitted, taskId={}, pollUrl={}", taskId, resolveTaskUrl(taskId));
+
+        for (int i = 0; i < MAX_POLL_COUNT; i++) {
+            Thread.sleep(POLL_DELAY_MS);
+            ImgTaskStatus st = pollTask(taskId, opts);
+            if (st.isSucceeded()) {
+                return st.getResponse();
+            }
+            if (st.isFailed()) {
+                throw new IOException("Wanx 2.7 task failed: " + st.getError());
+            }
+            // processing — 继续轮询
+        }
+        throw new IOException("Wanx 2.7 async task timed out after "
+                + (MAX_POLL_COUNT * POLL_DELAY_MS / 1000) + "s, taskId=" + taskId);
+    }
+
+    // ======================== 原生异步（非阻塞 submit / poll） ========================
+
+    /**
+     * 提交异步任务（非阻塞），返回服务端 task_id。
+     * <p>
+     * 不受 {@link #setSyncMode(boolean)} 影响，恒走异步端点
+     * （{@code X-DashScope-Async: enable}）。
+     */
+    @Override
+    public ImgTaskSubmit submitTask(ImgRequest request) throws Exception {
+        if (apiKey == null || apiKey.isEmpty()) {
+            throw new IllegalStateException("Qwen Wanx 2.7 requires an API key (DashScope API Key)");
+        }
+        JSONObject body = buildRequestBody(request.getOptions());
+        JSONObject submitJson = submitAsyncTask(body);
+        String taskId = submitJson.getJSONObject("output").getString("task_id");
+        return new ImgTaskSubmit(taskId, submitJson);
+    }
+
+    /**
+     * 查询异步任务状态（非阻塞）。
+     * <p>
+     * {@code output.task_status} 映射：PENDING/RUNNING → processing，
+     * SUCCEEDED → succeeded（含完整 {@link ImgResponse}），
+     * FAILED/CANCELED/UNKNOWN → failed。
+     */
+    @Override
+    public ImgTaskStatus pollTask(String taskId, ImgOptions opts) throws IOException, InterruptedException {
+        String taskUrl = resolveTaskUrl(taskId);
+        HttpClient client = HttpUtils.createHttpClient();
+        HttpRequest pollReq = HttpRequest.newBuilder(URI.create(taskUrl))
+                .header("Authorization", "Bearer " + apiKey)
+                .GET()
+                .build();
+        HttpResponse<String> pollResp =
+                client.send(pollReq, HttpResponse.BodyHandlers.ofString());
+        if (pollResp.statusCode() / 100 != 2) {
+            throw new IOException("Wanx 2.7 poll HTTP " + pollResp.statusCode()
+                    + ": " + pollResp.body());
+        }
+
+        JSONObject pollJson = new JSONObject(pollResp.body());
+        JSONObject output = pollJson.optJSONObject("output");
+        String status = output != null ? output.optString("task_status", "") : "";
+        if ("SUCCEEDED".equals(status)) {
+            return new ImgTaskStatus("succeeded", parseResponse(pollJson, opts), null, pollJson);
+        }
+        if ("FAILED".equals(status) || "CANCELED".equals(status) || "UNKNOWN".equals(status)) {
+            String msg = output != null ? output.optString("message", "") : "";
+            return new ImgTaskStatus("failed", null, "Wanx 2.7 task " + status + ": " + msg, pollJson);
+        }
+        // PENDING / RUNNING — 处理中
+        return new ImgTaskStatus("processing", null, null, pollJson);
+    }
+
+    /**
+     * POST 异步端点提交任务，校验并返回原始 JSON（保证 output.task_id 存在）。
+     */
+    private JSONObject submitAsyncTask(JSONObject body) throws IOException, InterruptedException {
         String submitUrl = resolveAsyncUrl();
         String submitBody = postJson(submitUrl, body, true);
         JSONObject submitJson = new JSONObject(submitBody);
 
-        // 如果同步端点也接受异步头，可能直接返回完整结果
+        // 如果端点直接返回完整结果（含 choices），说明未走异步流程
         if (hasChoices(submitJson)) {
-            return parseResponse(submitJson, opts);
+            throw new IOException("Wanx 2.7 异步提交直接返回了完整结果，请改用同步 generate()");
         }
 
         JSONObject output = submitJson.optJSONObject("output");
@@ -150,40 +234,7 @@ public class QwenImgWanxProvider extends ImgProviderBase {
         if (taskId == null || taskId.isEmpty()) {
             throw new IOException("Wanx 2.7 async: no task_id in response: " + submitBody);
         }
-
-        String taskUrl = resolveTaskUrl(taskId);
-        LOGGER.info("Wanx 2.7 async task submitted, taskId={}, pollUrl={}", taskId, taskUrl);
-
-        for (int i = 0; i < MAX_POLL_COUNT; i++) {
-            Thread.sleep(POLL_DELAY_MS);
-
-            HttpClient client = HttpUtils.createHttpClient();
-            HttpRequest pollReq = HttpRequest.newBuilder(URI.create(taskUrl))
-                    .header("Authorization", "Bearer " + apiKey)
-                    .GET()
-                    .build();
-            HttpResponse<String> pollResp =
-                    client.send(pollReq, HttpResponse.BodyHandlers.ofString());
-            if (pollResp.statusCode() / 100 != 2) {
-                throw new IOException("Wanx 2.7 poll HTTP " + pollResp.statusCode()
-                        + ": " + pollResp.body());
-            }
-
-            JSONObject pollJson = new JSONObject(pollResp.body());
-            String status = pollJson.optJSONObject("output") != null
-                    ? pollJson.getJSONObject("output").optString("task_status", "")
-                    : "";
-            if ("SUCCEEDED".equals(status)) {
-                return parseResponse(pollJson, opts);
-            }
-            if ("FAILED".equals(status) || "CANCELED".equals(status) || "UNKNOWN".equals(status)) {
-                String msg = pollJson.getJSONObject("output").optString("message", "");
-                throw new IOException("Wanx 2.7 task " + status + ": " + msg);
-            }
-            // PENDING / RUNNING — 继续轮询
-        }
-        throw new IOException("Wanx 2.7 async task timed out after "
-                + (MAX_POLL_COUNT * POLL_DELAY_MS / 1000) + "s, taskId=" + taskId);
+        return submitJson;
     }
 
     // ======================== Request body ========================

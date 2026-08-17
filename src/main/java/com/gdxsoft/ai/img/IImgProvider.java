@@ -35,6 +35,30 @@ public interface IImgProvider {
     ImgResponse generate(ImgRequest request) throws IOException, InterruptedException;
 
     /**
+     * Submit task (non-blocking). Returns immediately with task_id.
+     * <p>
+     * {@link ImgProviderBase} provides a local async fallback (virtual thread +
+     * in-memory registry) so all providers support this out of the box.
+     * Providers with native async APIs (e.g. Qwen Wanx) override this.
+     */
+    default ImgTaskSubmit submitTask(ImgRequest request) throws Exception {
+        throw new UnsupportedOperationException(
+            getProviderType().getName() + " does not support non-blocking submitTask");
+    }
+
+    /**
+     * Poll task status (non-blocking). Returns current status without blocking.
+     * <p>
+     * {@link ImgProviderBase} provides a local async fallback (virtual thread +
+     * in-memory registry) so all providers support this out of the box.
+     * Providers with native async APIs (e.g. Qwen Wanx) override this.
+     */
+    default ImgTaskStatus pollTask(String taskId, ImgOptions opts) throws Exception {
+        throw new UnsupportedOperationException(
+            getProviderType().getName() + " does not support non-blocking pollTask");
+    }
+
+    /**
      * Render the request as a {@code curl} command (for debugging / logging).
      * Sensitive headers (e.g. {@code Authorization}) should be redacted.
      */

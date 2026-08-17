@@ -172,6 +172,23 @@ public class ImgChatLogger {
 	}
 
 	/**
+	 * 记录 API 原始返回结果（异步任务的创建/查询返回）。
+	 *
+	 * @param label 标签（如 "创建任务返回"、"查询结果返回"）
+	 * @param raw   原始 JSON 响应，null 时跳过
+	 */
+	public void logRawResponse(String label, JSONObject raw) {
+		try {
+			if (aiId == 0 || raw == null) return;
+			String msg = (label != null ? "【" + label + "】\n" : "") + raw.toString(2);
+			db.addMessage(aiId, msg, "assistant", "img_generate",
+					null, null, null, noi, true, false);
+		} catch (Exception e) {
+			LOGGER.warn("记录原始返回日志失败: {}", e.getMessage());
+		}
+	}
+
+	/**
 	 * 记录任务成功：添加 assistant 消息（图片 URL + 元数据）。
 	 *
 	 * @param response 图片生成响应

@@ -58,8 +58,8 @@ class DoubaoImgProviderTest {
         // Doubao-specific fields
         assertFalse(body.has("sequential_image_generation"),
                 "sequential_image_generation should not be present when not set");
-        assertTrue(body.getBoolean("watermark"),
-                "default watermark should be true");
+        assertFalse(body.getBoolean("watermark"),
+                "default watermark should be false");
         assertFalse(body.getBoolean("stream"),
                 "default stream should be false");
 

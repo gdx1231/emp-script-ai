@@ -7,6 +7,7 @@
 - 流式输出（SSE）Servlet 示例：`StreamServlet`
 - 场景模式（Mode）XML 解析：从 XML 解析 Step、Prompt、SqlQuery，支持 step 的 `stream` 与 `actionSqlRef` 属性
 - **多轮对话历史控制**：`ChatManagerBase` 支持配置最大历史消息条数和 token 上限，自动截断旧消息
+- **AI 音乐创作**：内置 MiniMax Music 3.0 Provider，支持歌词/风格生成、自动歌词、纯音乐与翻唱参数
 - XML 解析性能优化：`Modes` 内置 xmlContent 的 MD5 缓存，相同内容不重复解析（线程安全）
 - Markdown 代码块提取：`StringUtils.extractCodeBlocks`
 - Java 17 + Maven，轻依赖、易扩展
@@ -164,6 +165,28 @@ List<Map<String, String>> blocks = StringUtils.extractCodeBlocks(md);
 // blocks.get(0).get("language") == "java"
 // blocks.get(0).get("code") == "System.out.println(\"hi\");"
 ```
+
+### 6) AI 音乐创作
+```java
+import com.gdxsoft.ai.music.*;
+import java.nio.file.Path;
+
+MusicOptions options = new MusicOptions()
+        .lyrics("[Verse]\n街灯微亮晚风轻抚\n[Chorus]\n熟悉的角落")
+        .format("mp3");
+
+Path output = MusicClient.of("minimax_music")
+        .apiKey(System.getenv("MINIMAX_API_KEY"))
+        .generateToFile("独立民谣,忧郁,咖啡馆", options, Path.of("song.mp3"));
+```
+
+说明：
+- `lyricsOptimizer(true)` 可只提供风格描述，由服务端自动生成歌词
+- `instrumental(true)` 生成纯音乐，此时 prompt 必填
+- `music-cover` / `music-cover-free` 可通过 `audioUrl`、`audioBase64` 或 `coverFeatureId` 提供参考音频
+- API Key 请通过环境变量或配置中心注入，不要硬编码
+
+更多接口字段见 `docs/MUSIC_API.md`。
 
 ## 进阶说明
 - MD5 缓存策略：`Modes` 以 xmlContent 的 MD5 作为键缓存“最近一次解析结果”。同一进程内，若多次传入相同 xmlContent，将直接复用缓存；内容变更后自动重新解析并刷新缓存。

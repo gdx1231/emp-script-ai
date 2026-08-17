@@ -9,7 +9,7 @@
 - **统一调用多家大模型服务商**：通过工厂类构建 OpenAI / Anthropic 兼容的请求并处理响应（含流式 SSE）。
 - **场景模式（Mode）XML 解析**：从 XML 解析 `<mode>` / `<step>` / `<prompt>` / `<sql>` / `<api>` / `<action>` 等定义，驱动多步骤 AI 对话流程。
 - **AI 聊天管理**：会话、消息持久化（数据库）、多轮历史截断（条数 + token 上限）、国际化消息。
-- **多模态子模块**：文本对话之外，还有图像生成（img）、视频生成（video）、语音转文字（stt）、文字转语音（tts）四套独立的 Provider 体系。
+- **多模态子模块**：文本对话之外，还有图像生成（img）、视频生成（video）、语音转文字（stt）、文字转语音（tts）、音乐生成（music）五套独立的 Provider 体系。
 - **视频创作工作流（video/workflow）**：独立进程的多阶段视频生产管线（分镜规划 → 素材生成 → TTS → 分镜视频 → ffmpeg 合成），workflow.json 配置驱动、数据库表持久化状态、CLI 入口。
 - **AI API Switch 代理（switchproxy）**：基于 JDK 内置 `com.sun.net.httpserver.HttpServer` 的本地代理，对外暴露 OpenAI / Anthropic 兼容接口，内部转发/转换到真实服务商，带 CLI 管理工具。
 
@@ -52,7 +52,7 @@ mvn -B package -Prelease
 - `modes/` — Mode XML 解析：`Modes`（按 xmlContent 的 MD5 缓存解析结果，`ConcurrentHashMap` 线程安全；`getMode(name)` 返回克隆体防止外部修改缓存原件）、`Mode`、`Step`、`Prompt`、`SqlQuery`、`Api`、`ApiField`、`ApiHeader`、`Tool`（继承 `Api`，支持 `command` 本地程序执行与 CDATA 调用说明）、`Action`、`ParamCheck`、`ModeParser`。
 - `request/` — 请求层抽象：`IRequestData` / `IRequestAI` / `IOutEvents` 接口及 `RequestDataBase` / `RequestAIBase` 基类，`RequestDataFactory` / `RequestAIFactory` 工厂，`ProviderType` 枚举，工具调用与多模态内容模型（`AiTool`、`AiToolCall`、`AiToolResult`、`AiImageContent`、`AiAudioContent`、`AiVideoContent`、`AiWebSearch` 等）、`McpClient` / `McpTool`、`style/`（Anthropic 风格请求）。
 - `providers/` — 各服务商实现：`qwen`、`openai`、`anthropic`、`gemini`、`grok`、`doubao`、`tencent`、`deepseek`、`openrouter`、`openaiCompat`（OpenAI 兼容）、`anthropicCompat`（Anthropic 兼容）。多数为 OpenAI 兼容接口风格。新增服务商时在对应包下实现 `RequestData` 等并注册到 `ProviderType` 与两个工厂类。
-- `img/` — 图像生成：`IImgProvider`、`ImgClient`、`ImgProviderFactory`、`ImgProviderType`、`ImgOptions`（含 doubao 组图生成 `sequentialImageGeneration`），providers：qwen/doubao/grok/openai/openaiCompat/stability。
+- `img/` — 图像生成：`IImgProvider`、`ImgClient`、`ImgProviderFactory`、`ImgProviderType`、`ImgOptions`（含 doubao 组图生成 `sequentialImageGeneration`）、`ImgTaskRunner`（统一异步 submit/poll + 自动落库日志，配合 `ImgTaskSubmit`/`ImgTaskStatus`；`ImgProviderBase` 内置本地异步回退——虚拟线程执行 generate + 内存注册表，taskId 为 `local-` 前缀仅进程内有效；Qwen Wanx 覆盖为 DashScope 原生异步 task_id），providers：qwen/doubao/grok/openai/openaiCompat/stability。
 - `video/` — 视频生成：`IVideoProvider`、`VideoClient`、`VideoProviderFactory`、`VideoTaskRunner`（异步 submit/poll）、`VideoOptions`（`returnLastFrame()` 尾帧续接），providers：qwen/doubao/jimeng/kling/minimax/openaiCompat。
 - `video/workflow/` — 视频创作工作流（独立进程）：
   - `engine/` — `WorkflowCli`（main 入口：start/submit/status 等子命令）、`WorkflowEngine`、`WorkflowScheduler`（DB 轮询 pending 实例 + 全局并发信号量 + 优先级调度）、`WorkflowExecutor`（虚拟线程执行各阶段）。
@@ -61,6 +61,7 @@ mvn -B package -Prelease
   - 状态持久化到 `AI_WF_DEF` / `AI_WF_INSTANCE` / `AI_WF_TASK` / `AI_WF_ASSET` 等 11 张表，workflow.json 按 MD5 去重。设计文档见 `docs/VIDEO_WORKFLOW_PLAN.md`。
 - `stt/` — 语音转文字：openai/openaiCompat/azure/google/qwen/doubao/local（qwen、doubao 均走各自 OpenAI 兼容模式 chat/completions + input_audio，qwen 默认模型 qwen3-asr-flash，doubao 用方舟音频理解模型 + 转写提示词）。
 - `tts/` — 文字转语音：qwen/doubao——qwen 走 DashScope multimodal-generation 端点（默认 qwen3-tts-flash，响应 output.audio.data/url，url 自动下载），doubao 按模型自动选接口：seed-audio-* 走 tts/create 非流式（默认 seed-audio-1.0，成功无 code 字段），seed-tts-*（如 seed-tts-2.0）走 unidirectional HTTP Chunked 流式（X-Api-Resource-Id 头=模型名，逐行 JSON 分片聚合，speaker 默认 zh_female_xiaohe_uranus_bigtts）。
+- `music/` — 音乐生成：`IMusicProvider`、`MusicClient`、`MusicProviderFactory`、`MusicProviderType`、`MusicOptions`（默认 model `music-3.0`，支持 `lyricsOptimizer` 自动歌词、`instrumental` 纯音乐、`audioUrl`/`audioBase64`/`coverFeatureId` 翻唱参考音频）、`MusicComposition`（先歌词后生成的一站式创作），providers：minimax（Music 3.0，含 `music_cover_preprocess` 翻唱预处理与 `lyrics_generation` 歌词生成，hex 音频经 `MusicResponse.save` 落盘）。
 - `switchproxy/` — AI API Switch 代理：`SwitchServer`（多地址监听）、`SwitchCli`（`main` 入口：start/list/add-provider/add-model/use-model/add-key 等子命令）、`SwitchConfig`/`ProfileConfig`/`RouteConfig`/`AccessKeyConfig`（XML 配置）、`IpAccessController`（IP 白名单）、`handler/`（Passthrough、Chat2Anthropic、Chat2Responses、Responses2Anthropic、Admin、Status）、`converter/`（格式转换）、`logger/` + `entry/`（请求/响应 XML 日志）。配置默认在 `~/.emp-script-ai/switch.settings.xml`，详细设计见 `docs/SWITCH_DEV_GUIDE.md`。
 - `export/IAction.java` — 自定义动作扩展接口；`console/TranslateSql.java` — 控制台工具。
 
@@ -78,7 +79,7 @@ mvn -B package -Prelease
 
 ## 测试说明
 
-- 测试框架为 JUnit 5（Jupiter）。单元测试在各包下（如 `switchproxy/`、`stt/`、`tts/`、`img/`、`video/`、`modes/`、`request/` 的解析与配置测试），不依赖外部服务。
+- 测试框架为 JUnit 5（Jupiter）。单元测试在各包下（如 `switchproxy/`、`stt/`、`tts/`、`img/`、`video/`、`music/`、`modes/`、`request/` 的解析与配置测试），不依赖外部服务。
 - **集成测试** `com.gdxsoft.ai.test.IntegrationTest` 使用真实 AI API + HSQLDB 内存库，流程为 SSE 流式输出 → AI 回答落库 → 多轮对话验证；未配置 provider 时通过 `assumeTrue` 自动跳过，不会导致构建失败。
 - 运行集成测试前需要：
   - `src/test/resources/ewa_conf.xml`：由 `ewa_conf.xml.example` 复制并配置（`TestDatabase` 使用其中名为 `test_hsqldb` 的 HSQLDB 配置）；
@@ -129,6 +130,7 @@ bin/start.sh list                # 列出供应商和路由
 - `INTEGRATION_TEST_DESIGN.md` — 集成测试设计
 - `GENERATE_AI_SETTINGS.md` — 测试配置生成工具
 - `IMG_API.md`、`DOUBAO_SEQUENTIAL_GENERATION.md` — 图像生成 API 与豆包组图生成
+- `MUSIC_API.md`、`refs/minimax-music3.md` — MiniMax 音乐生成 API 与参考文档
 - `INTERNATIONALIZATION.md` / `INTERNATIONALIZATION_IMPROVEMENT.md` — 国际化
 - `LOGGER_IMPROVEMENT.md` — 请求日志改进说明
 - `MODE_REFACTOR_SUMMARY.md`、`API_IMPLEMENTATION_SUMMARY.md` 等 — 历次重构记录

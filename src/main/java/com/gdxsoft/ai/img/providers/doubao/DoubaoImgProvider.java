@@ -29,7 +29,7 @@ import com.gdxsoft.ai.img.ImgResponse;
  * has its own request parameters:
  * <ul>
  * <li>{@code sequential_image_generation} — "disabled" (default) or "auto"</li>
- * <li>{@code watermark} — whether to add watermark (default true)</li>
+ * <li>{@code watermark} — whether to add watermark (default false)</li>
  * <li>Size presets like {@code "2K"}, {@code "4K"} in addition to exact
  * dimensions</li>
  * </ul>
@@ -59,7 +59,7 @@ public class DoubaoImgProvider extends ImgProviderBase {
 
 	// === Doubao-specific config ===
 
-	/** Whether the generated image includes a watermark (default true). */
+	/** Whether the generated image includes a watermark (default false). */
 	public void setWatermark(boolean watermark) {
 		this.watermark = watermark;
 	}
