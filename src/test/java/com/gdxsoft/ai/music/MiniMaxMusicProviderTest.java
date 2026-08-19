@@ -128,6 +128,42 @@ class MiniMaxMusicProviderTest {
     }
 
     @Test
+    void coverRunsPreprocessThenMusic() throws Exception {
+        MusicCoverPreprocessResponse preprocess = new MusicCoverPreprocessResponse(
+                "feature-1", "[Verse]\n原曲歌词", null, 120.0, "trace-1", new JSONObject());
+        MusicResponse music = new MusicResponse("0011ff", null, 2, "trace-2", null, new JSONObject());
+        FakeProvider provider = new FakeProvider(null, music);
+        provider.nextCoverPreprocess = preprocess;
+
+        MusicClient client = new MusicClient(provider);
+        var result = client.cover(
+                MusicCoverPreprocessRequest.audioUrl("https://example.com/a.mp3"),
+                "流行摇滚风格，保持原曲情绪", new MusicOptions());
+
+        assertEquals("https://example.com/a.mp3", provider.lastCoverRequest.getAudioUrl());
+        assertEquals("feature-1", provider.lastMusicRequest.getOptions().getCoverFeatureId());
+        assertEquals("[Verse]\n原曲歌词", provider.lastMusicRequest.getOptions().getLyrics());
+        assertSame(preprocess, result.getPreprocess());
+        assertSame(music, result.getMusic());
+    }
+
+    @Test
+    void coverSupportsRevisedLyrics() throws Exception {
+        MusicCoverPreprocessResponse preprocess = new MusicCoverPreprocessResponse(
+                "feature-2", "[Verse]\n原曲歌词", null, 90.0, null, new JSONObject());
+        MusicResponse music = new MusicResponse(null, "https://example.com/song.mp3", 2, null, null, new JSONObject());
+        FakeProvider provider = new FakeProvider(null, music);
+        provider.nextCoverPreprocess = preprocess;
+
+        new MusicClient(provider).cover(
+                MusicCoverPreprocessRequest.audioBase64("YXVkaW8="),
+                "民谣风格，温柔抒情", new MusicOptions(), "[Verse]\n修改后的歌词");
+
+        assertEquals("YXVkaW8=", provider.lastCoverRequest.getAudioBase64());
+        assertEquals("[Verse]\n修改后的歌词", provider.lastMusicRequest.getOptions().getLyrics());
+    }
+
+    @Test
     void rendersCurlForLyricsAndCoverPreprocess() {
         MiniMaxMusicProvider provider = new MiniMaxMusicProvider();
         String lyricsCurl = provider.curl(MusicLyricsRequest.writeFullSong("夏日海边"));
@@ -153,6 +189,8 @@ class MiniMaxMusicProviderTest {
         private final MusicResponse music;
         private MusicLyricsRequest lastLyricsRequest;
         private MusicRequest lastMusicRequest;
+        private MusicCoverPreprocessRequest lastCoverRequest;
+        private MusicCoverPreprocessResponse nextCoverPreprocess;
 
         private FakeProvider(MusicLyricsResponse lyrics, MusicResponse music) {
             this.lyrics = lyrics;
@@ -166,7 +204,7 @@ class MiniMaxMusicProviderTest {
         }
 
         @Override public MusicCoverPreprocessResponse preprocessCover(MusicCoverPreprocessRequest request) {
-            throw new UnsupportedOperationException();
+            this.lastCoverRequest = request; return nextCoverPreprocess;
         }
 
         @Override public MusicLyricsResponse generateLyrics(MusicLyricsRequest request) {

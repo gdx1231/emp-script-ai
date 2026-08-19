@@ -439,4 +439,117 @@ class ThinkingBudgetTest {
 		assertFalse(com.gdxsoft.ai.providers.doubao.RequestData
 				.isThinkingModel("doubao-lite-32k"));
 	}
+
+	// ====================== DeepSeek ======================
+
+	@Test
+	void deepseek_thinkingEnabledDisabled() {
+		com.gdxsoft.ai.providers.deepseek.RequestData rd =
+				new com.gdxsoft.ai.providers.deepseek.RequestData();
+		rd.model("deepseek-v4-pro");
+
+		rd.thinking(true);
+		assertEquals("enabled", rd.build().getJSONObject("thinking").getString("type"));
+
+		// DeepSeek 默认开启思考，关闭必须显式下发 disabled
+		rd.thinking(false);
+		assertEquals("disabled", rd.build().getJSONObject("thinking").getString("type"));
+	}
+
+	@Test
+	void deepseek_v4Pro_writesReasoningEffort() {
+		com.gdxsoft.ai.providers.deepseek.RequestData rd =
+				new com.gdxsoft.ai.providers.deepseek.RequestData();
+		rd.model("deepseek-v4-pro");
+		rd.thinkingBudget(4096);
+
+		JSONObject body = rd.build();
+		assertEquals("low", body.getString("reasoning_effort"));
+		assertEquals("enabled", body.getJSONObject("thinking").getString("type"));
+		assertEquals(4096, rd.getThinkingBudget());
+
+		rd.thinkingBudget(16384);
+		assertEquals("high", rd.build().getString("reasoning_effort"));
+
+		rd.thinkingBudget(32768);
+		assertEquals("max", rd.build().getString("reasoning_effort"));
+	}
+
+	@Test
+	void deepseek_chat_ignored() {
+		com.gdxsoft.ai.providers.deepseek.RequestData rd =
+				new com.gdxsoft.ai.providers.deepseek.RequestData();
+		rd.model("deepseek-chat");
+		rd.thinkingBudget(4096);
+
+		assertFalse(rd.build().has("reasoning_effort"), "deepseek-chat 不支持思考强度");
+		assertEquals(4096, rd.getThinkingBudget());
+	}
+
+	@Test
+	void deepseek_clearBudget_keepsThinkingSwitch() {
+		com.gdxsoft.ai.providers.deepseek.RequestData rd =
+				new com.gdxsoft.ai.providers.deepseek.RequestData();
+		rd.model("deepseek-v4-flash");
+		rd.thinking(true);
+		rd.thinkingBudget(8192);
+		assertEquals("high", rd.build().getString("reasoning_effort"));
+
+		rd.thinkingBudget(0);
+		JSONObject body = rd.build();
+		assertFalse(body.has("reasoning_effort"));
+		assertEquals("enabled", body.getJSONObject("thinking").getString("type"));
+		assertEquals(0, rd.getThinkingBudget());
+	}
+
+	@Test
+	void deepseek_thinkingDisabled_clearsEffort() {
+		com.gdxsoft.ai.providers.deepseek.RequestData rd =
+				new com.gdxsoft.ai.providers.deepseek.RequestData();
+		rd.model("deepseek-v4-pro");
+		rd.thinkingBudget(4096);
+		rd.thinking(false);
+
+		JSONObject body = rd.build();
+		assertFalse(body.has("reasoning_effort"), "关闭思考模式应清除 reasoning_effort");
+		assertEquals("disabled", body.getJSONObject("thinking").getString("type"));
+	}
+
+	@Test
+	void deepseek_reasoningEffort_normalization() {
+		assertEquals("low", com.gdxsoft.ai.providers.deepseek.RequestData.normalizeEffort("low"));
+		assertEquals("high", com.gdxsoft.ai.providers.deepseek.RequestData.normalizeEffort("medium"));
+		assertEquals("high", com.gdxsoft.ai.providers.deepseek.RequestData.normalizeEffort("high"));
+		assertEquals("high", com.gdxsoft.ai.providers.deepseek.RequestData.normalizeEffort("xhigh"));
+		assertEquals("max", com.gdxsoft.ai.providers.deepseek.RequestData.normalizeEffort("MAX"));
+	}
+
+	@Test
+	void deepseek_reasoningEffort_setDirectly() {
+		com.gdxsoft.ai.providers.deepseek.RequestData rd =
+				new com.gdxsoft.ai.providers.deepseek.RequestData();
+		rd.model("deepseek-v4-pro");
+		rd.reasoningEffort("medium");
+
+		JSONObject body = rd.build();
+		assertEquals("high", body.getString("reasoning_effort"));
+		assertEquals("enabled", body.getJSONObject("thinking").getString("type"));
+
+		rd.reasoningEffort(null);
+		assertFalse(rd.build().has("reasoning_effort"));
+	}
+
+	@Test
+	void deepseekReasoningModel_detection() {
+		assertTrue(com.gdxsoft.ai.providers.deepseek.RequestData
+				.isReasoningModel("deepseek-v4-pro"));
+		assertTrue(com.gdxsoft.ai.providers.deepseek.RequestData
+				.isReasoningModel("deepseek-v4-flash"));
+		assertTrue(com.gdxsoft.ai.providers.deepseek.RequestData
+				.isReasoningModel("deepseek-reasoner"));
+		assertFalse(com.gdxsoft.ai.providers.deepseek.RequestData
+				.isReasoningModel("deepseek-chat"));
+		assertFalse(com.gdxsoft.ai.providers.deepseek.RequestData
+				.isReasoningModel(null));
+	}
 }

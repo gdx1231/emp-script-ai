@@ -125,6 +125,26 @@ public final class MusicClient {
         return new MusicComposition(lyrics, music);
     }
 
+    /**
+     * 两步翻唱流程：先预处理参考音频获得 cover_feature_id 与 ASR 格式化歌词，
+     * 再直接用二者发起翻唱生成；调用方可通过 revisedLyrics 覆盖识别出的歌词。
+     */
+    public MusicCoverComposition cover(MusicCoverPreprocessRequest request,
+            String prompt, MusicOptions options, String revisedLyrics)
+            throws IOException, InterruptedException {
+        MusicCoverPreprocessResponse preprocess = preprocessCover(request);
+        options.coverFeatureId(preprocess.getCoverFeatureId());
+        options.lyrics(revisedLyrics == null || revisedLyrics.isBlank()
+                ? preprocess.getFormattedLyrics() : revisedLyrics);
+        MusicResponse music = generate(prompt, options);
+        return new MusicCoverComposition(preprocess, music);
+    }
+
+    public MusicCoverComposition cover(MusicCoverPreprocessRequest request,
+            String prompt, MusicOptions options) throws IOException, InterruptedException {
+        return cover(request, prompt, options, null);
+    }
+
     /** 生成并直接保存 hex 音频。 */
     public Path generateToFile(String prompt, MusicOptions options, Path output)
             throws IOException, InterruptedException {

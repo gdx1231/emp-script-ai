@@ -99,7 +99,44 @@ MusicResponse response = client.generate("流行摇滚，保持原曲情绪", ne
         .lyrics(revisedLyrics));
 ```
 
+### 两步翻唱一键封装
+
+```java
+MusicCoverComposition result = MusicClient.of("minimax_music")
+        .apiKey(System.getenv("MINIMAX_API_KEY"))
+        .cover(MusicCoverPreprocessRequest.audioUrl("https://example.com/reference.mp3"),
+                "流行摇滚，保持原曲情绪", new MusicOptions().model("music-cover"));
+
+// result.getPreprocess() 为预处理结果；result.getMusic() 为翻唱音频
+```
+
+如需覆盖 ASR 识别出的歌词，传入第四个参数：
+
+```java
+client.cover(request, prompt, options, "[Verse]\n修改后的歌词");
+```
+
 预处理返回的 `coverFeatureId` 有效期 24 小时；两步流程可在生成前修改 ASR 提取出的格式化歌词。
+
+### 两步翻唱命令行
+
+仓库内置可直接调用的命令行程序 `com.gdxsoft.ai.console.MusicCoverCli`，完成预处理 + 生成 + 落盘：
+
+```bash
+export MINIMAX_API_KEY=your_key
+java -cp target/emp-script-ai-last.jar:<runtime_classpath> \
+     com.gdxsoft.ai.console.MusicCoverCli \
+     https://example.com/reference.mp3 \
+     "流行摇滚风格，保持原曲情绪" \
+     cover.mp3
+```
+
+常用选项：
+
+- `--audio-file <path>` 从本地音频文件读取参考（自动转 Base64）
+- `--lyrics <path>` 用指定歌词文件覆盖 ASR 识别结果
+- `--model <name>` 翻唱模型，默认 `music-cover`
+- `--format <fmt>` 输出编码 `mp3` / `wav` / `pcm`，默认 `mp3`
 
 ## 输出
 
