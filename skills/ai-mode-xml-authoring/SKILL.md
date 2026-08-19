@@ -50,6 +50,7 @@ Mode XML 文件由 `emp-script-ai` 的 `Modes.loadModes(xml)` 解析。它定义
 | `temperature` | 否 | 小数；结构化抽取建议 `0.1`，对话建议 `0.7`。 |
 | `topP` | 否 | 小数。 |
 | `thinking` | 否 | `"true"` 启用推理模式（provider 支持时）。 |
+| `thinkingBudget` | 否 | 整数，思考预算 token 数；`0` 或不填表示沿用 provider/model 默认。各 provider 自动翻译为自身字段：Anthropic `thinking.budget_tokens`、Gemini `thinkingConfig.thinkingBudget`、Qwen `thinking.max_thinking_tokens`、OpenRouter `reasoning.max_tokens`、Doubao `thinking.level`、OpenAI o-series/gpt-5 `reasoning_effort`、DeepSeek v4/reasoner `reasoning_effort`（档位映射：≤4096→low，≤16384→medium/high，更大→high/max）。不支持的 model 忽略。请求参数 `ai_thinking_budget` 优先级高于本属性。 |
 | `responseFormat` | 否 | `"json_object"` 强制 JSON 输出。 |
 | `maxHistoryMessages` | 否 | 多轮历史消息数上限（默认 30）。 |
 | `maxHistoryTokensK` | 否 | 历史 token 上限，单位 K（默认 100），超限会截断并打 WARN。 |
