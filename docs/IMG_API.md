@@ -2,7 +2,7 @@
 
 ## 概述
 
-`com.gdxsoft.ai.img` 提供统一的图片生成 API，封装 **6 个供应商** 的差异。无论底层是 OpenAI、豆包还是通义万相，都返回相同的 `ImgResponse`。
+`com.gdxsoft.ai.img` 提供统一的图片生成 API，封装 **7 个供应商** 的差异。无论底层是 OpenAI、豆包还是通义万相，都返回相同的 `ImgResponse`。
 
 ## 供应商
 
@@ -14,6 +14,7 @@
 | `qwen_img` | 通义万相 (DashScope) | `wanx2.1-t2i-turbo` | 仅异步 (提交任务+轮询) |
 | `stability_img` | Stability AI | `stable-diffusion-xl` | Multipart |
 | `grok_img` | xAI Grok | `grok-3-mini` | 同步 JSON / Chat |
+| `minimax_img` | MiniMax | `image-01` | 同步 JSON |
 
 ## 快速开始
 
@@ -42,11 +43,11 @@ System.out.println(resp.getFirstImage().getUrl());
 | `model` | String | 模型名称 | 全部 |
 | `size` | String | `1024x1024`, `2K`, `4K` 等 | 全部 |
 | `n` | Integer | 生成张数，1-4 | 全部 |
-| `responseFormat` | String | `url`（默认）或 `b64_json` | OpenAI / 豆包 |
+| `responseFormat` | String | `url`（默认）或 `b64_json` | OpenAI / 豆包 / MiniMax |
 | `quality` | String | `standard` / `hd` | OpenAI |
-| `style` | String | `vivid` / `natural` / `<anime>` 等 | OpenAI / Qwen |
+| `style` | String | `vivid` / `natural` / `<anime>` / 画风名等 | OpenAI / Qwen / MiniMax |
 | `negativePrompt` | String | 负向提示词 | Qwen / Stability |
-| `seed` | Long | 随机种子 | Qwen / Stability |
+| `seed` | Long | 随机种子 | Qwen / Stability / MiniMax |
 | `steps` | Integer | 扩散步数 | Stability |
 | `user` | String | 终端用户标识 | OpenAI / 豆包 |
 
@@ -142,6 +143,39 @@ g.setGenerationMode("chat");
 ImgResponse r2 = ImgClient.of(g).generate("一幅水墨画");
 ```
 
+### MiniMax (`minimax_img`)
+
+```java
+// 文生图
+ImgResponse r = ImgClient.of("minimax_img")
+    .apiKey("eyJhbGci...")
+    .generate(new ImgOptions("一只戴宇航员头盔的橘猫，写实摄影风格")
+        .size("1024x1024").n(1));
+
+// 图生图（人物主体参考）
+ImgResponse r2 = ImgClient.of("minimax_img")
+    .apiKey("...")
+    .generate(new ImgOptions("让人物站在图书馆窗边")
+        .refImageUrl("https://example.com/person.jpg"));
+
+// image-01-live 画风模式
+MiniMaxImgProvider p = (MiniMaxImgProvider) ImgProviderFactory.create("minimax_img");
+p.setApiKey("...");
+p.setStyleWeight(0.5);                        // 画风权重 (0,1]，默认 0.8
+ImgResponse r3 = ImgClient.of(p)
+    .generate(new ImgOptions("水彩风格的少女")
+        .model("image-01-live").size("16:9").style("水彩"));
+```
+
+- 端点: `https://api.minimaxi.com/v1/image_generation`，Bearer 鉴权，同步返回
+- 模型: `image-01`（默认，支持 `21:9`）、`image-01-live`（支持画风：漫画/元气/中世纪/水彩）
+- 尺寸映射: `size("16:9")` 直接作 `aspect_ratio`；`size("WxH")` 时 image-01 发送精确
+  `width/height`（对齐 8 的倍数、夹在 [512,2048]），image-01-live 按比例匹配支持的宽高比
+- 参数映射: `promptExtend` -> `prompt_optimizer`、`watermark` -> `aigc_watermark`、
+  `refImageUrls` -> `subject_reference`（官方每次请求仅支持 1 张参考图，多张时截取第一张）、
+  `responseFormat("b64_json")` -> `base64`
+- URL 有效期 24 小时，请及时下载
+
 ### OpenAI 兼容 (`openai_compat_img`)
 
 ```java
@@ -187,10 +221,10 @@ ImgProviderFactory → 按名称创建
   ↓
 IImgProvider → ImgProviderBase (线程安全)
   ↓
-┌──────────┬──────────┬──────────┬──────────┬──────────┬──────────┐
-│ OpenAI   │ Doubao   │ Qwen     │ Stability│ Grok     │ Compat   │
-│ JSON     │ JSON+SSE │ 异步轮询  │ Multipart│ JSON/Chat│ JSON     │
-└──────────┴──────────┴──────────┴──────────┴──────────┴──────────┘
+┌──────────┬──────────┬──────────┬──────────┬──────────┬──────────┬──────────┐
+│ OpenAI   │ Doubao   │ Qwen     │ Stability│ Grok     │ MiniMax  │ Compat   │
+│ JSON     │ JSON+SSE │ 异步轮询  │ Multipart│ JSON/Chat│ JSON     │ JSON     │
+└──────────┴──────────┴──────────┴──────────┴──────────┴──────────┴──────────┘
   ↓               ↓              ↓              ↓              ↓
         统一返回 ImgResponse (url / b64 / writeToFile / release)
 ```
@@ -201,6 +235,7 @@ IImgProvider → ImgProviderBase (线程安全)
 # 单元测试 (无需 Key)
 mvn test -pl . -Dtest="QwenImgProviderTest#buildRequestBodyShape+parseResponseShape"
 mvn test -pl . -Dtest="DoubaoImgProviderTest#buildRequestBodyShape+buildRequestBodyWithStream+parseResponseShape"
+mvn test -pl . -Dtest=MiniMaxImgProviderTest
 
 # 集成测试 (需 Key)
 export DOUBAO_API_KEY=xxx  && mvn test -pl . -Dtest=DoubaoImgProviderTest

@@ -28,6 +28,7 @@ public final class ImgProviderFactory {
             case WANX          -> new com.gdxsoft.ai.img.providers.qwen.QwenImgWanxProvider();
             case DOUBAO        -> new com.gdxsoft.ai.img.providers.doubao.DoubaoImgProvider();
             case GROK          -> new com.gdxsoft.ai.img.providers.grok.GrokImgProvider();
+            case MINIMAX       -> new com.gdxsoft.ai.img.providers.minimax.MiniMaxImgProvider();
         };
     }
 

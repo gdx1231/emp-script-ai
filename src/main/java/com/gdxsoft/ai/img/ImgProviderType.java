@@ -17,7 +17,8 @@ public enum ImgProviderType {
     QWEN("qwen_img"),
     WANX("wanx_img"),
     DOUBAO("doubao_img"),
-    GROK("grok_img");
+    GROK("grok_img"),
+    MINIMAX("minimax_img");
 
     private final String name;
 
