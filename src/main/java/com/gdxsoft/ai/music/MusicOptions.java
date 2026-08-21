@@ -21,6 +21,12 @@ public class MusicOptions {
     private String audioBase64;
     private String coverFeatureId;
 
+    // fal.ai（MiniMax Music 3）专属参数
+    private Integer duration;
+    private Long seed;
+    private Integer numInferenceSteps;
+    private Double guidanceScale;
+
     public String getModel() { return model; }
     public MusicOptions model(String model) { this.model = model; return this; }
     public MusicOptions setModel(String model) { this.model = model; return this; }
@@ -80,4 +86,24 @@ public class MusicOptions {
     public String getCoverFeatureId() { return coverFeatureId; }
     public MusicOptions coverFeatureId(String coverFeatureId) { this.coverFeatureId = coverFeatureId; return this; }
     public MusicOptions setCoverFeatureId(String coverFeatureId) { this.coverFeatureId = coverFeatureId; return this; }
+
+    /** 生成音频的最大时长（秒），fal.ai MiniMax Music 3 支持 1~300，默认 60。 */
+    public Integer getDuration() { return duration; }
+    public MusicOptions duration(Integer duration) { this.duration = duration; return this; }
+    public MusicOptions setDuration(Integer duration) { this.duration = duration; return this; }
+
+    /** 随机种子，用于复现生成结果。 */
+    public Long getSeed() { return seed; }
+    public MusicOptions seed(Long seed) { this.seed = seed; return this; }
+    public MusicOptions setSeed(Long seed) { this.seed = seed; return this; }
+
+    /** 每个 8 秒去噪块的流匹配欧拉步数，fal.ai MiniMax Music 3 支持 1~100，默认 30。 */
+    public Integer getNumInferenceSteps() { return numInferenceSteps; }
+    public MusicOptions numInferenceSteps(Integer numInferenceSteps) { this.numInferenceSteps = numInferenceSteps; return this; }
+    public MusicOptions setNumInferenceSteps(Integer numInferenceSteps) { this.numInferenceSteps = numInferenceSteps; return this; }
+
+    /** 流匹配阶段的无分类器引导系数，fal.ai MiniMax Music 3 支持 0~20，默认 1.7。 */
+    public Double getGuidanceScale() { return guidanceScale; }
+    public MusicOptions guidanceScale(Double guidanceScale) { this.guidanceScale = guidanceScale; return this; }
+    public MusicOptions setGuidanceScale(Double guidanceScale) { this.guidanceScale = guidanceScale; return this; }
 }

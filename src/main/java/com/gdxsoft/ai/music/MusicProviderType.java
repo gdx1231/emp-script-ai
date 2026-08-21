@@ -2,7 +2,8 @@ package com.gdxsoft.ai.music;
 
 /** 音乐生成 Provider 类型。 */
 public enum MusicProviderType {
-    MINIMAX("minimax_music");
+    MINIMAX("minimax_music"),
+    FAI("fai");
 
     private final String name;
 

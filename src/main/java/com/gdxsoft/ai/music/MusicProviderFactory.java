@@ -10,6 +10,7 @@ public final class MusicProviderFactory {
         if (type == null) throw new IllegalArgumentException("type is null");
         return switch (type) {
             case MINIMAX -> new com.gdxsoft.ai.music.providers.minimax.MiniMaxMusicProvider();
+            case FAI -> new com.gdxsoft.ai.music.providers.fai.FaiMusicProvider();
         };
     }
 
