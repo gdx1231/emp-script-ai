@@ -85,6 +85,8 @@ public class Modes {
 
         // 解析 <common><apis> 中的公共 API 定义
         List<Api> commonApis = parseCommonApis(this.document);
+        // 解析 <modes> 根节点下的 <sqls> 公共 SQL 定义
+        List<SqlQuery> commonSqls = parseCommonSqls(this.document);
 
         List<Mode> modes = new ArrayList<>();
         NodeList modeNodes = document.getElementsByTagName("mode");
@@ -98,6 +100,8 @@ public class Modes {
                     mode.getApis().add(commonApi);
                 }
             }
+            // 合并根节点公共 SQL：mode 自身的 sqls 优先，同名（忽略大小写）时 mode 覆盖根节点
+            mode.mergeSqlQueries(commonSqls);
             MODES.put(mode.getName(), mode);
             modes.add(mode);
             LOGGER.info("Mode: " + mode.getName());
@@ -116,6 +120,26 @@ public class Modes {
         }
         XML_MD5.put(this.xmlMd5, modes);
         return modes;
+    }
+
+    /**
+     * 解析 {@code <common>} 下的公共 {@code <sqls>} 定义列表。
+     *
+     * @param document 已解析的 XML Document
+     * @return 公共 SQL 查询列表（可能为空列表，不会为 null）
+     */
+    private static List<SqlQuery> parseCommonSqls(Document document) {
+        List<SqlQuery> commonSqls = new ArrayList<>();
+        NodeList commonNodes = document.getElementsByTagName("common");
+        if (commonNodes.getLength() == 0) {
+            return commonSqls;
+        }
+        Element commonElement = (Element) commonNodes.item(0);
+        NodeList sqlsNodes = commonElement.getElementsByTagName("sqls");
+        if (sqlsNodes.getLength() > 0) {
+            commonSqls = ModeParser.parseSqlQueries((Element) sqlsNodes.item(0));
+        }
+        return commonSqls;
     }
 
     /**

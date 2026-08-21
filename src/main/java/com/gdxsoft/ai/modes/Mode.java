@@ -234,6 +234,8 @@ public class Mode {
 			prompt.setContent(tb.toCSV());
 		} else if ("xml".equalsIgnoreCase(prompt.getDataType())) {
 			prompt.setContent(tb.toXml(rv));
+		} else {
+			prompt.setContent(tb.toCSV());
 		}
 
 		return true;
@@ -402,6 +404,35 @@ public class Mode {
 	}
 
 	 
+	/**
+	 * 合并公共 SQL 查询到本 mode。
+	 * <p>
+	 * 先从 {@code <common><sqls>} 获取公共 SQL，再从本 mode 下获取；
+	 * 名称一致（忽略大小写）时本 mode 的定义覆盖公共定义。
+	 *
+	 * @param commonSqls 公共 SQL 查询列表
+	 */
+	public void mergeSqlQueries(List<SqlQuery> commonSqls) {
+		if (commonSqls == null || commonSqls.isEmpty()) {
+			return;
+		}
+		// 构建本 mode 已有 sql 的名称索引（忽略大小写）
+		Map<String, Integer> nameIndex = new HashMap<>();
+		for (int i = 0; i < sqlQueries.size(); i++) {
+			String key = sqlQueries.get(i).getName() == null ? "" : sqlQueries.get(i).getName().toLowerCase();
+			nameIndex.put(key, i);
+		}
+		for (SqlQuery commonSql : commonSqls) {
+			String key = commonSql.getName() == null ? "" : commonSql.getName().toLowerCase();
+			if (nameIndex.containsKey(key)) {
+				// 同名时 mode 级别优先，跳过公共定义
+				continue;
+			}
+			nameIndex.put(key, sqlQueries.size());
+			sqlQueries.add(commonSql);
+		}
+	}
+
 	/**
 	 * 根据名称查找 SQL 查询定义
 	 *

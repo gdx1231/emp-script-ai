@@ -71,6 +71,9 @@ public abstract class RequestDataBase implements IRequestData {
      */
     @Override
     public IRequestData addMessage(String content, String role) {
+        if (content == null || content.isEmpty()) {
+            return this;
+        }
         JSONObject message = new JSONObject();
         message.put("role", role);
         message.put("content", content);
