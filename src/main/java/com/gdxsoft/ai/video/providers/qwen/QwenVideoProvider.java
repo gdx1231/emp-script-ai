@@ -28,8 +28,9 @@ import com.gdxsoft.ai.video.VideoTaskSubmit;
  * <ul>
  *   <li><b>WAN 3.0 ({@code wan3.0-video})</b> — All-in-one reference video model.
  *       Uses {@code input.media} array (first_frame, last_frame, reference_image,
- *       reference_video, reference_audio) and {@code parameters.audio}.
- *       Watermark defaults to false.</li>
+ *       reference_video, reference_audio, file, link) and {@code parameters.audio}.
+ *       file/link 与 reference_xx/first_frame/last_frame 互斥。
+ *       Watermark defaults to false. Audio defaults to true.</li>
  *   <li><b>HappyHorse ({@code happyhorse-1.1-t2v}, {@code happyhorse-1.0-t2v},
  *       {@code happyhorse-1.1-i2v}, {@code happyhorse-1.0-i2v})</b> —
  *       T2V: simple prompt-only (no media), supports {@code ratio}.
@@ -279,6 +280,45 @@ public class QwenVideoProvider extends VideoProviderBase {
         // Media: WAN 3.0 always; HappyHorse only i2v (first_frame)
         // HappyHorse t2v has no media support
         if (!isHappyHorse(model) || isI2v) {
+            // file/link 与 reference_xx/first_frame/last_frame 互斥校验
+            boolean hasFile = opts.getFileUrl() != null && !opts.getFileUrl().isEmpty();
+            boolean hasLink = opts.getLinkUrl() != null && !opts.getLinkUrl().isEmpty();
+            if (hasFile && hasLink) {
+                throw new IllegalArgumentException(
+                        "WAN 3.0: file 和 link 不可同时输入");
+            }
+            if (hasFile || hasLink) {
+                boolean hasFrameOrRef = (opts.getFirstFrameUrl() != null && !opts.getFirstFrameUrl().isEmpty())
+                        || (opts.getLastFrameUrl() != null && !opts.getLastFrameUrl().isEmpty())
+                        || (opts.getRefImageUrls() != null && !opts.getRefImageUrls().isEmpty())
+                        || (opts.getRefVideoUrls() != null && !opts.getRefVideoUrls().isEmpty())
+                        || (opts.getRefAudioUrls() != null && !opts.getRefAudioUrls().isEmpty())
+                        || (opts.getRefImageUrl() != null && !opts.getRefImageUrl().isEmpty())
+                        || (opts.getRefVideoUrl() != null && !opts.getRefVideoUrl().isEmpty())
+                        || (opts.getRefAudioUrl() != null && !opts.getRefAudioUrl().isEmpty());
+                if (hasFrameOrRef) {
+                    throw new IllegalArgumentException(
+                            "WAN 3.0: file/link 与 reference_xx/first_frame/last_frame 互斥，不可混用");
+                }
+            }
+
+            // reference 数量上限校验
+            int refImageCount = countUrls(opts.getRefImageUrls(), opts.getRefImageUrl());
+            if (refImageCount > 10) {
+                throw new IllegalArgumentException(
+                        "WAN 3.0: reference_image 最多 10 张，当前 " + refImageCount);
+            }
+            int refVideoCount = countUrls(opts.getRefVideoUrls(), opts.getRefVideoUrl());
+            if (refVideoCount > 5) {
+                throw new IllegalArgumentException(
+                        "WAN 3.0: reference_video 最多 5 段，当前 " + refVideoCount);
+            }
+            int refAudioCount = countUrls(opts.getRefAudioUrls(), opts.getRefAudioUrl());
+            if (refAudioCount > 5) {
+                throw new IllegalArgumentException(
+                        "WAN 3.0: reference_audio 最多 5 段，当前 " + refAudioCount);
+            }
+
             JSONArray media = buildWan3MediaArray(opts);
             if (!media.isEmpty()) {
                 input.put("media", media);
@@ -303,9 +343,10 @@ public class QwenVideoProvider extends VideoProviderBase {
             params.put("duration", dur);
         }
 
-        // audio: WAN 3.0 only
-        if (!isHappyHorse(model) && opts.getGenerateAudio() != null) {
-            params.put("audio", opts.getGenerateAudio());
+        // audio: WAN 3.0 only, default true (API 文档默认值)
+        if (!isHappyHorse(model)) {
+            boolean audio = opts.getGenerateAudio() != null ? opts.getGenerateAudio() : true;
+            params.put("audio", audio);
         }
 
         // seed
@@ -363,6 +404,16 @@ public class QwenVideoProvider extends VideoProviderBase {
         List<String> audioUrls = collectUrls(opts.getRefAudioUrls(), opts.getRefAudioUrl());
         for (String url : audioUrls) {
             media.put(mediaItem("reference_audio", url));
+        }
+
+        // file（文档/文件输入，最多 1 个）
+        if (opts.getFileUrl() != null && !opts.getFileUrl().isEmpty()) {
+            media.put(mediaItem("file", opts.getFileUrl()));
+        }
+
+        // link（网页链接输入，最多 1 个）
+        if (opts.getLinkUrl() != null && !opts.getLinkUrl().isEmpty()) {
+            media.put(mediaItem("link", opts.getLinkUrl()));
         }
 
         return media;
@@ -506,6 +557,20 @@ public class QwenVideoProvider extends VideoProviderBase {
             result.add(single);
         }
         return result;
+    }
+
+    /**
+     * 统计有效 URL 数量（list + single fallback）。
+     */
+    private int countUrls(List<String> list, String single) {
+        if (list != null) {
+            int count = 0;
+            for (String s : list) {
+                if (s != null && !s.isEmpty()) count++;
+            }
+            return count;
+        }
+        return (single != null && !single.isEmpty()) ? 1 : 0;
     }
 
     private boolean isDupe(String url, String existing) {

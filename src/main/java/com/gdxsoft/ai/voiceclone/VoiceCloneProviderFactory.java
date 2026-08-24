@@ -21,6 +21,7 @@ public final class VoiceCloneProviderFactory {
         return switch (type) {
             case DOUBAO -> new com.gdxsoft.ai.voiceclone.providers.doubao.DoubaoVoiceCloneProvider();
             case QWEN -> new com.gdxsoft.ai.voiceclone.providers.qwen.QwenVoiceCloneProvider();
+            case MINIMAX -> new com.gdxsoft.ai.voiceclone.providers.minimax.MiniMaxVoiceCloneProvider();
         };
     }
 

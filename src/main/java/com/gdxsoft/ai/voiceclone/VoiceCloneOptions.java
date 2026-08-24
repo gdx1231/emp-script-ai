@@ -22,6 +22,12 @@ public class VoiceCloneOptions {
     /** 音频预处理：是否启用降噪 */
     private Boolean denoise;
 
+    /** 是否开启音频降噪（doubao enable_audio_denoise），音频样本噪声较大时建议开启。 */
+    private Boolean enableAudioDenoise;
+
+    /** 是否关闭音量归一化（doubao disable_volume_normalization），关闭后合成音量与原始音频更接近。 */
+    private Boolean disableVolumeNormalization;
+
     public Map<String, String> getExtras() { return extras; }
 
     public VoiceCloneOptions setExtra(String key, String value) {
@@ -40,4 +46,10 @@ public class VoiceCloneOptions {
 
     public Boolean getDenoise() { return denoise; }
     public VoiceCloneOptions setDenoise(Boolean denoise) { this.denoise = denoise; return this; }
+
+    public Boolean getEnableAudioDenoise() { return enableAudioDenoise; }
+    public VoiceCloneOptions setEnableAudioDenoise(Boolean enableAudioDenoise) { this.enableAudioDenoise = enableAudioDenoise; return this; }
+
+    public Boolean getDisableVolumeNormalization() { return disableVolumeNormalization; }
+    public VoiceCloneOptions setDisableVolumeNormalization(Boolean disableVolumeNormalization) { this.disableVolumeNormalization = disableVolumeNormalization; return this; }
 }

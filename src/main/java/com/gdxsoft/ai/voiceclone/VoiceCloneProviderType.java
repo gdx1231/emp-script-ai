@@ -7,7 +7,8 @@ package com.gdxsoft.ai.voiceclone;
  */
 public enum VoiceCloneProviderType {
     DOUBAO("doubao_voice_clone"),
-    QWEN("qwen_voice_clone");
+    QWEN("qwen_voice_clone"),
+    MINIMAX("minimax_voice_clone");
 
     private final String name;
 

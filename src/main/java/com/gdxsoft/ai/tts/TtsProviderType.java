@@ -7,7 +7,8 @@ package com.gdxsoft.ai.tts;
  */
 public enum TtsProviderType {
     QWEN("qwen_tts"),
-    DOUBAO("doubao_tts");
+    DOUBAO("doubao_tts"),
+    MINIMAX("minimax_tts");
 
     private final String name;
 

@@ -89,6 +89,12 @@ public class VideoOptions {
     /** 多个参考音频 URL 列表（最多 3 个） */
     private List<String> refAudioUrls;
 
+    /** 文件 URL（WAN 3.0 type=file），支持 docx/xlsx/pptx/pdf/txt 等，最多 1 个，不可与 link 同时使用 */
+    private String fileUrl;
+
+    /** 网页链接 URL（WAN 3.0 type=link），公开网页，最多 1 个，不可与 file 同时使用 */
+    private String linkUrl;
+
     public VideoOptions() {}
 
     /**
@@ -381,4 +387,24 @@ public class VideoOptions {
         this.refAudioUrls = new ArrayList<>(Arrays.asList(urls));
         return this;
     }
+
+    // ==================== 文件 / 网页链接（WAN 3.0） ====================
+
+    /** @return 文件 URL（WAN 3.0 type=file） */
+    public String getFileUrl() { return fileUrl; }
+
+    /** 设置文件 URL（fluent）。支持 docx/xlsx/pptx/pdf/txt 等，不可与 link 同时使用 */
+    public VideoOptions fileUrl(String v) { this.fileUrl = v; return this; }
+
+    /** 设置文件 URL（setter） */
+    public VideoOptions setFileUrl(String v) { this.fileUrl = v; return this; }
+
+    /** @return 网页链接 URL（WAN 3.0 type=link） */
+    public String getLinkUrl() { return linkUrl; }
+
+    /** 设置网页链接 URL（fluent）。仅支持无需登录的公开网页，不可与 file 同时使用 */
+    public VideoOptions linkUrl(String v) { this.linkUrl = v; return this; }
+
+    /** 设置网页链接 URL（setter） */
+    public VideoOptions setLinkUrl(String v) { this.linkUrl = v; return this; }
 }

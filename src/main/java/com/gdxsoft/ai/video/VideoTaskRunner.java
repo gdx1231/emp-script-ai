@@ -107,6 +107,8 @@ public class VideoTaskRunner {
         if (opts.getRefImageUrls() != null) j.put("ref_images", opts.getRefImageUrls());
         if (opts.getRefVideoUrls() != null) j.put("ref_videos", opts.getRefVideoUrls());
         if (opts.getRefAudioUrls() != null) j.put("ref_audios", opts.getRefAudioUrls());
+        if (opts.getFileUrl() != null) j.put("file_url", opts.getFileUrl());
+        if (opts.getLinkUrl() != null) j.put("link_url", opts.getLinkUrl());
         return j;
     }
 }

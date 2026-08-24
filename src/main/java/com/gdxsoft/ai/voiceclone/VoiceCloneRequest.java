@@ -27,6 +27,12 @@ public class VoiceCloneRequest {
     /** 可选：降噪模型 ID */
     private String denoiseModelId;
 
+    /** 可选：参考文本（服务端对比音频与文本差异，WER 过大则复刻失败） */
+    private String text;
+
+    /** 可选：自定义音色代号（后付费音色，8~256 字符，字母开头） */
+    private String customSpeakerId;
+
     /** 额外 provider 特定参数 */
     private VoiceCloneOptions options;
 
@@ -51,6 +57,12 @@ public class VoiceCloneRequest {
 
     public String getDenoiseModelId() { return denoiseModelId; }
     public VoiceCloneRequest setDenoiseModelId(String denoiseModelId) { this.denoiseModelId = denoiseModelId; return this; }
+
+    public String getText() { return text; }
+    public VoiceCloneRequest setText(String text) { this.text = text; return this; }
+
+    public String getCustomSpeakerId() { return customSpeakerId; }
+    public VoiceCloneRequest setCustomSpeakerId(String customSpeakerId) { this.customSpeakerId = customSpeakerId; return this; }
 
     public VoiceCloneOptions getOptions() { return options; }
     public VoiceCloneRequest setOptions(VoiceCloneOptions options) { this.options = options; return this; }

@@ -59,4 +59,33 @@ public class VoiceCloneResponse {
         r.setRaw(raw);
         return r;
     }
+
+    /** 训练状态码（doubao）：0=NotFound, 1=Training, 2=Success, 3=Failed, 4=Active */
+    public int getTrainingStatus() {
+        if (raw == null) return -1;
+        return raw.optInt("status", -1);
+    }
+
+    /** 是否训练成功（status=2 或 4） */
+    public boolean isTrainingComplete() {
+        int s = getTrainingStatus();
+        return s == 2 || s == 4;
+    }
+
+    /** 剩余训练次数（doubao） */
+    public int getAvailableTrainingTimes() {
+        if (raw == null) return -1;
+        return raw.optInt("available_training_times", -1);
+    }
+
+    /** 试听音频 URL（doubao，Success 时返回，1 小时有效） */
+    public String getDemoAudioUrl() {
+        if (raw == null) return null;
+        // speaker_status 数组中第一个元素的 demo_audio
+        org.json.JSONArray arr = raw.optJSONArray("speaker_status");
+        if (arr != null && arr.length() > 0) {
+            return arr.optJSONObject(0).optString("demo_audio", null);
+        }
+        return raw.optString("demo_audio", null);
+    }
 }

@@ -41,4 +41,22 @@ public class TtsResponse {
         if (audio == null) throw new IllegalStateException("no audio bytes");
         Files.write(path, audio);
     }
+
+    /** 音频时长（秒），从 raw 响应提取；无 raw 时返回 -1。 */
+    public double getDuration() {
+        if (raw == null) return -1;
+        return raw.optDouble("duration", -1);
+    }
+
+    /** 原始音频时长（秒，计费依据），从 raw 响应提取；无 raw 时返回 -1。 */
+    public double getOriginalDuration() {
+        if (raw == null) return -1;
+        return raw.optDouble("original_duration", -1);
+    }
+
+    /** 字幕信息（doubao enable_subtitle=true 时返回），从 raw 响应提取。 */
+    public JSONObject getSubtitle() {
+        if (raw == null) return null;
+        return raw.optJSONObject("subtitle");
+    }
 }

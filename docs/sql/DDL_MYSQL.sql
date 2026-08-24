@@ -214,3 +214,26 @@ CREATE TABLE AI_PROVIDER_URL (
     APU_CONCURRENCY INT,                                           -- 并发数
     PRIMARY KEY (APU_UID)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ==========================================================
+-- 12. AI_VOICE_CLONE — 声音复刻记录
+-- ==========================================================
+CREATE TABLE AI_VOICE_CLONE (
+    AVC_ID          BIGINT AUTO_INCREMENT NOT NULL,                  -- 主键
+    AVC_VOICE_ID    VARCHAR(200) NULL,                               -- 音色 ID（API 返回）
+    AVC_PROVIDER    VARCHAR(50) NULL,                                -- provider 类型
+    AVC_TARGET_MODEL VARCHAR(100) NULL,                              -- 绑定的合成模型
+    AVC_PREFIX      VARCHAR(100) NULL,                               -- 克隆时的前缀/名称
+    AVC_AUDIO_URL   VARCHAR(500) NULL,                               -- 源音频 URL
+    AVC_DESC        VARCHAR(500) NULL,                               -- 备注
+    AVC_STATUS      VARCHAR(20) DEFAULT 'USED',                      -- USED/DELETED
+    ADM_ID          INT NULL,                                        -- 管理员
+    USR_ID          INT NULL,                                        -- 用户
+    SUP_ID          INT NULL,                                        -- 供应商
+    AVC_CDATE       DATETIME DEFAULT CURRENT_TIMESTAMP,              -- 创建时间
+    AVC_MDATE       DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, -- 修改时间
+    PRIMARY KEY (AVC_ID),
+    INDEX IDX_AVC_VOICE_ID (AVC_VOICE_ID, AVC_STATUS),
+    INDEX IDX_AVC_PROVIDER (AVC_PROVIDER, AVC_STATUS),
+    INDEX IDX_AVC_TARGET_MODEL (AVC_TARGET_MODEL, AVC_STATUS)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

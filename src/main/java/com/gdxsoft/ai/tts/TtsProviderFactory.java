@@ -21,6 +21,7 @@ public final class TtsProviderFactory {
         return switch (type) {
             case QWEN   -> new com.gdxsoft.ai.tts.providers.qwen.QwenTtsProvider();
             case DOUBAO -> new com.gdxsoft.ai.tts.providers.doubao.DoubaoTtsProvider();
+            case MINIMAX -> new com.gdxsoft.ai.tts.providers.minimax.MiniMaxTtsProvider();
         };
     }
 

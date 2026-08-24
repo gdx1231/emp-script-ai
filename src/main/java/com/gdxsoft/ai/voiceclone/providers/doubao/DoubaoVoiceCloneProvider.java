@@ -154,9 +154,29 @@ public class DoubaoVoiceCloneProvider extends VoiceCloneProviderBase {
         audioObj.put("format", format);
 
         JSONObject body = new JSONObject();
-        body.put("speaker_id", request.getSpeakerId() != null ? request.getSpeakerId() : "");
+
+        // speaker_id / custom_speaker_id
+        String speakerId = request.getSpeakerId();
+        String customSpeakerId = request.getCustomSpeakerId();
+        if (customSpeakerId != null && !customSpeakerId.isEmpty()) {
+            // 后付费音色：speaker_id 固定为 "custom_speaker_id"，实际名称在 custom_speaker_id
+            body.put("speaker_id", "custom_speaker_id");
+            body.put("custom_speaker_id", customSpeakerId);
+        } else {
+            body.put("speaker_id", speakerId != null ? speakerId : "");
+        }
+
         body.put("audio", audioObj);
         body.put("language", request.getLanguage());
+
+        // 参考文本（WER 校验）
+        String text = request.getText();
+        if (text == null || text.isEmpty()) {
+            text = getConfig("text");
+        }
+        if (text != null && !text.isEmpty()) {
+            body.put("text", text);
+        }
 
         // extra_params
         JSONObject extraParams = new JSONObject();
@@ -171,8 +191,16 @@ public class DoubaoVoiceCloneProvider extends VoiceCloneProviderBase {
         if (denoiseModelId != null && !denoiseModelId.isEmpty()) {
             extraParams.put("voice_clone_denoise_model_id", denoiseModelId);
         }
-        // 合并 options 中的额外参数
+
+        // options 中的专用参数
         if (request.getOptions() != null) {
+            if (request.getOptions().getEnableAudioDenoise() != null) {
+                extraParams.put("enable_audio_denoise", request.getOptions().getEnableAudioDenoise());
+            }
+            if (request.getOptions().getDisableVolumeNormalization() != null) {
+                extraParams.put("disable_volume_normalization", request.getOptions().getDisableVolumeNormalization());
+            }
+            // 合并 extras
             for (var entry : request.getOptions().getExtras().entrySet()) {
                 extraParams.put(entry.getKey(), entry.getValue());
             }
@@ -187,17 +215,9 @@ public class DoubaoVoiceCloneProvider extends VoiceCloneProviderBase {
     /**
      * 解析克隆/升级响应。
      * <p>
-     * 预期响应格式（成功）：
-     * <pre>{@code
-     * {
-     *   "code": 0,
-     *   "message": "success",
-     *   "data": {
-     *     "speaker_id": "xxx",
-     *     "status": "success"
-     *   }
-     * }
-     * }</pre>
+     * 响应格式（API 文档）：顶层包含 code, message, speaker_id, status(int),
+     * available_training_times, speaker_status(含 demo_audio) 等字段。
+     * 部分旧响应可能包裹在 data 对象中。
      */
     private VoiceCloneResponse parseCloneResponse(JSONObject root) {
         int code = root.optInt("code", -1);
@@ -207,20 +227,33 @@ public class DoubaoVoiceCloneProvider extends VoiceCloneProviderBase {
             return VoiceCloneResponse.error("code=" + code + ", " + message, root);
         }
 
+        // 优先从 data 对象取，否则从顶层取
         JSONObject data = root.optJSONObject("data");
-        if (data == null) {
-            // 某些响应可能直接在顶层
-            String speakerId = root.optString("speaker_id", null);
-            if (speakerId != null && !speakerId.isEmpty()) {
-                return VoiceCloneResponse.success(speakerId, root);
-            }
-            return VoiceCloneResponse.error("响应中无 data 字段", root);
+        String speakerId;
+        String statusStr;
+
+        if (data != null) {
+            speakerId = data.optString("speaker_id", null);
+            statusStr = data.optString("status", "success");
+        } else {
+            speakerId = root.optString("speaker_id", null);
+            // status 在 API 文档中是 int（0-4），转为可读字符串
+            int statusInt = root.optInt("status", -1);
+            statusStr = switch (statusInt) {
+                case 0 -> "NotFound";
+                case 1 -> "Training";
+                case 2 -> "Success";
+                case 3 -> "Failed";
+                case 4 -> "Active";
+                default -> "success";
+            };
         }
 
-        String speakerId = data.optString("speaker_id", null);
-        String status = data.optString("status", "success");
+        if (speakerId == null || speakerId.isEmpty()) {
+            return VoiceCloneResponse.error("响应中无 speaker_id", root);
+        }
 
-        VoiceCloneResponse resp = new VoiceCloneResponse(speakerId, status, root);
+        VoiceCloneResponse resp = new VoiceCloneResponse(speakerId, statusStr, root);
         resp.setMessage(message);
         return resp;
     }

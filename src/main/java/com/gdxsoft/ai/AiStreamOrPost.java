@@ -582,7 +582,7 @@ public class AiStreamOrPost {
 	 */
 	private String executeRequest(IRequestAI req, IRequestData reqData) throws Exception {
 		String fullText;
-		if (chatManager.getStep().isStream()) {
+		if (chatManager.isAiStream()) {
 			if (chatManager.getStepAction() != null) {
 				IOutEvents oes = new ActionEventsOut();
 				oes.setName(chatManager.getActionName());
@@ -666,7 +666,7 @@ public class AiStreamOrPost {
 	 * @return 思考内容，无则返回 null
 	 */
 	private String extractReasoning(IRequestAI req, String fullText) {
-		if (chatManager.getStep().isStream()) {
+		if (chatManager.isAiStream()) {
 			StringBuilder reasoningBuf = req.getReasoningText();
 			return reasoningBuf != null ? reasoningBuf.toString().trim() : null;
 		}
@@ -688,7 +688,7 @@ public class AiStreamOrPost {
 	 * @return 正文内容
 	 */
 	private String extractContent(IRequestAI req, String fullText) {
-		if (chatManager.getStep().isStream()) {
+		if (chatManager.isAiStream()) {
 			return fullText;
 		}
 		JSONObject json = req.extraceJson(fullText, true);
@@ -741,7 +741,7 @@ public class AiStreamOrPost {
 				LOGGER.info(getMessage("EXPORT_RESULT") + "{}", grpInfo.toString(2));
 
 				chatManager.addAiChatMsg(grpInfo.toString(), "agent", true);
-				if (chatManager.getStep().isStream()) {
+				if (chatManager.isAiStream()) {
 					chatManager.outEvent(grpInfo.toString());
 				} else {
 					writer.write(grpInfo.toString());
@@ -763,7 +763,7 @@ public class AiStreamOrPost {
 	 * @param type 事件类型，"welcome" 或 "complete"
 	 */
 	private void sendUiHtmlEvent(String type) {
-		if (!chatManager.getStep().isStream()) {
+		if (!chatManager.isAiStream()) {
 			return;
 		}
 		String html = null;
@@ -828,7 +828,7 @@ public class AiStreamOrPost {
 		}
 		JSONObject rst = UJSon.rstFalse(getMessage("GENERAL_ERROR") + err.getMessage());
 		this.lastError = rst;
-		if (chatManager.getStep().isStream()) {
+		if (chatManager.isAiStream()) {
 			chatManager.outEvent(rst.toString());
 		} else {
 			writer.print(rst.toString());

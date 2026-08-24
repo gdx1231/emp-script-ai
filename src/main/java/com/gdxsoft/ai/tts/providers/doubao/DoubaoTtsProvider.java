@@ -10,6 +10,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.UUID;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import com.gdxsoft.ai.ChatManagerI18nConstants;
@@ -190,16 +191,50 @@ public class DoubaoTtsProvider extends TtsProviderBase {
         body.put("model", model);
         body.put("text_prompt", req.getText());
 
+        // speaker / 参考音频 / 参考图片（三者互斥）
         String voice = resolveVoice(opts, false);
-        if (voice != null && !voice.isEmpty()) {
+        if (opts.getRefAudioUrls() != null && opts.getRefAudioUrls().length > 0) {
+            // 参考音频生成模式
+            JSONArray refs = new JSONArray();
+            for (String url : opts.getRefAudioUrls()) {
+                JSONObject ref = new JSONObject();
+                ref.put("audio_url", url);
+                refs.put(ref);
+            }
+            if (opts.getRefImageUrl() != null && !opts.getRefImageUrl().isEmpty()) {
+                JSONObject imgRef = new JSONObject();
+                imgRef.put("image_url", opts.getRefImageUrl());
+                refs.put(imgRef);
+            }
+            body.put("references", refs);
+        } else if (opts.getRefImageUrl() != null && !opts.getRefImageUrl().isEmpty()) {
+            // 参考图片生成模式
+            JSONArray refs = new JSONArray();
+            JSONObject imgRef = new JSONObject();
+            imgRef.put("image_url", opts.getRefImageUrl());
+            refs.put(imgRef);
+            body.put("references", refs);
+        } else if (voice != null && !voice.isEmpty()) {
             body.put("speaker", voice);
         }
 
         JSONObject audioConfig = new JSONObject();
         String format = opts.getFormat() == null || opts.getFormat().isEmpty() ? "wav" : opts.getFormat();
         audioConfig.put("format", format);
+        if (opts.getSampleRate() != null) {
+            audioConfig.put("sample_rate", opts.getSampleRate());
+        }
         if (opts.getSpeed() != null) {
             audioConfig.put("speech_rate", speedToSpeechRate(opts.getSpeed()));
+        }
+        if (opts.getLoudnessRate() != null) {
+            audioConfig.put("loudness_rate", opts.getLoudnessRate());
+        }
+        if (opts.getPitchRate() != null) {
+            audioConfig.put("pitch_rate", opts.getPitchRate());
+        }
+        if (opts.getEnableSubtitle() != null) {
+            audioConfig.put("enable_subtitle", opts.getEnableSubtitle());
         }
         body.put("audio_config", audioConfig);
         return body.toString();
