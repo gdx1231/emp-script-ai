@@ -22,7 +22,7 @@ import com.gdxsoft.ai.video.VideoTaskStatus;
 import com.gdxsoft.ai.video.VideoTaskSubmit;
 
 /**
- * 豆包视频生成（Doubao / Seedance 2.0）via 火山引擎方舟（Volcengine Ark）。
+ * 豆包视频生成（Doubao / Seedance 2.5 / 2.0 / 1.5 / 1.0）via 火山引擎方舟（Volcengine Ark）。
  * <p>
  * 使用 {@code /api/v3/contents/generations/tasks} 接口，
  * multimodal {@code content} 数组格式，支持 text / image_url / video_url / audio_url，
@@ -31,23 +31,31 @@ import com.gdxsoft.ai.video.VideoTaskSubmit;
  * 支持的能力：
  * <ul>
  *   <li>文生视频、图生视频（首帧 / 首尾帧）、多模态参考</li>
- *   <li>视频编辑、视频延长</li>
+ *   <li>视频编辑、视频延长（Seedance 2.5 {@code omni_reference_task_type}）</li>
  *   <li>生成有声视频（generate_audio）</li>
  *   <li>联网搜索（enableWebSearch，仅纯文本输入）</li>
  *   <li>4K 输出（仅 Seedance 2.0，resolution=4k，H.265/HEVC 10bit）</li>
- *   <li>离线推理（service_tier=flex）</li>
+ *   <li>1080p 10bit（Seedance 2.5，H.265/HEVC）</li>
+ *   <li>离线推理（service_tier=flex，仅 1.0/1.5）</li>
  *   <li>返回尾帧图（return_last_frame）</li>
- *   <li>多张参考图（最多 9 张）、多个参考视频（最多 3 个）、多个参考音频（最多 3 个）</li>
+ *   <li>输出格式（output_format: mp4/mov，仅 Seedance 2.5）</li>
+ *   <li>优先级队列（priority: 0-9，Seedance 2.5/2.0）</li>
+ *   <li>任务超时（execution_expires_after，Seedance 2.5/2.0）</li>
+ *   <li>多张参考图（Seedance 2.5 最多 30 张，2.0 最多 9 张）、多个参考视频（2.5 最多 10 段，2.0 最多 3 段）、多个参考音频（2.5 最多 10 段，2.0 最多 3 段）</li>
+ *   <li>仅音频输入生成视频（仅 Seedance 2.5）</li>
+ *   <li>私域素材库（asset:// URI）：通过 {@link com.gdxsoft.ai.video.asset.ArkAssetClient} 管理已认证的真人人像素材，
+ *       在 refImageUrls / firstFrameUrl 等字段中传入 {@code asset://<assetId>} 即可引用</li>
  * </ul>
  * <p>
- * 默认模型：{@code doubao-seedance-2-0-260128}
+ * 默认模型：{@code doubao-seedance-2-5-260814}
  *
  * @since 1.3.0
  */
 public class DoubaoVideoProvider extends VideoProviderBase {
     public static final String DEFAULT_URL =
             "https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks";
-    public static final String DEFAULT_MODEL = "doubao-seedance-2-0-260128";
+    /** 默认模型：Seedance 2.5（2026-08-14 发布） */
+    public static final String DEFAULT_MODEL = "doubao-seedance-2-5-260814";
 
     private boolean watermark = false;
 
@@ -233,6 +241,18 @@ public class DoubaoVideoProvider extends VideoProviderBase {
         if (opts.getReturnLastFrame() != null) body.put("return_last_frame", opts.getReturnLastFrame());
         if (opts.getServiceTier() != null) body.put("service_tier", opts.getServiceTier());
 
+        // Seedance 2.5 新增字段
+        String model = opts.getModel() != null ? opts.getModel() : DEFAULT_MODEL;
+        if (opts.getOutputFormat() != null) body.put("output_format", opts.getOutputFormat());
+        if (opts.getOmniReferenceTaskType() != null)
+            body.put("omni_reference_task_type", opts.getOmniReferenceTaskType());
+        if (opts.getPriority() != null && (isSeedance25(model) || isSeedance20(model)))
+            body.put("priority", opts.getPriority());
+        if (opts.getExecutionExpiresAfter() != null && (isSeedance25(model) || isSeedance20(model)))
+            body.put("execution_expires_after", opts.getExecutionExpiresAfter());
+        if (opts.getFrames() != null && isSeedance1x(model))
+            body.put("frames", opts.getFrames());
+
         // 联网搜索工具
         if (Boolean.TRUE.equals(opts.getEnableWebSearch())) {
             JSONArray tools = new JSONArray();
@@ -373,6 +393,21 @@ public class DoubaoVideoProvider extends VideoProviderBase {
     }
 
     // === HTTP ===
+
+    /** 检测是否为 Seedance 2.5 模型 */
+    private boolean isSeedance25(String model) {
+        return model != null && model.contains("seedance-2-5");
+    }
+
+    /** 检测是否为 Seedance 2.0 系列模型 */
+    private boolean isSeedance20(String model) {
+        return model != null && model.contains("seedance-2-0");
+    }
+
+    /** 检测是否为 Seedance 1.0/1.5 系列模型 */
+    private boolean isSeedance1x(String model) {
+        return model != null && (model.contains("seedance-1-0") || model.contains("seedance-1-5"));
+    }
 
     private String postJson(String url, JSONObject body) throws IOException, InterruptedException {
         HttpClient c = HttpUtils.createHttpClient();

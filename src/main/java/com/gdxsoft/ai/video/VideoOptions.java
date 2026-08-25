@@ -95,6 +95,36 @@ public class VideoOptions {
     /** 网页链接 URL（WAN 3.0 type=link），公开网页，最多 1 个，不可与 file 同时使用 */
     private String linkUrl;
 
+    /** 是否生成多镜头视频（Kling 3.0，prompt 用“镜头 n, m, words;”格式描述分镜），null 沿用服务端默认 */
+    private Boolean multiShot;
+
+    /** 人物朝向参考（Kling 3.0 动作控制）："image" 与形象参考图一致 / "video" 与动作参考视频一致 */
+    private String characterOrientation;
+
+    /** 主体库主体 ID 列表（Kling 3.0 contents element），prompt 中通过自动生成的 @element_N 引用 */
+    private List<String> refElementIds;
+
+    /** 待编辑视频 URL（Kling 3.0 Omni base_video）：编辑该视频而非参考其风格 */
+    private String baseVideoUrl;
+
+    /** 是否保留参考视频原声（Kling 3.0 audio=original），优先于 generateAudio */
+    private Boolean keepSourceAudio;
+
+    /** 输出视频格式（Seedance 2.5）："mp4"（通用）/ "mov"（专业色彩精度，适用于后期加工） */
+    private String outputFormat;
+
+    /** 全模态参考任务类型（Seedance 2.5）："auto" / "reference" / "edit" / "extend" */
+    private String omniReferenceTaskType;
+
+    /** 执行优先级（Seedance 2.5 / 2.0），0-9，数值越大优先级越高 */
+    private Integer priority;
+
+    /** 任务超时阈值（秒，Seedance 2.5 / 2.0），范围 [3600, 259200]，默认 172800（48 小时） */
+    private Integer executionExpiresAfter;
+
+    /** 视频帧数（Seedance 1.0 系列），范围 [29, 289]，与 duration 二选一，frames 优先级更高 */
+    private Integer frames;
+
     public VideoOptions() {}
 
     /**
@@ -407,4 +437,119 @@ public class VideoOptions {
 
     /** 设置网页链接 URL（setter） */
     public VideoOptions setLinkUrl(String v) { this.linkUrl = v; return this; }
+
+    // ==================== Kling 3.0 扩展 ====================
+
+    /** @return 是否生成多镜头视频；null 沿用服务端默认 */
+    public Boolean getMultiShot() { return multiShot; }
+
+    /** 设置是否生成多镜头视频（fluent）。多镜头 prompt 格式：“镜头 n, m, words; 镜头 n, m, words;” */
+    public VideoOptions multiShot(Boolean v) { this.multiShot = v; return this; }
+
+    /** 设置是否生成多镜头视频（setter） */
+    public VideoOptions setMultiShot(Boolean v) { this.multiShot = v; return this; }
+
+    /** @return 人物朝向参考（"image" / "video"），动作控制专用 */
+    public String getCharacterOrientation() { return characterOrientation; }
+
+    /** 设置人物朝向参考（fluent）。"image" 与形象参考图一致，"video" 与动作参考视频一致 */
+    public VideoOptions characterOrientation(String v) { this.characterOrientation = v; return this; }
+
+    /** 设置人物朝向参考（setter） */
+    public VideoOptions setCharacterOrientation(String v) { this.characterOrientation = v; return this; }
+
+    /** @return 主体库主体 ID 列表 */
+    public List<String> getRefElementIds() { return refElementIds; }
+
+    /** 设置主体 ID 列表（fluent） */
+    public VideoOptions refElementIds(List<String> v) { this.refElementIds = v; return this; }
+
+    /** 设置主体 ID 列表（setter） */
+    public VideoOptions setRefElementIds(List<String> v) { this.refElementIds = v; return this; }
+
+    /**
+     * 追加一个主体 ID。
+     *
+     * @param elementId 主体库主体 ID（由可灵主体管理 API 返回）
+     */
+    public VideoOptions addRefElementId(String elementId) {
+        if (this.refElementIds == null) this.refElementIds = new ArrayList<>();
+        this.refElementIds.add(elementId);
+        return this;
+    }
+
+    /**
+     * 设置主体 ID 列表（可变参数，fluent）。请求中以 @element_1、@element_2 ... 引用。
+     *
+     * @param ids 主体 ID 数组
+     */
+    public VideoOptions refElementIds(String... ids) {
+        this.refElementIds = new ArrayList<>(Arrays.asList(ids));
+        return this;
+    }
+
+    /** @return 待编辑视频 URL */
+    public String getBaseVideoUrl() { return baseVideoUrl; }
+
+    /** 设置待编辑视频 URL（fluent）。Kling 3.0 Omni 视频编辑（base_video） */
+    public VideoOptions baseVideoUrl(String v) { this.baseVideoUrl = v; return this; }
+
+    /** 设置待编辑视频 URL（setter） */
+    public VideoOptions setBaseVideoUrl(String v) { this.baseVideoUrl = v; return this; }
+
+    /** @return 是否保留参考视频原声 */
+    public Boolean getKeepSourceAudio() { return keepSourceAudio; }
+
+    /** 设置是否保留参考视频原声（fluent）。对应 Kling 3.0 audio=original，优先于 {@link #generateAudio(Boolean)} */
+    public VideoOptions keepSourceAudio(Boolean v) { this.keepSourceAudio = v; return this; }
+
+    /** 设置是否保留参考视频原声（setter） */
+    public VideoOptions setKeepSourceAudio(Boolean v) { this.keepSourceAudio = v; return this; }
+
+    // ==================== Seedance 2.5 扩展 ====================
+
+    /** @return 输出视频格式（"mp4" / "mov"） */
+    public String getOutputFormat() { return outputFormat; }
+
+    /** 设置输出视频格式（fluent）。"mov" 采用专业编码（H.264+yuv444p+PCM），适用于调色/抠像/合成 */
+    public VideoOptions outputFormat(String v) { this.outputFormat = v; return this; }
+
+    /** 设置输出视频格式（setter） */
+    public VideoOptions setOutputFormat(String v) { this.outputFormat = v; return this; }
+
+    /** @return 全模态参考任务类型（"auto" / "reference" / "edit" / "extend"） */
+    public String getOmniReferenceTaskType() { return omniReferenceTaskType; }
+
+    /** 设置全模态参考任务类型（fluent）。"edit" 需 reference_video + ratio=adaptive + duration=-1；"extend" 需 reference_video + ratio=adaptive */
+    public VideoOptions omniReferenceTaskType(String v) { this.omniReferenceTaskType = v; return this; }
+
+    /** 设置全模态参考任务类型（setter） */
+    public VideoOptions setOmniReferenceTaskType(String v) { this.omniReferenceTaskType = v; return this; }
+
+    /** @return 执行优先级（0-9） */
+    public Integer getPriority() { return priority; }
+
+    /** 设置执行优先级（fluent）。数值越大优先级越高，同优先级按 FIFO 排序 */
+    public VideoOptions priority(Integer v) { this.priority = v; return this; }
+
+    /** 设置执行优先级（setter） */
+    public VideoOptions setPriority(Integer v) { this.priority = v; return this; }
+
+    /** @return 任务超时阈值（秒） */
+    public Integer getExecutionExpiresAfter() { return executionExpiresAfter; }
+
+    /** 设置任务超时阈值（fluent）。范围 [3600, 259200]，默认 172800（48 小时） */
+    public VideoOptions executionExpiresAfter(Integer v) { this.executionExpiresAfter = v; return this; }
+
+    /** 设置任务超时阈值（setter） */
+    public VideoOptions setExecutionExpiresAfter(Integer v) { this.executionExpiresAfter = v; return this; }
+
+    /** @return 视频帧数（Seedance 1.0 系列） */
+    public Integer getFrames() { return frames; }
+
+    /** 设置视频帧数（fluent）。范围 [29, 289]，需满足 25+4n 格式，与 duration 二选一 */
+    public VideoOptions frames(Integer v) { this.frames = v; return this; }
+
+    /** 设置视频帧数（setter） */
+    public VideoOptions setFrames(Integer v) { this.frames = v; return this; }
 }

@@ -51,7 +51,8 @@ public class ImgChatLogger {
 
 	private long userMsgId;
 
-	private ImgChatLogger(ChatManagerDb db, RequestValue rv) {
+	/** 包内可见：允许单元测试注入伪造的 ChatManagerDb */
+	ImgChatLogger(ChatManagerDb db, RequestValue rv) {
 		this.db = db;
 		this.rv = rv;
 	}
@@ -117,6 +118,10 @@ public class ImgChatLogger {
 
 	/**
 	 * 记录任务开始：创建 AI_CHAT 会话 + 用户消息（提示词 + 参数）。
+	 * <p>
+	 * 幂等保护：{@link #restore} 恢复的实例 aiId 已非 0（会话与用户消息已在入队时由
+	 * Web 侧创建），重复调用会另建会话 -- 此时直接跳过，仅保留后续 curl / 原始返回 /
+	 * 成功失败消息的追加记录。
 	 *
 	 * @param provider provider 名称（如 openai_img、doubao_img）
 	 * @param model    模型 ID（如 dall-e-3）
@@ -124,6 +129,10 @@ public class ImgChatLogger {
 	 * @param options  参数 JSON（可为 null）
 	 */
 	public void logStart(String provider, String model, String prompt, JSONObject options) {
+		if (aiId != 0) {
+			// restore 场景：AI_CHAT 会话与用户消息已在入队时创建，跳过避免重复建会话
+			return;
+		}
 		try {
 			String requestId = UUID.randomUUID().toString();
 			this.requestId = requestId;
