@@ -347,7 +347,7 @@ public class MiniMaxVideoProvider extends VideoProviderBase {
         body.put("content", content);
 
         // ---- parameters ----
-        if (opts.getResolution() != null) body.put("resolution", opts.getResolution());
+        if (opts.getResolution() != null) body.put("resolution", minimaxResolution(opts.getResolution()));
         if (opts.getDuration() != null) body.put("duration", opts.getDuration());
         if (opts.getAspectRatio() != null) body.put("ratio", opts.getAspectRatio());
 
@@ -410,6 +410,22 @@ public class MiniMaxVideoProvider extends VideoProviderBase {
 
     private boolean isDupe(String url, String existing) {
         return url != null && existing != null && url.equals(existing);
+    }
+
+    /**
+     * MiniMax-H3 仅支持 {@code 768P} / {@code 2K} 两档（其余档位 API 直接 400 拒绝），
+     * 而调用方常传通用档位（如 720p / 1080p），此处映射到最接近的支持档位：
+     * ≤1080 → 768P，>1080 或显式 2K → 2K；无法解析数字时回退 768P（低档最稳）。
+     */
+    private static String minimaxResolution(String resolution) {
+        String r = resolution.trim().toLowerCase();
+        if (r.startsWith("2k")) return "2K";
+        int height = 0;
+        for (int i = 0; i < r.length(); i++) {
+            char c = r.charAt(i);
+            if (c >= '0' && c <= '9') height = height * 10 + (c - '0');
+        }
+        return height > 1080 ? "2K" : "768P";
     }
 
     // ==================== HTTP ====================

@@ -328,7 +328,7 @@ public class QwenVideoProvider extends VideoProviderBase {
 
         // ---- parameters ----
         JSONObject params = new JSONObject();
-        if (opts.getResolution() != null) params.put("resolution", opts.getResolution());
+        if (opts.getResolution() != null) params.put("resolution", wanResolution(opts.getResolution()));
 
         // ratio: WAN 3.0 + HappyHorse T2V; skip for i2v (aspect follows input image)
         if (opts.getAspectRatio() != null && !isI2v) {
@@ -445,7 +445,7 @@ public class QwenVideoProvider extends VideoProviderBase {
 
         JSONObject params = new JSONObject();
         if (opts.getDuration() != null) params.put("duration", opts.getDuration());
-        if (opts.getResolution() != null) params.put("resolution", opts.getResolution());
+        if (opts.getResolution() != null) params.put("resolution", wanResolution(opts.getResolution()));
         if (opts.getAspectRatio() != null) params.put("aspect_ratio", opts.getAspectRatio());
         if (opts.getFps() != null) params.put("fps", opts.getFps());
         if (opts.getSeed() != null) params.put("seed", opts.getSeed());
@@ -571,6 +571,14 @@ public class QwenVideoProvider extends VideoProviderBase {
             return count;
         }
         return (single != null && !single.isEmpty()) ? 1 : 0;
+    }
+
+    /**
+     * WAN 系列 API 的 resolution 仅接受大写（'1080P'/'720P'/'480P'），
+     * 而项目内调用方（Doubao 习惯）常传小写 '720p'，统一归一化为大写。
+     */
+    private static String wanResolution(String resolution) {
+        return resolution == null ? null : resolution.trim().toUpperCase();
     }
 
     private boolean isDupe(String url, String existing) {
