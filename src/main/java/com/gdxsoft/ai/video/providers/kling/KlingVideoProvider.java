@@ -526,4 +526,13 @@ public class KlingVideoProvider extends VideoProviderBase {
             throw new IOException("HTTP " + resp.statusCode() + ": " + resp.body());
         return resp.body();
     }
+
+    /** 查询任务状态 curl（创建任务时写入 ai_chat_msg）：GET /tasks?task_ids={task_id} */
+    @Override
+    public String queryCurl(String taskId) {
+        if (taskId == null || taskId.isEmpty()) return "";
+        return "curl -X GET '" + baseUrl() + PATH_TASKS + "?task_ids="
+                + URLEncoder.encode(taskId, StandardCharsets.UTF_8)
+                + "' \\\n  -H 'Authorization: Bearer " + getApiKey() + "'";
+    }
 }

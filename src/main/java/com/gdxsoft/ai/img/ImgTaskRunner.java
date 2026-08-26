@@ -55,8 +55,20 @@ public class ImgTaskRunner {
                 provider.getProviderType().getName(), result.getTaskId());
 
         // 日志：创建任务原始返回（本地回退时 raw 为 null，自动跳过）
+        // 原生异步任务写入查询状态 curl；本地回退（local-）无服务端查询端点，记录说明
         if (logger != null) {
             logger.logRawResponse("创建任务返回", result.getRaw());
+            String tid = result.getTaskId();
+            if (tid != null && !tid.isEmpty()) {
+                if (tid.startsWith("local-")) {
+                    logger.logCurl("# 本地回退任务 " + tid + "：无服务端查询端点，结果仅在本 worker JVM 内存，无法用 curl 查询状态");
+                } else {
+                    String queryCurl = provider.queryCurl(tid);
+                    if (queryCurl != null && !queryCurl.isEmpty()) {
+                        logger.logCurl("# 查询任务状态（task_id=" + tid + "）\n" + queryCurl);
+                    }
+                }
+            }
         }
 
         return result;

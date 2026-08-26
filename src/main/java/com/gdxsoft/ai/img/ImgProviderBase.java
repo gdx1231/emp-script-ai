@@ -37,6 +37,9 @@ public abstract class ImgProviderBase implements IImgProvider {
     private final Map<String, LocalTask> localTasks = new ConcurrentHashMap<>();
     /** 本地任务注册表条目存活时间（终态任务超过该时间在下次 submit 时清理） */
     private static final long LOCAL_TASK_TTL_MS = 3600_000L;
+    /** 同步图片请求累计序号（本 JVM 内所有 provider 实例共享），INFO 日志显示已发起多少个同步请求 */
+    private static final java.util.concurrent.atomic.AtomicLong SYNC_REQUEST_SEQ =
+            new java.util.concurrent.atomic.AtomicLong();
 
     @Override
     public String getApiUrl() { return apiUrl; }
@@ -78,6 +81,16 @@ public abstract class ImgProviderBase implements IImgProvider {
         String taskId = "local-" + UUID.randomUUID();
         localTasks.put(taskId, new LocalTask(new ImgTaskStatus("processing", null, null, null)));
 
+        // 同步请求日志：INFO 显示累计序号（已发起多少个同步请求）；DEBUG 显示请求详情
+        long seq = SYNC_REQUEST_SEQ.incrementAndGet();
+        ImgOptions opts = request.getOptions();
+        String model = opts != null ? opts.getModel() : null;
+        LOGGER.info("同步图片请求 #{} 已发起（taskId={}, model={}）", seq, taskId,
+                model == null || model.isEmpty() ? "?" : model);
+        if (LOGGER.isDebugEnabled()) {
+            LOGGER.debug("同步图片请求 #{} 详情: {}", seq, describeRequest(request));
+        }
+
         Executor executor = HttpUtils.createVirtualThreadExecutorService();
         executor.execute(() -> {
             try {
@@ -90,6 +103,46 @@ public abstract class ImgProviderBase implements IImgProvider {
             }
         });
         return new ImgTaskSubmit(taskId, null);
+    }
+
+    /** 生成同步请求的可读描述（DEBUG 日志用，不包含 apiKey 等敏感信息） */
+    private String describeRequest(ImgRequest request) {
+        ImgOptions o = request.getOptions();
+        if (o == null) return "null";
+        StringBuilder sb = new StringBuilder();
+        sb.append("model=").append(nvl(o.getModel()));
+        sb.append(", size=").append(nvl(o.getSize()));
+        sb.append(", n=").append(o.getN() != null ? o.getN() : 1);
+        if (o.getQuality() != null && !o.getQuality().isEmpty()) {
+            sb.append(", quality=").append(o.getQuality());
+        }
+        if (o.getStyle() != null && !o.getStyle().isEmpty()) {
+            sb.append(", style=").append(o.getStyle());
+        }
+        if (o.getSeed() != null) {
+            sb.append(", seed=").append(o.getSeed());
+        }
+        if (o.getSteps() != null) {
+            sb.append(", steps=").append(o.getSteps());
+        }
+        if (o.getNegativePrompt() != null && !o.getNegativePrompt().isEmpty()) {
+            sb.append(", negative=").append(truncate(o.getNegativePrompt(), 60));
+        }
+        List<String> refs = resolveRefImages(o);
+        if (refs != null) {
+            sb.append(", refs=").append(refs.size());
+        }
+        sb.append(", prompt=").append(truncate(nvl(o.getPrompt()), 200));
+        return sb.toString();
+    }
+
+    private static String nvl(String s) {
+        return s == null || s.isEmpty() ? "?" : s;
+    }
+
+    private static String truncate(String s, int max) {
+        if (s == null) return "";
+        return s.length() > max ? s.substring(0, max) + "…" : s;
     }
 
     /**

@@ -540,4 +540,12 @@ public class QwenImgWanxProvider extends ImgProviderBase {
           .append("'");
         return sb.toString();
     }
+
+    /** 查询任务状态 curl（创建异步任务时写入 ai_chat_msg）：GET /api/v1/tasks/{task_id} */
+    @Override
+    public String queryCurl(String taskId) {
+        if (taskId == null || taskId.isEmpty()) return "";
+        return "curl -X GET '" + resolveTaskUrl(taskId)
+                + "' \\\n  -H 'Authorization: Bearer " + getApiKey() + "'";
+    }
 }

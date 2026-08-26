@@ -55,9 +55,13 @@ public class VideoTaskRunner {
         // 提交（非阻塞）
         VideoTaskSubmit result = provider.submitTask(request);
 
-        // 日志：创建任务原始返回
+        // 日志：创建任务原始返回 + 查询任务状态 curl（创建时即写入 ai_chat_msg，便于手动查询）
         if (logger != null) {
             logger.logRawResponse("创建任务返回", result.getRaw());
+            String queryCurl = provider.queryCurl(result.getTaskId());
+            if (queryCurl != null && !queryCurl.isEmpty()) {
+                logger.logCurl("# 查询任务状态（task_id=" + result.getTaskId() + "）\n" + queryCurl);
+            }
         }
 
         return result;

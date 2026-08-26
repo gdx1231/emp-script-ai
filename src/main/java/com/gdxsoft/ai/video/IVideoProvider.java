@@ -50,4 +50,19 @@ public interface IVideoProvider {
 
     /** Debug curl representation. */
     String curl(VideoRequest request);
+
+    /**
+     * Build a curl command to query the task status (for logging into ai_chat_msg
+     * at submit time). Providers may override when the query URL differs.
+     * <p>
+     * Default: {@code GET apiUrl/{taskId}} with Bearer auth (Doubao / Jimeng style).
+     *
+     * @param taskId server-side async task id
+     * @return curl command, or empty when taskId is null/empty
+     */
+    default String queryCurl(String taskId) {
+        if (taskId == null || taskId.isEmpty()) return "";
+        return "curl -X GET '" + getApiUrl() + "/" + taskId
+                + "' \\\n  -H 'Authorization: Bearer " + getApiKey() + "'";
+    }
 }

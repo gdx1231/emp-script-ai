@@ -129,4 +129,12 @@ public class OpenAiCompatVideoProvider extends VideoProviderBase {
             throw new IOException("HTTP " + resp.statusCode() + ": " + resp.body());
         return resp.body();
     }
+
+    /** 查询任务状态 curl（创建任务时写入 ai_chat_msg）：GET /v1/video/tasks/{task_id} */
+    @Override
+    public String queryCurl(String taskId) {
+        if (taskId == null || taskId.isEmpty()) return "";
+        return "curl -X GET '" + deriveTaskUrl(taskId, "/v1/video/tasks/")
+                + "' \\\n  -H 'Authorization: Bearer " + getApiKey() + "'";
+    }
 }

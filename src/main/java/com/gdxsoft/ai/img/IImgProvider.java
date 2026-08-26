@@ -63,4 +63,21 @@ public interface IImgProvider {
      * Sensitive headers (e.g. {@code Authorization}) should be redacted.
      */
     String curl(ImgRequest request);
+
+    /**
+     * Build a curl command to query the task status (for logging into ai_chat_msg
+     * at submit time). Native-async providers (e.g. Qwen Wanx) override this;
+     * local-fallback tasks ({@code local-} prefix) have no server-side query
+     * endpoint and callers should log a note instead of a query curl.
+     * <p>
+     * Default: {@code GET apiUrl/{taskId}} with Bearer auth.
+     *
+     * @param taskId server-side async task id
+     * @return curl command, or empty when taskId is null/empty
+     */
+    default String queryCurl(String taskId) {
+        if (taskId == null || taskId.isEmpty()) return "";
+        return "curl -X GET '" + getApiUrl() + "/" + taskId
+                + "' \\\n  -H 'Authorization: Bearer " + getApiKey() + "'";
+    }
 }
