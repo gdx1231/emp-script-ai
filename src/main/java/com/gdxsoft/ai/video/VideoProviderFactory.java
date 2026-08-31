@@ -20,6 +20,7 @@ public final class VideoProviderFactory {
             case QWEN   -> new com.gdxsoft.ai.video.providers.qwen.QwenVideoProvider();
             case MINIMAX -> new com.gdxsoft.ai.video.providers.minimax.MiniMaxVideoProvider();
             case OPENAI_COMPAT -> new com.gdxsoft.ai.video.providers.openaiCompat.OpenAiCompatVideoProvider();
+            case ZAI    -> new com.gdxsoft.ai.video.providers.zai.ZaiVideoProvider();
         };
     }
 

@@ -303,6 +303,70 @@ class QwenVideoProviderTest {
         assertEquals(1, r.getUsage().getInt("video_count"));
     }
 
+    @Test
+    @DisplayName("转场轮询场景：opts.model 是调用方默认模型（非 wan 前缀）也能解析 video_url")
+    void wan3ParseSuccessWithForeignModel() {
+        // 复现 2026-08-28 转场 bug：VideoTaskWorker.processTransition 轮询 Qwen 任务时
+        // opts.model 传的是 DEFAULT_MODEL（doubao-...），按 model 前缀判定格式会走旧格式分支，
+        // 漏掉 output.video_url -> 「成功但未返回视频 URL」
+        QwenVideoProvider p = new QwenVideoProvider();
+
+        JSONObject resp = new JSONObject();
+        JSONObject output = new JSONObject();
+        output.put("task_status", "SUCCEEDED");
+        output.put("video_url", "https://dashscope-result.oss.aliyuncs.com/transition.mp4");
+        output.put("task_id", "d9b186bb-b8a8-4c9d-b8d8-e095bc279916");
+        resp.put("output", output);
+
+        JSONObject usage = new JSONObject();
+        usage.put("duration", 4);
+        usage.put("output_video_duration", 4);
+        usage.put("input_video_duration", 0);
+        usage.put("video_count", 1);
+        usage.put("fps", 30);
+        usage.put("SR", 720);
+        usage.put("ratio", "16:9");
+        resp.put("usage", usage);
+
+        VideoOptions opts = new VideoOptions("").model("doubao-seedance-2-0-mini-260615");
+        VideoResponse r = p.parseSuccess(resp, opts, "d9b186bb-b8a8-4c9d-b8d8-e095bc279916");
+
+        assertEquals(1, r.getVideos().size());
+        assertEquals("https://dashscope-result.oss.aliyuncs.com/transition.mp4",
+                r.getFirstVideo().getUrl());
+        assertEquals(4.0, r.getFirstVideo().getDuration());
+        assertEquals("720P", r.getFirstVideo().getResolution());
+    }
+
+    @Test
+    @DisplayName("旧格式 results[] 响应仍可解析（wanx2.x）")
+    void legacyResultsParseSuccess() {
+        QwenVideoProvider p = new QwenVideoProvider();
+
+        JSONObject resp = new JSONObject();
+        JSONObject output = new JSONObject();
+        output.put("task_id", "task-456");
+        output.put("task_status", "SUCCEEDED");
+        JSONArray results = new JSONArray();
+        JSONObject v = new JSONObject();
+        v.put("url", "https://dashscope-result.oss.aliyuncs.com/legacy.mp4");
+        v.put("duration", 5);
+        results.put(v);
+        output.put("results", results);
+        resp.put("output", output);
+
+        // 无论 model 是否 wan 前缀，results[] 都应被解析
+        VideoOptions opts = new VideoOptions("test").model("wanx2.1-t2v-turbo");
+        VideoResponse r1 = p.parseSuccess(resp, opts, "task-456");
+        assertEquals("https://dashscope-result.oss.aliyuncs.com/legacy.mp4",
+                r1.getFirstVideo().getUrl());
+
+        VideoOptions foreignOpts = new VideoOptions("test").model("doubao-seedance-2-0-mini-260615");
+        VideoResponse r2 = p.parseSuccess(resp, foreignOpts, "task-456");
+        assertEquals("https://dashscope-result.oss.aliyuncs.com/legacy.mp4",
+                r2.getFirstVideo().getUrl());
+    }
+
     // ==================== 默认模型 ====================
 
     @Test

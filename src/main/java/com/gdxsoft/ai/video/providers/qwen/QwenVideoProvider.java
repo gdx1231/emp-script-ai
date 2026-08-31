@@ -459,12 +459,18 @@ public class QwenVideoProvider extends VideoProviderBase {
     // ==================== Response Parsing ====================
 
     /**
-     * Parse success response, auto-detecting format by model name.
+     * Parse success response, auto-detecting format by response shape.
+     * <p>
+     * 不能按 model 前缀判定格式：轮询场景（如转场 VideoTaskWorker.processTransition）的
+     * opts.model 是调用方默认模型而非提交时的真实 model（如 doubao-...），
+     * 按 model 判定会走旧格式分支，漏掉新格式的 {@code output.video_url}，
+     * 表现为任务已 SUCCEEDED 却报「成功但未返回视频 URL」。
      */
     public VideoResponse parseSuccess(JSONObject root, VideoOptions opts, String taskId) {
-        String model = opts.getModel() != null ? opts.getModel() : DEFAULT_MODEL;
-        if (isNewFormat(model)) {
-            return parseNewFormatSuccess(root, opts, taskId);
+        // 新格式（WAN 3.0 / HappyHorse）：output.video_url；取不到再回退旧格式 output.results[]
+        VideoResponse resp = parseNewFormatSuccess(root, opts, taskId);
+        if (!resp.getVideos().isEmpty()) {
+            return resp;
         }
         return parseLegacySuccess(root, opts, taskId);
     }

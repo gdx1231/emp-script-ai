@@ -11,7 +11,8 @@ public enum VideoProviderType {
     DOUBAO("doubao_video"),
     QWEN("qwen_video"),
     MINIMAX("minimax_video"),
-    OPENAI_COMPAT("openai_compat_video");
+    OPENAI_COMPAT("openai_compat_video"),
+    ZAI("zai_video");
 
     private final String name;
 
