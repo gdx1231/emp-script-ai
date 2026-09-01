@@ -15,6 +15,7 @@ import org.json.JSONObject;
 
 import com.gdxsoft.ai.HttpUtils;
 import com.gdxsoft.ai.video.VideoOptions;
+import com.gdxsoft.ai.video.VideoPromptBuilder;
 import com.gdxsoft.ai.video.VideoProviderBase;
 import com.gdxsoft.ai.video.VideoProviderType;
 import com.gdxsoft.ai.video.VideoRequest;
@@ -304,14 +305,20 @@ public class MiniMaxVideoProvider extends VideoProviderBase {
         JSONObject body = new JSONObject();
         body.put("model", opts.getModel() != null ? opts.getModel() : DEFAULT_MODEL);
 
+        // 长度校验（MiniMax H3 上限 7000 字符）
+        VideoPromptBuilder builder = VideoPromptBuilder.forMiniMax();
+        builder.prompt(opts.getPrompt());
+        builder.validateLength();
+
         // ---- content array ----
         JSONArray content = new JSONArray();
 
         // Text (required in all scenarios)
-        if (opts.getPrompt() != null && !opts.getPrompt().isEmpty()) {
+        String finalPrompt = builder.buildPrompt();
+        if (!finalPrompt.isEmpty()) {
             JSONObject textBlock = new JSONObject();
             textBlock.put("type", "text");
-            textBlock.put("text", opts.getPrompt());
+            textBlock.put("text", finalPrompt);
             content.put(textBlock);
         }
 

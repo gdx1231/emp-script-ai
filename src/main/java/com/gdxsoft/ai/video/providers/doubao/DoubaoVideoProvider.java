@@ -13,6 +13,7 @@ import org.json.JSONObject;
 
 import com.gdxsoft.ai.HttpUtils;
 import com.gdxsoft.ai.video.VideoOptions;
+import com.gdxsoft.ai.video.VideoPromptBuilder;
 import com.gdxsoft.ai.video.VideoProviderBase;
 import com.gdxsoft.ai.video.VideoProviderType;
 import com.gdxsoft.ai.video.VideoRequest;
@@ -182,22 +183,29 @@ public class DoubaoVideoProvider extends VideoProviderBase {
         JSONObject body = new JSONObject();
         body.put("model", opts.getModel() != null ? opts.getModel() : DEFAULT_MODEL);
 
+        // 创建 builder 用于素材引用编号 + 长度校验
+        VideoPromptBuilder builder = VideoPromptBuilder.forSeedance();
+        builder.prompt(opts.getPrompt());
+        builder.validateLength();
+
         // content 数组
         JSONArray content = new JSONArray();
 
         // 文本提示词
         JSONObject textBlock = new JSONObject();
         textBlock.put("type", "text");
-        textBlock.put("text", opts.getPrompt());
+        textBlock.put("text", builder.buildPrompt());
         content.put(textBlock);
 
         // 严格首帧（first_frame）：视频第一帧与该图一致，优先输出
         if (opts.getFirstFrameUrl() != null && !opts.getFirstFrameUrl().isEmpty()) {
+            builder.refImage(opts.getFirstFrameUrl());
             content.put(buildContentBlock("image_url", opts.getFirstFrameUrl(), "first_frame"));
         }
 
         // 严格尾帧（last_frame）：视频最后一帧与该图一致
         if (opts.getLastFrameUrl() != null && !opts.getLastFrameUrl().isEmpty()) {
+            builder.refImage(opts.getLastFrameUrl());
             content.put(buildContentBlock("image_url", opts.getLastFrameUrl(), "last_frame"));
         }
 
@@ -211,18 +219,21 @@ public class DoubaoVideoProvider extends VideoProviderBase {
             if (opts.getLastFrameUrl() != null && opts.getLastFrameUrl().equals(url)) {
                 continue;
             }
+            builder.refImage(url);
             content.put(buildContentBlock("image_url", url, "reference_image"));
         }
 
         // 参考视频（列表 + 单个兼容）
         List<String> videoUrls = collectUrls(opts.getRefVideoUrls(), opts.getRefVideoUrl());
         for (String url : videoUrls) {
+            builder.refVideo(url);
             content.put(buildContentBlock("video_url", url, "reference_video"));
         }
 
         // 参考音频（列表 + 单个兼容）
         List<String> audioUrls = collectUrls(opts.getRefAudioUrls(), opts.getRefAudioUrl());
         for (String url : audioUrls) {
+            builder.refAudio(url);
             content.put(buildContentBlock("audio_url", url, "reference_audio"));
         }
 

@@ -13,6 +13,7 @@ import org.json.JSONObject;
 
 import com.gdxsoft.ai.HttpUtils;
 import com.gdxsoft.ai.video.VideoOptions;
+import com.gdxsoft.ai.video.VideoPromptBuilder;
 import com.gdxsoft.ai.video.VideoProviderBase;
 import com.gdxsoft.ai.video.VideoProviderType;
 import com.gdxsoft.ai.video.VideoRequest;
@@ -271,10 +272,17 @@ public class QwenVideoProvider extends VideoProviderBase {
 
         boolean isI2v = model != null && model.contains("i2v");
 
+        // 创建 builder 用于素材引用编号 + 长度校验
+        VideoPromptBuilder builder = isHappyHorse(model)
+                ? VideoPromptBuilder.forHappyHorse()
+                : VideoPromptBuilder.forWan3();
+        builder.prompt(opts.getPrompt());
+        builder.validateLength();
+
         // ---- input ----
         JSONObject input = new JSONObject();
-        if (opts.getPrompt() != null && !opts.getPrompt().isEmpty()) {
-            input.put("prompt", opts.getPrompt());
+        if (builder.currentLength() > 0) {
+            input.put("prompt", builder.buildPrompt());
         }
 
         // Media: WAN 3.0 always; HappyHorse only i2v (first_frame)
@@ -319,7 +327,7 @@ public class QwenVideoProvider extends VideoProviderBase {
                         "WAN 3.0: reference_audio 最多 5 段，当前 " + refAudioCount);
             }
 
-            JSONArray media = buildWan3MediaArray(opts);
+            JSONArray media = buildWan3MediaArray(opts, builder);
             if (!media.isEmpty()) {
                 input.put("media", media);
             }
@@ -371,17 +379,20 @@ public class QwenVideoProvider extends VideoProviderBase {
     /**
      * Build the WAN 3.0 {@code media} array from VideoOptions.
      * Order: first_frame → last_frame → reference_images → reference_videos → reference_audio.
+     * 同时通过 builder 记录素材引用名（如"图1""视频1"），供调用方在 prompt 中引用。
      */
-    private JSONArray buildWan3MediaArray(VideoOptions opts) {
+    private JSONArray buildWan3MediaArray(VideoOptions opts, VideoPromptBuilder builder) {
         JSONArray media = new JSONArray();
 
         // first_frame (strict first frame)
         if (opts.getFirstFrameUrl() != null && !opts.getFirstFrameUrl().isEmpty()) {
+            builder.refImage(opts.getFirstFrameUrl());
             media.put(mediaItem("first_frame", opts.getFirstFrameUrl()));
         }
 
         // last_frame (strict last frame)
         if (opts.getLastFrameUrl() != null && !opts.getLastFrameUrl().isEmpty()) {
+            builder.refImage(opts.getLastFrameUrl());
             media.put(mediaItem("last_frame", opts.getLastFrameUrl()));
         }
 
@@ -391,18 +402,21 @@ public class QwenVideoProvider extends VideoProviderBase {
             if (isDupe(url, opts.getFirstFrameUrl()) || isDupe(url, opts.getLastFrameUrl())) {
                 continue;
             }
+            builder.refImage(url);
             media.put(mediaItem("reference_image", url));
         }
 
         // reference_video
         List<String> videoUrls = collectUrls(opts.getRefVideoUrls(), opts.getRefVideoUrl());
         for (String url : videoUrls) {
+            builder.refVideo(url);
             media.put(mediaItem("reference_video", url));
         }
 
         // reference_audio
         List<String> audioUrls = collectUrls(opts.getRefAudioUrls(), opts.getRefAudioUrl());
         for (String url : audioUrls) {
+            builder.refAudio(url);
             media.put(mediaItem("reference_audio", url));
         }
 

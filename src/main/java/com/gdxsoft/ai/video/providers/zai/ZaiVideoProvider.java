@@ -13,6 +13,7 @@ import org.json.JSONObject;
 
 import com.gdxsoft.ai.HttpUtils;
 import com.gdxsoft.ai.video.VideoOptions;
+import com.gdxsoft.ai.video.VideoPromptBuilder;
 import com.gdxsoft.ai.video.VideoProviderBase;
 import com.gdxsoft.ai.video.VideoProviderType;
 import com.gdxsoft.ai.video.VideoRequest;
@@ -244,9 +245,13 @@ public class ZaiVideoProvider extends VideoProviderBase {
         JSONObject body = new JSONObject();
         body.put("model", model);
 
-        // prompt
-        if (opts.getPrompt() != null && !opts.getPrompt().isEmpty()) {
-            body.put("prompt", opts.getPrompt());
+        // prompt + 长度校验（CogVideoX 上限 512 字符）
+        VideoPromptBuilder builder = VideoPromptBuilder.forCogVideoX();
+        builder.prompt(opts.getPrompt());
+        builder.validateLength();
+        String finalPrompt = builder.buildPrompt();
+        if (!finalPrompt.isEmpty()) {
+            body.put("prompt", finalPrompt);
         }
 
         // image_url：CogVideoX-3 支持首尾帧（数组），其他仅单图
@@ -402,9 +407,13 @@ public class ZaiVideoProvider extends VideoProviderBase {
         JSONObject body = new JSONObject();
         body.put("model", model);
 
-        // prompt（必填）
-        if (opts.getPrompt() != null && !opts.getPrompt().isEmpty()) {
-            body.put("prompt", opts.getPrompt());
+        // prompt（必填）+ 长度校验（Vidu 上限 512 字符）
+        VideoPromptBuilder vBuilder = VideoPromptBuilder.forCogVideoX();
+        vBuilder.prompt(opts.getPrompt());
+        vBuilder.validateLength();
+        String vPrompt = vBuilder.buildPrompt();
+        if (!vPrompt.isEmpty()) {
+            body.put("prompt", vPrompt);
         }
 
         // style（仅 viduq1-text）

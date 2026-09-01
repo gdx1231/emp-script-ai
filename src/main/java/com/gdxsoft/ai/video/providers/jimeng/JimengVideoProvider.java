@@ -13,6 +13,7 @@ import org.json.JSONObject;
 
 import com.gdxsoft.ai.HttpUtils;
 import com.gdxsoft.ai.video.VideoOptions;
+import com.gdxsoft.ai.video.VideoPromptBuilder;
 import com.gdxsoft.ai.video.VideoProviderBase;
 import com.gdxsoft.ai.video.VideoProviderType;
 import com.gdxsoft.ai.video.VideoRequest;
@@ -135,24 +136,22 @@ public class JimengVideoProvider extends VideoProviderBase {
 
         JSONArray content = new JSONArray();
 
-        // Text prompt with embedded parameters
-        StringBuilder text = new StringBuilder(opts.getPrompt());
-        if (opts.getDuration() != null)
-            text.append(" --duration ").append(opts.getDuration());
-        if (opts.getFps() != null)
-            text.append(" --fps ").append(opts.getFps());
-        if (opts.getAspectRatio() != null)
-            text.append(" --ar ").append(opts.getAspectRatio());
-        text.append(" --camerafixed ").append(cameraFixed);
-        text.append(" --watermark ").append(watermark);
-        if (opts.getNegativePrompt() != null)
-            text.append(" --negative \"").append(opts.getNegativePrompt()).append("\"");
-        if (opts.getSeed() != null)
-            text.append(" --seed ").append(opts.getSeed());
+        // 使用 VideoPromptBuilder 构建提示词（含参数编码）
+        VideoPromptBuilder builder = VideoPromptBuilder.forJimeng();
+        builder.prompt(opts.getPrompt());
+        builder.encodeDuration(opts.getDuration());
+        builder.encodeFps(opts.getFps());
+        builder.encodeAspectRatio(opts.getAspectRatio());
+        builder.encodeCameraFixed(cameraFixed);
+        // watermark: 优先 per-request 覆盖，回退 provider 默认
+        Boolean wm = opts.getWatermark();
+        builder.encodeWatermark(wm != null ? wm : watermark);
+        builder.encodeNegativePrompt(opts.getNegativePrompt());
+        builder.encodeSeed(opts.getSeed());
 
         JSONObject textBlock = new JSONObject();
         textBlock.put("type", "text");
-        textBlock.put("text", text.toString());
+        textBlock.put("text", builder.buildPrompt());
         content.put(textBlock);
 
         // Image reference (image-to-video)

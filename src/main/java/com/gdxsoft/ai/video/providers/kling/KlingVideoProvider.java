@@ -15,6 +15,7 @@ import org.json.JSONObject;
 
 import com.gdxsoft.ai.HttpUtils;
 import com.gdxsoft.ai.video.VideoOptions;
+import com.gdxsoft.ai.video.VideoPromptBuilder;
 import com.gdxsoft.ai.video.VideoProviderBase;
 import com.gdxsoft.ai.video.VideoProviderType;
 import com.gdxsoft.ai.video.VideoRequest;
@@ -250,18 +251,23 @@ public class KlingVideoProvider extends VideoProviderBase {
         String model = resolveModel(opts);
         String endpoint = resolveEndpoint(opts, model);
 
+        // 创建 builder 用于素材编号 + 长度校验
+        VideoPromptBuilder builder = VideoPromptBuilder.forKling();
+        builder.prompt(opts.getPrompt());
+        builder.validateLength();
+
         JSONObject body = new JSONObject();
         if (PATH_TEXT_TO_VIDEO.equals(endpoint)) {
-            body.put("prompt", opts.getPrompt());
+            body.put("prompt", builder.buildPrompt());
             body.put("settings", buildSettings(opts, true));
         } else if (PATH_IMAGE_TO_VIDEO.equals(endpoint)) {
-            body.put("contents", buildImageContents(opts));
+            body.put("contents", buildImageContents(opts, builder));
             body.put("settings", buildSettings(opts, false));
         } else if (PATH_OMNI_VIDEO.equals(endpoint)) {
-            body.put("contents", buildOmniContents(opts));
+            body.put("contents", buildOmniContents(opts, builder));
             body.put("settings", buildSettings(opts, true));
         } else {
-            body.put("contents", buildMotionContents(opts));
+            body.put("contents", buildMotionContents(opts, builder));
             body.put("settings", buildMotionSettings(opts));
         }
         applyOptions(body, opts);
@@ -313,77 +319,83 @@ public class KlingVideoProvider extends VideoProviderBase {
     }
 
     /** 图生视频 contents：prompt + first_frame / last_frame + element（无 id 字段）。 */
-    private JSONArray buildImageContents(VideoOptions opts) {
+    private JSONArray buildImageContents(VideoOptions opts, VideoPromptBuilder builder) {
         JSONArray contents = new JSONArray();
-        contents.put(promptBlock(opts));
+        contents.put(promptBlock(builder));
         if (notEmpty(opts.getFirstFrameUrl())) {
             contents.put(urlBlock("first_frame", opts.getFirstFrameUrl(), null));
         }
         if (notEmpty(opts.getLastFrameUrl())) {
             contents.put(urlBlock("last_frame", opts.getLastFrameUrl(), null));
         }
-        appendElements(contents, opts.getRefElementIds());
+        appendElements(contents, opts.getRefElementIds(), builder);
         return contents;
     }
 
     /**
      * Omni contents：prompt + first_frame / last_frame / refer_image / feature_video /
-     * base_video + element。图片/视频/主体自动编号 image_N / video_N / element_N，
+     * base_video + element。图片/视频/主体通过 builder 自动编号 image_N / video_N / element_N，
      * 供 prompt 中 {@code @id} 引用。
      */
-    private JSONArray buildOmniContents(VideoOptions opts) {
+    private JSONArray buildOmniContents(VideoOptions opts, VideoPromptBuilder builder) {
         JSONArray contents = new JSONArray();
-        contents.put(promptBlock(opts));
+        contents.put(promptBlock(builder));
 
-        int imageIdx = 0;
         if (notEmpty(opts.getFirstFrameUrl())) {
-            contents.put(urlBlock("first_frame", opts.getFirstFrameUrl(), "image_" + (++imageIdx)));
+            String id = builder.refImage(opts.getFirstFrameUrl());
+            contents.put(urlBlock("first_frame", opts.getFirstFrameUrl(), id));
         }
         if (notEmpty(opts.getLastFrameUrl())) {
-            contents.put(urlBlock("last_frame", opts.getLastFrameUrl(), "image_" + (++imageIdx)));
+            String id = builder.refImage(opts.getLastFrameUrl());
+            contents.put(urlBlock("last_frame", opts.getLastFrameUrl(), id));
         }
         for (String url : collectUrls(opts.getRefImageUrls(), opts.getRefImageUrl())) {
-            contents.put(urlBlock("refer_image", url, "image_" + (++imageIdx)));
+            String id = builder.refImage(url);
+            contents.put(urlBlock("refer_image", url, id));
         }
 
-        int videoIdx = 0;
         for (String url : collectUrls(opts.getRefVideoUrls(), opts.getRefVideoUrl())) {
-            contents.put(urlBlock("feature_video", url, "video_" + (++videoIdx)));
+            String id = builder.refVideo(url);
+            contents.put(urlBlock("feature_video", url, id));
         }
         if (notEmpty(opts.getBaseVideoUrl())) {
-            contents.put(urlBlock("base_video", opts.getBaseVideoUrl(), "video_" + (++videoIdx)));
+            String id = builder.refVideo(opts.getBaseVideoUrl());
+            contents.put(urlBlock("base_video", opts.getBaseVideoUrl(), id));
         }
 
-        appendElements(contents, opts.getRefElementIds());
+        appendElements(contents, opts.getRefElementIds(), builder);
         return contents;
     }
 
     /** 动作控制 contents：prompt + image（形象参考图）+ video（动作参考视频）+ element。 */
-    private JSONArray buildMotionContents(VideoOptions opts) {
+    private JSONArray buildMotionContents(VideoOptions opts, VideoPromptBuilder builder) {
         JSONArray contents = new JSONArray();
-        contents.put(promptBlock(opts));
+        contents.put(promptBlock(builder));
 
         List<String> images = collectUrls(opts.getRefImageUrls(), opts.getRefImageUrl());
         if (!images.isEmpty()) {
+            builder.refImage(images.get(0));
             contents.put(urlBlock("image", images.get(0), null));
         }
         List<String> videos = collectUrls(opts.getRefVideoUrls(), opts.getRefVideoUrl());
         if (!videos.isEmpty()) {
+            builder.refVideo(videos.get(0));
             contents.put(urlBlock("video", videos.get(0), null));
         }
 
         List<String> elements = opts.getRefElementIds() == null
                 ? List.of() : opts.getRefElementIds();
         if (!elements.isEmpty()) {
-            contents.put(elementBlock(elements.get(0), "element_1"));
+            String id = builder.addElement(elements.get(0));
+            contents.put(elementBlock(elements.get(0), id));
         }
         return contents;
     }
 
-    private JSONObject promptBlock(VideoOptions opts) {
+    private JSONObject promptBlock(VideoPromptBuilder builder) {
         JSONObject block = new JSONObject();
         block.put("type", "prompt");
-        block.put("text", opts.getPrompt());
+        block.put("text", builder.buildPrompt());
         return block;
     }
 
@@ -395,12 +407,12 @@ public class KlingVideoProvider extends VideoProviderBase {
         return block;
     }
 
-    private void appendElements(JSONArray contents, List<String> elementIds) {
+    private void appendElements(JSONArray contents, List<String> elementIds, VideoPromptBuilder builder) {
         if (elementIds == null) return;
-        int idx = 0;
         for (String elementId : elementIds) {
             if (elementId == null || elementId.isBlank()) continue;
-            contents.put(elementBlock(elementId, "element_" + (++idx)));
+            String id = builder.addElement(elementId);
+            contents.put(elementBlock(elementId, id));
         }
     }
 
