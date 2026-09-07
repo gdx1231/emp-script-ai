@@ -186,6 +186,20 @@ public abstract class GeminiRequestData extends RequestDataBase {
 					part.put("inlineData", inlineData);
 				}
 				break;
+			case FILE:
+				AiFileContent file = (AiFileContent) content;
+				if (file.isUrlMode()) {
+					JSONObject fileData = new JSONObject();
+					fileData.put("fileUri", file.getUrl());
+					fileData.put("mimeType", file.getMimeType() != null ? file.getMimeType() : "application/pdf");
+					part.put("fileData", fileData);
+				} else {
+					JSONObject inlineData = new JSONObject();
+					inlineData.put("mimeType", file.getMimeType() != null ? file.getMimeType() : "application/pdf");
+					inlineData.put("data", file.getBase64Data());
+					part.put("inlineData", inlineData);
+				}
+				break;
 			case TOOL_RESULT:
 				AiToolResult tr = (AiToolResult) content;
 				JSONObject functionResponse = new JSONObject();
@@ -208,15 +222,20 @@ public abstract class GeminiRequestData extends RequestDataBase {
 		for (int i = 0; i < this.messages.length(); i++) {
 			JSONObject message = this.messages.getJSONObject(i);
 			String role = message.getString("role");
-			String content = message.getString("content");
 			if ("assistant".equals(role)) role = "model";
 			JSONObject contentItem = new JSONObject();
 			contentItem.put("role", role);
-			JSONArray parts = new JSONArray();
-			JSONObject part = new JSONObject();
-			part.put("text", content);
-			parts.put(part);
-			contentItem.put("parts", parts);
+
+			// 多模态 / 工具结果消息已携带 parts；普通消息则从 content 字符串转换。
+			if (message.has("parts")) {
+				contentItem.put("parts", message.getJSONArray("parts"));
+			} else {
+				JSONArray parts = new JSONArray();
+				JSONObject part = new JSONObject();
+				part.put("text", message.getString("content"));
+				parts.put(part);
+				contentItem.put("parts", parts);
+			}
 			contents.put(contentItem);
 		}
 		requestData.put("contents", contents);

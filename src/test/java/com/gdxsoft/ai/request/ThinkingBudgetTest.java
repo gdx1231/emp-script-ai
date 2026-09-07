@@ -133,42 +133,35 @@ class ThinkingBudgetTest {
 	// ====================== Qwen ======================
 
 	@Test
-	void qwen_qwq_writesMaxThinkingTokens() {
+	void qwen_qwq_writesThinkingBudget() {
 		com.gdxsoft.ai.providers.qwen.RequestData rd =
 				new com.gdxsoft.ai.providers.qwen.RequestData();
 		rd.model("qwq-32b-preview");
 		rd.thinkingBudget(4096);
 
 		JSONObject body = rd.build();
-		JSONObject thinking = body.getJSONObject("thinking");
-		assertEquals("enabled", thinking.getString("type"));
-		assertEquals(4096, thinking.getInt("max_thinking_tokens"));
-		assertFalse(thinking.has("budget"),
-				"DashScope 原生字段为 max_thinking_tokens，不应使用 thinking.budget");
+		assertEquals(4096, body.getInt("thinking_budget"));
+		assertFalse(body.has("thinking"), "Qwen 应使用 enable_thinking/thinking_budget，不使用 thinking 对象");
 	}
 
 	@Test
-	void qwen_qwen3Thinking_writesMaxThinkingTokens() {
+	void qwen_qwen3_writesThinkingBudget() {
 		com.gdxsoft.ai.providers.qwen.RequestData rd =
 				new com.gdxsoft.ai.providers.qwen.RequestData();
 		rd.model("qwen3-max-thinking");
 		rd.thinkingBudget(8192);
 
-		JSONObject thinking = rd.build().getJSONObject("thinking");
-		assertEquals("enabled", thinking.getString("type"));
-		assertEquals(8192, thinking.getInt("max_thinking_tokens"));
+		assertEquals(8192, rd.build().getInt("thinking_budget"));
 	}
 
 	@Test
-	void qwen_qvq_writesMaxThinkingTokens() {
+	void qwen_qvq_writesThinkingBudget() {
 		com.gdxsoft.ai.providers.qwen.RequestData rd =
 				new com.gdxsoft.ai.providers.qwen.RequestData();
 		rd.model("qvq-max");
 		rd.thinkingBudget(2048);
 
-		JSONObject thinking = rd.build().getJSONObject("thinking");
-		assertEquals("enabled", thinking.getString("type"));
-		assertEquals(2048, thinking.getInt("max_thinking_tokens"));
+		assertEquals(2048, rd.build().getInt("thinking_budget"));
 	}
 
 	@Test
@@ -179,7 +172,8 @@ class ThinkingBudgetTest {
 		rd.thinkingBudget(4096);
 
 		JSONObject body = rd.build();
-		assertFalse(body.has("thinking"), "qwen-plus 不应写入 thinking 字段");
+		assertFalse(body.has("thinking"), "qwen-plus 不应写入 thinking 对象");
+		assertFalse(body.has("thinking_budget"), "qwen-plus 不应写入 thinking_budget");
 		assertEquals(4096, rd.getThinkingBudget());
 	}
 

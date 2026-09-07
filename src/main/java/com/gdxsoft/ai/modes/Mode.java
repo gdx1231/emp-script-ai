@@ -1,5 +1,6 @@
 package com.gdxsoft.ai.modes;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.ArrayList;
@@ -222,6 +223,17 @@ public class Mode {
 			throw new Exception("Error executing SQL query: " + sql);
 		}
 
+		// 多模态 prompt 未显式指定 dataType 时，默认从 SQL 结果中提取 URL；
+		// dataType=url/urls 也表示每行返回一个媒体地址。
+		String dataType = prompt.getDataType();
+		boolean isUrlDataType = "url".equalsIgnoreCase(dataType) || "urls".equalsIgnoreCase(dataType);
+		if ((isUrlDataType || (StringUtils.isBlank(dataType) && isMediaUrlPrompt(prompt)))
+				&& !"json".equalsIgnoreCase(dataType)
+				&& !"xml".equalsIgnoreCase(dataType)) {
+			prompt.setContent(toUrlList(tb));
+			return true;
+		}
+
 		if ("json".equalsIgnoreCase(prompt.getDataType())) {
 			String groupField = prompt.getDataGroupField();
 			if (groupField != null && groupField.trim().length() > 0) {
@@ -239,6 +251,60 @@ public class Mode {
 		}
 
 		return true;
+	}
+
+	/**
+	 * 判断提示词是否声明为 URL 型多模态内容。
+	 */
+	private boolean isMediaUrlPrompt(Prompt prompt) {
+		String type = prompt.getType();
+		if (StringUtils.isBlank(type)) {
+			return false;
+		}
+		switch (type.trim().toLowerCase()) {
+			case "image_url":
+			case "file_url":
+			case "input_audio":
+			case "video":
+			case "video_url":
+				return true;
+			default:
+				return false;
+		}
+	}
+
+	/**
+	 * 将 SQL 查询结果转换为媒体 URL 列表。
+	 * <p>
+	 * SQL 建议返回一列 URL；如果返回多列，则优先使用 url/image_url/img_url/image/img
+	 * 等列名，未命中时使用第一列。多行结果按换行分隔。
+	 */
+	static String toUrlList(DTTable tb) throws Exception {
+		List<String> urls = new ArrayList<>();
+		int columnCount = tb.getColumns().getCount();
+		for (int rowIndex = 0; rowIndex < tb.getCount(); rowIndex++) {
+			String url = null;
+			for (int columnIndex = 0; columnIndex < columnCount; columnIndex++) {
+				String columnName = tb.getColumns().getColumn(columnIndex).getName();
+				columnName = columnName == null ? "" : columnName.trim().toLowerCase();
+				if ("url".equals(columnName) || "image_url".equals(columnName) || "imageurl".equals(columnName)
+						|| "img_url".equals(columnName) || "imgurl".equals(columnName)
+						|| "image".equals(columnName) || "img".equals(columnName)) {
+					url = tb.getCell(rowIndex, columnIndex).getString();
+					break;
+				}
+			}
+			if (StringUtils.isBlank(url) && columnCount > 0) {
+				url = tb.getCell(rowIndex, 0).getString();
+			}
+			if (StringUtils.isNotBlank(url)) {
+				urls.add(url.trim());
+			}
+		}
+		if (urls.isEmpty()) {
+			throw new Exception("SQL query returned no media URLs");
+		}
+		return String.join("\n", urls);
 	}
 
 	/**

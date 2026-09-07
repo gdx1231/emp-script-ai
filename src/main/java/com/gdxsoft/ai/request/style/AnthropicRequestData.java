@@ -158,10 +158,32 @@ public abstract class AnthropicRequestData extends RequestDataBase {
 				AiImageContent img = (AiImageContent) content;
 				part.put("type", "image");
 				JSONObject source = new JSONObject();
-				source.put("type", "base64");
-				source.put("media_type", img.getMimeType() != null ? img.getMimeType() : "image/png");
-				source.put("data", img.isUrlMode() ? img.getUrl() : img.getBase64Data());
+				if (img.isUrlMode()) {
+					source.put("type", "url");
+					source.put("url", img.getUrl());
+				} else {
+					source.put("type", "base64");
+					source.put("media_type", img.getMimeType() != null ? img.getMimeType() : "image/png");
+					source.put("data", img.getBase64Data());
+				}
 				part.put("source", source);
+				break;
+			case FILE:
+				AiFileContent file = (AiFileContent) content;
+				part.put("type", "document");
+				JSONObject docSource = new JSONObject();
+				if (file.isUrlMode()) {
+					docSource.put("type", "url");
+					docSource.put("url", file.getUrl());
+				} else {
+					docSource.put("type", "base64");
+					docSource.put("media_type", file.getMimeType() != null ? file.getMimeType() : "application/pdf");
+					docSource.put("data", file.getBase64Data());
+				}
+				if (file.getFilename() != null) {
+					part.put("title", file.getFilename());
+				}
+				part.put("source", docSource);
 				break;
 			case TOOL_RESULT:
 				AiToolResult tr = (AiToolResult) content;

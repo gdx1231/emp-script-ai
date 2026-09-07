@@ -306,6 +306,7 @@ public class ModeParser {
 		String dataGroupField = promptElement.getAttribute("dataGroupField");
 		String action = promptElement.getAttribute("action");
 		String api = promptElement.getAttribute("api");
+		String type = promptElement.getAttribute("type");
 		if (api == null || api.trim().length() == 0) {
 			// tool 属性为 api 的别名写法
 			api = promptElement.getAttribute("tool");
@@ -319,6 +320,9 @@ public class ModeParser {
 		Prompt p = new Prompt(promptName, role, description, sqlRef, dataType, prefix, content, action);
 		if (dataGroupField != null && dataGroupField.length() > 0) {
 			p.setDataGroupField(dataGroupField);
+		}
+		if (type != null && type.trim().length() > 0) {
+			p.setType(type);
 		}
 		if (showInChatAttr != null && showInChatAttr.trim().length() > 0) {
 			p.setShowInChat(Boolean.parseBoolean(showInChatAttr.trim()));

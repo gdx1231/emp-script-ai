@@ -87,8 +87,13 @@ import com.gdxsoft.ai.ChatManagerI18nConstants.StatusMessages;
 import com.gdxsoft.ai.export.ActionBase;
 import com.gdxsoft.ai.export.IAction;
 import com.gdxsoft.ai.modes.*;
+import com.gdxsoft.ai.request.AiAudioContent;
+import com.gdxsoft.ai.request.AiContent;
+import com.gdxsoft.ai.request.AiTextContent;
+import com.gdxsoft.ai.request.AiVideoContent;
 import com.gdxsoft.ai.request.AiTool;
 import com.gdxsoft.ai.request.DefaultOutEvents;
+import com.gdxsoft.ai.providers.qwen.QwenFileClient;
 import com.gdxsoft.ai.request.IOutEvents;
 import com.gdxsoft.ai.request.IRequestAI;
 import com.gdxsoft.ai.request.IRequestData;
@@ -234,7 +239,7 @@ public class ChatManagerBase {
 	/**
 	 * 思考预算 token 数。0 表示使用 Mode 的默认或 provider 自身默认；
 	 * &gt;0 时由各 provider 自行转换为对应字段（如 Anthropic budget_tokens、
-	 * Gemini thinkingConfig.thinkingBudget、Qwen thinking.budget、OpenRouter
+	 * Gemini thinkingConfig.thinkingBudget、Qwen thinking_budget、OpenRouter
 	 * reasoning.max_tokens、OpenAI o-series reasoning_effort），不支持的 model 忽略。
 	 */
 	private int aiThinkingBudget;
@@ -1248,7 +1253,15 @@ public class ChatManagerBase {
 			promptContent = p.getPrefix() + promptContent;
 		}
 		promptContent = this.rv.replaceParameters(promptContent);
-		reqData.addMessage(promptContent, role);
+
+		PromptAppendResult appendResult = appendPromptContent(reqData, p, promptContent, role);
+		if (appendResult == PromptAppendResult.HANDLED) {
+			return;
+		} else if (appendResult == PromptAppendResult.MULTIMODAL) {
+			LOGGER.info("启用多模态 prompt: name={}, type={}", p.getName(), p.getType());
+		} else {
+			reqData.addMessage(promptContent, role);
+		}
 
 		// 记录到数据库中
 		rv.addOrUpdateValue("AIM_PROMPT_NAME", p.getName());
@@ -1264,6 +1277,176 @@ public class ChatManagerBase {
 			this.outEvent(promptMsg.toString());
 		}
 
+	}
+
+	/** 提示词内容追加结果。 */
+	private enum PromptAppendResult {
+		/** 普通文本消息，由调用方追加并记录。 */
+		TEXT,
+		/** 多模态消息，由本方法追加，调用方仅记录原始引用。 */
+		MULTIMODAL,
+		/** 本方法已完成请求和记录，例如 Qwen Files API。 */
+		HANDLED
+	}
+
+	/**
+	 * 按提示词 type 追加多模态内容。
+	 *
+	 * @return 追加结果
+	 */
+	private PromptAppendResult appendPromptContent(IRequestData reqData, Prompt p, String promptContent,
+			String role) throws Exception {
+		String type = p.getType();
+		if (type == null || type.trim().length() == 0) {
+			type = "text";
+		}
+		List<AiContent> mediaContents = new ArrayList<>();
+		switch (type.toLowerCase()) {
+			case "image_url":
+				// SQL/API 可能返回一行 URL，也可能返回多行或 JSON 格式的 URL 列表。
+				for (String imageUrl : extractImageUrls(promptContent)) {
+					mediaContents.add(AiContent.imageUrl(imageUrl));
+				}
+				break;
+			case "file_url":
+				if (isQwenFilePrompt()) {
+					appendQwenFile(reqData, p, promptContent);
+					return PromptAppendResult.HANDLED;
+				}
+				mediaContents.add(AiContent.fileUrl(promptContent));
+				break;
+			case "input_audio":
+				mediaContents.add(AiContent.audioUrl(promptContent));
+				break;
+			case "video_url":
+			case "video":
+				mediaContents.add(AiContent.videoUrl(promptContent));
+				break;
+			default:
+				return PromptAppendResult.TEXT;
+		}
+		if (!"user".equalsIgnoreCase(role)) {
+			LOGGER.warn("多模态 prompt 仅支持 user 消息，已降级为文本: name={}, role={}, type={}",
+					p.getName(), role, type);
+			reqData.addMessage(promptContent, role);
+			return PromptAppendResult.TEXT;
+		}
+		List<AiContent> contents = new ArrayList<>();
+		if (!StringUtils.isBlank(p.getPrefix())) {
+			contents.add(new AiTextContent(p.getPrefix()));
+		}
+		contents.addAll(mediaContents);
+		reqData.addUserMultiPart(contents.toArray(new AiContent[0]));
+		return PromptAppendResult.MULTIMODAL;
+	}
+
+	/**
+	 * 从多模态 prompt 内容中提取图片 URL。
+	 * <p>
+	 * 支持单个 URL、换行/空白/逗号分隔的多个 URL，以及 JSON 字符串数组或
+	 * JSON 对象中的 {@code url/image_url/img_url/image/img} 字段。
+	 */
+	static List<String> extractImageUrls(String content) throws Exception {
+		List<String> urls = new ArrayList<>();
+		String value = StringUtils.trimToEmpty(content);
+		if (value.isEmpty()) {
+			return urls;
+		}
+
+		if (value.startsWith("[") || value.startsWith("{")) {
+			if (value.startsWith("[")) {
+				JSONArray rows = new JSONArray(value);
+				for (int i = 0; i < rows.length(); i++) {
+					addImageUrlFromValue(urls, rows.get(i));
+				}
+			} else {
+				addImageUrlFromValue(urls, new JSONObject(value));
+			}
+			return urls;
+		}
+
+		String[] lines = value.split("\\r?\\n");
+		for (String line : lines) {
+			String[] parts = line.trim().split("\\s+");
+			for (String part : parts) {
+				// 保留 data:image/png;base64,... 中的逗号；普通 URL 仍支持逗号分隔。
+				if (part.startsWith("data:")) {
+					addImageUrl(urls, part);
+				} else {
+					for (String url : part.split(",")) {
+						addImageUrl(urls, url);
+					}
+				}
+			}
+		}
+		return urls;
+	}
+
+	/**
+	 * 从 JSON 值中提取一个图片 URL。
+	 */
+	static void addImageUrlFromValue(List<String> urls, Object value) {
+		if (value == null || JSONObject.NULL.equals(value)) {
+			return;
+		}
+		if (value instanceof String || value instanceof Number) {
+			addImageUrl(urls, value.toString());
+			return;
+		}
+		if (value instanceof JSONObject) {
+			JSONObject row = (JSONObject) value;
+			for (String key : row.keySet()) {
+				String normalized = key == null ? "" : key.trim().toLowerCase();
+				if ("url".equals(normalized) || "image_url".equals(normalized) || "imageurl".equals(normalized)
+						|| "img_url".equals(normalized) || "imgurl".equals(normalized)
+						|| "image".equals(normalized) || "img".equals(normalized)) {
+					addImageUrl(urls, row.optString(key));
+					return;
+				}
+			}
+		}
+	}
+
+	/**
+	 * 添加非空图片 URL，并按输入顺序去重。
+	 */
+	static void addImageUrl(List<String> urls, String url) {
+		String value = StringUtils.trimToNull(url);
+		if (value != null && !urls.contains(value)) {
+			urls.add(value);
+		}
+	}
+
+	/**
+	 * 判断当前请求是否应使用 Qwen Files API 上传文件。
+	 */
+	private boolean isQwenFilePrompt() {
+		if (!"qwen".equalsIgnoreCase(this.aiProvider)) {
+			return false;
+		}
+		if (this.aiModel == null || !this.aiModel.toLowerCase().contains("qwen-long")) {
+			return false;
+		}
+		return StringUtils.isNotBlank(this.apiUrl) && StringUtils.isNotBlank(this.apiKey);
+	}
+
+	/**
+	 * 将文件 URL 上传到 Qwen Files API，并把 fileid 引用作为 system 消息追加。
+	 */
+	private void appendQwenFile(IRequestData reqData, Prompt p, String promptContent) throws Exception {
+		String fileRef;
+		if (QwenFileClient.isFileId(promptContent)) {
+			fileRef = promptContent.trim();
+		} else {
+			String fileId = new QwenFileClient(this.apiUrl, this.apiKey).uploadUrl(promptContent).id();
+			fileRef = QwenFileClient.toFileId(fileId);
+		}
+		reqData.addMessage(fileRef, "system");
+
+		rv.addOrUpdateValue("AIM_PROMPT_NAME", p.getName());
+		addAiChatMsg(fileRef, "system", false);
+		rv.addOrUpdateValue("AIM_PROMPT_NAME", null);
+		LOGGER.info("Qwen 文件引用已添加: name={}, file={}", p.getName(), fileRef);
 	}
 
 	private boolean checkPreviousOverTime() {

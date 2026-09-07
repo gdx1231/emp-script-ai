@@ -2,8 +2,11 @@ package com.gdxsoft.ai;
 
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Base64;
 
 import org.apache.commons.lang3.StringUtils;
 import org.json.JSONObject;
@@ -11,9 +14,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.gdxsoft.ai.request.ActionEventsOut;
+import com.gdxsoft.ai.request.AiImageContent;
+import com.gdxsoft.ai.request.AiContent;
+import com.gdxsoft.ai.request.AiFileContent;
+import com.gdxsoft.ai.request.AiTextContent;
 import com.gdxsoft.ai.request.IOutEvents;
 import com.gdxsoft.ai.request.IRequestAI;
 import com.gdxsoft.ai.request.IRequestData;
+import com.gdxsoft.ai.providers.qwen.QwenFileClient;
 import com.gdxsoft.easyweb.script.RequestValue;
 import com.gdxsoft.easyweb.utils.UJSon;
 import com.gdxsoft.easyweb.utils.ULogic;
@@ -480,7 +488,7 @@ public class AiStreamOrPost {
 
 	/**
 	 * 准备AI请求数据
-	 * 
+	 *
 	 * @return 请求数据
 	 */
 	private IRequestData prepareRequestData() {
@@ -488,7 +496,21 @@ public class AiStreamOrPost {
 			IRequestData reqData = chatManager.createRequestData();
 			chatManager.appendPrompts(reqData);
 			String resolvedPrompt = chatManager.getResolvedPrompt();
-			reqData.userMessage(resolvedPrompt);
+			// Qwen 文档理解先上传 Files API，再把 fileid:// 引用放入 system 消息。
+			for (String fileRef : resolveQwenFileReferences()) {
+				reqData.addMessage(fileRef, "system");
+			}
+			// 多模态支持：请求可携带 image_url(s)/image_base64(s)、file_url(s)/file_base64(s)。
+			List<AiContent> attachments = readAttachments();
+			if (attachments.isEmpty()) {
+				reqData.userMessage(resolvedPrompt);
+			} else {
+				List<AiContent> contents = new ArrayList<>();
+				contents.add(new AiTextContent(resolvedPrompt));
+				contents.addAll(attachments);
+				reqData.addUserMultiPart(contents.toArray(new AiContent[0]));
+				LOGGER.info("启用多模态消息: {} 个附件", attachments.size());
+			}
 			chatManager.addAiChatMsg(resolvedPrompt, "user", false, true);
 			return reqData;
 		} catch (Exception e) {
@@ -496,6 +518,161 @@ public class AiStreamOrPost {
 			this.lastError = rst;
 			chatManager.outEvent(rst.toString());
 			return null;
+		}
+	}
+
+	/**
+	 * 判断当前 Qwen qwen-long 请求是否可使用 Files API。
+	 */
+	private boolean isQwenFileApi() {
+		if (this.chatManager == null || !"qwen".equalsIgnoreCase(this.chatManager.getAiProvider())) {
+			return false;
+		}
+		String model = this.chatManager.getAiModel();
+		if (model == null || !model.toLowerCase().contains("qwen-long")) {
+			return false;
+		}
+		return this.chatManager.getApiUrl() != null && !this.chatManager.getApiUrl().trim().isEmpty()
+				&& this.chatManager.getApiKey() != null && !this.chatManager.getApiKey().trim().isEmpty();
+	}
+
+	/**
+	 * 读取并上传 file_url/file_urls，返回 Qwen fileid 引用。
+	 */
+	private List<String> resolveQwenFileReferences() throws Exception {
+		List<String> refs = new ArrayList<>();
+		if (!isQwenFileApi()) {
+			return refs;
+		}
+		RequestValue rv = this.chatManager.getRv();
+		QwenFileClient client = new QwenFileClient(this.chatManager.getApiUrl(), this.chatManager.getApiKey());
+		for (String url : readValues(rv, "file_url", "file_urls", ',')) {
+			if (QwenFileClient.isFileId(url)) {
+				refs.add(url.trim());
+			} else {
+				refs.add(QwenFileClient.toFileId(client.uploadUrl(url).id()));
+			}
+		}
+		return refs;
+	}
+
+	/**
+	 * 读取多模态附件参数。图片支持 image_url/image_urls/image_base64/image_base64s；
+	 * 文件支持 file_url/file_urls/file_base64/file_base64s。
+	 * <p>
+	 * URL 参数兼容逗号分隔列表；Base64 列表同样使用逗号分隔，单个 Base64 项内部使用分号。
+	 */
+	private List<AiContent> readAttachments() {
+		List<AiContent> contents = new ArrayList<>();
+		try {
+			RequestValue rv = this.chatManager != null && this.chatManager.getRv() != null
+					? this.chatManager.getRv()
+					: null;
+			if (rv == null) {
+				return contents;
+			}
+
+			addUrlContents(contents, readValues(rv, "image_url", "image_urls", ','), false);
+			addBase64Contents(contents, readValues(rv, "image_base64", "image_base64s", ','), false);
+			if (!isQwenFileApi()) {
+				addUrlContents(contents, readValues(rv, "file_url", "file_urls", ','), true);
+			}
+			addBase64Contents(contents, readValues(rv, "file_base64", "file_base64s", ','), true);
+		} catch (Exception ex) {
+			LOGGER.warn("读取多模态附件参数失败: {}", ex.getMessage());
+		}
+		return contents;
+	}
+
+	/**
+	 * 读取参数值，兼容复数别名。
+	 */
+	private String[] readValues(RequestValue rv, String name, String pluralName, char separator) {
+		String[] values = splitValue(rv.s(name), separator);
+		if (values.length == 0) {
+			values = splitValue(rv.s(pluralName), name.endsWith("base64") ? ';' : ',');
+		}
+		return values;
+	}
+
+	/**
+	 * 拆分多值参数。
+	 */
+	private String[] splitValue(String value, char separator) {
+		if (value == null || value.trim().isEmpty()) {
+			return new String[0];
+		}
+		String[] arr = value.split(java.util.regex.Pattern.quote(String.valueOf(separator)));
+		List<String> result = new ArrayList<>();
+		for (String item : arr) {
+			if (item != null && !item.trim().isEmpty()) {
+				result.add(item.trim());
+			}
+		}
+		return result.toArray(new String[0]);
+	}
+
+	/**
+	 * 添加 URL 型图片或文件。
+	 */
+	private void addUrlContents(List<AiContent> contents, String[] values, boolean file) {
+		if (values == null) {
+			return;
+		}
+		for (String value : values) {
+			if (value.startsWith("data:")) {
+				addDataUrl(contents, value, file);
+			} else {
+				contents.add(file ? AiContent.fileUrl(value) : AiContent.imageUrl(value));
+			}
+		}
+	}
+
+	/**
+	 * 解析 data URL 并转为 Base64 内容，保证 Anthropic/Gemini 等需要内联数据的协议也能识别。
+	 */
+	private void addDataUrl(List<AiContent> contents, String dataUrl, boolean file) {
+		int comma = dataUrl.indexOf(',');
+		if (comma < 0) {
+			LOGGER.warn("多模态 data URL 缺少数据部分，已忽略");
+			return;
+		}
+		String meta = dataUrl.substring(5, comma);
+		int typeEnd = meta.lastIndexOf(';');
+		String mimeType = typeEnd > 0 ? meta.substring(0, typeEnd) : meta;
+		boolean base64 = typeEnd >= 0 && meta.substring(typeEnd + 1).equalsIgnoreCase("base64");
+		String data = dataUrl.substring(comma + 1);
+		if (!base64) {
+			data = Base64.getEncoder().encodeToString(data.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+		}
+		if (file) {
+			contents.add(AiContent.fileBase64(mimeType, data));
+		} else {
+			contents.add(new AiImageContent(null, mimeType, data));
+		}
+	}
+
+	/**
+	 * 添加 Base64 型图片或文件。Base64 参数格式为 {@code mime;data;filename}，其中 filename 可省略。
+	 */
+	private void addBase64Contents(List<AiContent> contents, String[] values, boolean file) {
+		if (values == null) {
+			return;
+		}
+		for (String value : values) {
+			String[] parts = value.split(java.util.regex.Pattern.quote(";"), 3);
+			if (parts.length < 2) {
+				LOGGER.warn("多模态 Base64 参数缺少 MIME 或数据，已忽略");
+				continue;
+			}
+			String mimeType = parts[0].trim();
+			String data = parts[1].trim();
+			String filename = parts.length > 2 ? parts[2].trim() : null;
+			if (file) {
+				contents.add(AiContent.fileBase64(mimeType, data, filename));
+			} else {
+				contents.add(new AiImageContent(null, mimeType, data));
+			}
 		}
 	}
 

@@ -89,10 +89,12 @@ public abstract class OpenAiRequestData extends RequestDataBase {
 				AiAudioContent audio = (AiAudioContent) content;
 				part.put("type", "input_audio");
 				JSONObject audioData = new JSONObject();
+				// Qwen 兼容协议要求 data 字段；Base64 使用 Data URL。
 				if (audio.isUrlMode()) {
-					audioData.put("url", audio.getUrl());
+					audioData.put("data", audio.getUrl());
 				} else {
-					audioData.put("data", audio.getBase64Data());
+					String mime = audio.getMimeType() != null ? audio.getMimeType() : "audio/wav";
+					audioData.put("data", "data:" + mime + ";base64," + audio.getBase64Data());
 					audioData.put("format", audio.getMimeType() != null ? audio.getMimeType().split("/")[1] : "wav");
 				}
 				part.put("input_audio", audioData);
@@ -108,6 +110,26 @@ public abstract class OpenAiRequestData extends RequestDataBase {
 				}
 				part.put("video_url", videoUrl);
 				break;
+			case FILE:
+				AiFileContent file = (AiFileContent) content;
+				part.put("type", "file");
+				JSONObject fileData = new JSONObject();
+				if (file.isUrlMode()) {
+					// OpenAI 兼容生态多数实现使用 file_data 传入 data URL 或外部文件 URL。
+					fileData.put("file_data", file.getUrl());
+				} else {
+					String mimeType = file.getMimeType() != null ? file.getMimeType() : "application/octet-stream";
+					fileData.put("file_data", "data:" + mimeType + ";base64," + file.getBase64Data());
+				}
+				String filename = file.getFilename();
+				if (filename == null && file.isUrlMode()) {
+					filename = fileNameFromUrl(file.getUrl());
+				}
+				if (filename != null) {
+					fileData.put("filename", filename);
+				}
+				part.put("file", fileData);
+				break;
 			case TOOL_RESULT:
 				AiToolResult tr = (AiToolResult) content;
 				part.put("type", "text");
@@ -118,6 +140,26 @@ public abstract class OpenAiRequestData extends RequestDataBase {
 				part.put("text", content.toString());
 		}
 		return part;
+	}
+
+	/**
+	 * 从 URL 中提取文件名；无法提取时返回 null。
+	 */
+	protected String fileNameFromUrl(String url) {
+		if (url == null || url.startsWith("data:")) {
+			return null;
+		}
+		int q = url.indexOf('?');
+		String path = q >= 0 ? url.substring(0, q) : url;
+		int hash = path.indexOf('#');
+		if (hash >= 0) {
+			path = path.substring(0, hash);
+		}
+		int slash = path.lastIndexOf('/');
+		if (slash >= 0) {
+			path = path.substring(slash + 1);
+		}
+		return path.isEmpty() ? null : path;
 	}
 
 	@Override

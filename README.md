@@ -7,6 +7,7 @@
 - 流式输出（SSE）Servlet 示例：`StreamServlet`
 - 场景模式（Mode）XML 解析：从 XML 解析 Step、Prompt、SqlQuery，支持 step 的 `stream` 与 `actionSqlRef` 属性
 - **多轮对话历史控制**：`ChatManagerBase` 支持配置最大历史消息条数和 token 上限，自动截断旧消息
+- **图片/文件识别**：统一请求构建器支持多模态 `user` 消息，可传入图片 URL/Base64 与通用文件（PDF/文档/表格等）
 - **AI 音乐创作**：内置 MiniMax Music 3.0 Provider，支持歌词/风格生成、自动歌词、纯音乐与翻唱参数
 - XML 解析性能优化：`Modes` 内置 xmlContent 的 MD5 缓存，相同内容不重复解析（线程安全）
 - Markdown 代码块提取：`StringUtils.extractCodeBlocks`
@@ -166,7 +167,69 @@ List<Map<String, String>> blocks = StringUtils.extractCodeBlocks(md);
 // blocks.get(0).get("code") == "System.out.println(\"hi\");"
 ```
 
-### 6) AI 音乐创作
+### 6) 图片/文件识别（多模态）
+可直接构建图片或文件识别请求：
+```java
+import com.gdxsoft.ai.request.AiContent;
+import com.gdxsoft.ai.providers.qwen.RequestData;
+
+RequestData req = new RequestData()
+        .model("qwen-vl-plus")
+        .addUserMultiPart(
+                AiContent.text("请识别图片内容并总结 PDF 文件"),
+                AiContent.imageUrl("https://example.com/a.png"),
+                AiContent.fileBase64("application/pdf", pdfBase64, "report.pdf"));
+```
+
+`AiStreamOrPost` 也支持从请求参数读取附件：
+`image_url`/`image_urls`、`image_base64`、`file_url`/`file_urls`、`file_base64`。
+其中 Base64 参数格式为 `mimeType;data;filename`，文件名可省略；`data:` URL 会自动转为内联 Base64。
+
+Mode XML 的 `<prompt>` 可通过 `type` 直接声明多模态内容：
+```xml
+<prompts>
+  <prompt name="instruction" role="user"><![CDATA[请识别这张图片并总结这个文件]]></prompt>
+  <prompt name="image" role="user" type="image_url"><![CDATA[@image_url]]></prompt>
+  <prompt name="file" role="user" type="file_url"><![CDATA[@file_url]]></prompt>
+</prompts>
+```
+`type` 可选值：`text`（默认）、`image_url`、`file_url`、`input_audio`、`video`（或 `video_url`）。
+
+`type="image_url"` 可以直接和 `sqlRef` 组合，由 SQL 查询图片 URL。SQL 建议返回一列 URL；
+也可以返回 `URL`、`IMAGE_URL`、`IMG_URL`、`IMAGE`、`IMG` 等列名。多行结果会生成多个
+`image_url` 内容块：
+
+```xml
+<mode name="image_assistant" description="图片识别">
+  <step name="init" stream="true">
+    <prompts>
+      <prompt name="instruction" role="user"><![CDATA[请识别下面图片中的内容]]></prompt>
+      <prompt name="images" role="user" type="image_url" sqlRef="getImages"/>
+    </prompts>
+  </step>
+  <sqls>
+    <sql name="getImages" description="查询待识别图片">
+      <![CDATA[
+        SELECT image_url
+        FROM ai_image
+        WHERE business_id=@business_id
+        ORDER BY create_date
+      ]]>
+    </sql>
+  </sqls>
+</mode>
+```
+
+`dataType="url"` 或 `dataType="urls"` 可显式声明 SQL 结果为 URL 列表；多模态 prompt
+未指定 `dataType` 时会自动使用该转换。SQL 结果也可以是 JSON 数组，其中的
+`url/image_url/img_url/image/img` 字段会被识别。
+
+Qwen 文件理解使用 Files API：当 `ai_provider=qwen` 且 `ai_model` 为 `qwen-long` 时，
+Mode 的 `type="file_url"` 提示词以及 `AiStreamOrPost` 请求参数 `file_url`/`file_urls`
+会自动上传 URL 文件到 Files API（`purpose=file-extract`），并以 `fileid://<id>` 的
+system 消息传给模型。若已经有文件 ID，可直接写 `fileid://<id>`。
+
+### 7) AI 音乐创作
 ```java
 import com.gdxsoft.ai.music.*;
 import java.nio.file.Path;

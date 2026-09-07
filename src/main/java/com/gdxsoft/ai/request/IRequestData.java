@@ -217,6 +217,11 @@ public interface IRequestData {
 				} else {
 					sb.append("[视频: base64]");
 				}
+			} else if (c instanceof AiFileContent) {
+				AiFileContent file = (AiFileContent) c;
+				String name = file.getFilename() != null ? file.getFilename()
+						: (file.isUrlMode() ? file.getUrl() : file.getMimeType());
+				sb.append("[文件: ").append(name != null ? name : "base64").append("]");
 			} else if (c instanceof AiToolResult) {
 				AiToolResult tr = (AiToolResult) c;
 				sb.append("[工具结果: ").append(tr.getToolCallId()).append("] ").append(tr.getContent());

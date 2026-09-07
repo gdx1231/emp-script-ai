@@ -82,6 +82,37 @@ public abstract class AiContent {
     }
 
     /**
+     * 创建文件内容（URL）。
+     */
+    public static AiFileContent fileUrl(String url) {
+        return new AiFileContent(url, null, null, null);
+    }
+
+    /**
+     * 创建文件内容（URL + 文件名）。
+     */
+    public static AiFileContent fileUrl(String url, String filename) {
+        return new AiFileContent(url, null, null, filename);
+    }
+
+    /**
+     * 创建文件内容（Base64 数据）。
+     *
+     * @param mimeType   MIME 类型，如 "application/pdf"、"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+     * @param base64Data Base64 编码的文件数据（不含 data: 前缀）
+     */
+    public static AiFileContent fileBase64(String mimeType, String base64Data) {
+        return new AiFileContent(null, mimeType, base64Data, null);
+    }
+
+    /**
+     * 创建文件内容（Base64 数据 + 文件名）。
+     */
+    public static AiFileContent fileBase64(String mimeType, String base64Data, String filename) {
+        return new AiFileContent(null, mimeType, base64Data, filename);
+    }
+
+    /**
      * 创建工具调用内容（AI 请求调用工具）。
      */
     public static AiToolCall toolUse(String id, String name, String arguments) {

@@ -28,6 +28,8 @@ public class Prompt {
     private boolean appendToolCheck = false;
     // API curl command
     private String apiCurl;
+    /** 多模态内容类型：text / image_url / file_url / input_audio / video，默认 text */
+    private String type = "text";
 
     public Prompt() {
         // Default constructor
@@ -197,8 +199,22 @@ public class Prompt {
         return apiCurl;
     }
 
+    /**
+     * 获取提示词内容类型。
+     */
+    public String getType() {
+        return type;
+    }
+
     public void setApiCurl(String apiCurl) {
         this.apiCurl = apiCurl;
+    }
+
+    /**
+     * 设置提示词内容类型。
+     */
+    public void setType(String type) {
+        this.type = type == null || type.trim().length() == 0 ? "text" : type.trim().toLowerCase();
     }
 
     /**
@@ -211,6 +227,7 @@ public class Prompt {
         np.setApi(api);
         np.setApisCheck(apisCheck);
         np.setAppendToolCheck(appendToolCheck);
+        np.setType(type);
         return np;
     }
 }
