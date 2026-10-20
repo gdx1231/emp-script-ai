@@ -40,6 +40,23 @@ public abstract class OpenAiRequestData extends RequestDataBase {
 		return this;
 	}
 
+	/**
+	 * 启用/关闭联网搜索，写入 OpenAI 兼容的顶层字段 {@code enable_search}。
+	 * <p>
+	 * 各服务商支持情况由服务端决定：Qwen（DashScope）支持该字段，
+	 * 并提供 {@code search_options} 扩展（见 Qwen RequestData）；
+	 * 不支持的 provider 由服务端忽略或拒绝。
+	 */
+	@Override
+	public IRequestData enableSearch(boolean enable) {
+		if (enable) {
+			parameters.put("enable_search", true);
+		} else {
+			parameters.remove("enable_search");
+		}
+		return this;
+	}
+
 	@Override
 	public IRequestData addToolResult(String toolCallId, String content) {
 		JSONObject message = new JSONObject();

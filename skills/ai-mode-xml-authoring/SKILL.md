@@ -56,6 +56,8 @@ Mode XML 文件由 `emp-script-ai` 的 `Modes.loadModes(xml)` 解析。它定义
 | `maxHistoryTokensK` | 否 | 历史 token 上限，单位 K（默认 100），超限会截断并打 WARN。 |
 | `debugOutput` | 否 | 回显 LLM 原始输出，便于调试。 |
 | `enableSearch` | 否 | `"true"` 时请求体附加 `enable_search: true` 启用联网搜索（qwen/DashScope 兼容模式等支持的 provider 生效，不支持的 provider 会忽略或报错，按需开启）。适合「工具 = 联网查询」的 useMode 子 mode。 |
+| `searchStrategy` | 否 | 联网搜索策略，仅 `enableSearch="true"` 时生效：`turbo`（默认）/`max`/`agent`/`agent_max`，写入 qwen `search_options.search_strategy`；其它 provider 忽略。 |
+| `forcedSearch` | 否 | `"true"` 时即使模型判断无需搜索也强制联网，写入 qwen `search_options.forced_search`；仅 `enableSearch="true"` 时生效。 |
 
 ## `<routerMode>` 自动路由
 

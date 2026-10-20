@@ -462,10 +462,36 @@ public class ChatManagerBase {
 		}
 		if (mode.isEnableSearch()) {
 			// 联网搜索（如 qwen enable_search），provider 不支持时忽略该字段
-			reqData.getParameters().put("enable_search", true);
+			applySearchConfig(reqData, mode);
 		}
 		LOGGER.info(getText(LogMessages.MODEL_REQUEST_PARAMS), reqData.buildJson());
 		return reqData;
+	}
+
+	/**
+	 * 应用联网搜索配置。
+	 * <p>
+	 * {@code searchStrategy} / {@code forcedSearch} 通过
+	 * {@link IRequestData#searchOptions(JSONObject)} 交由 provider 转换，
+	 * 不支持联网搜索的 provider 使用默认空实现忽略。
+	 *
+	 * @param reqData 请求体
+	 * @param mode    当前模式
+	 */
+	private void applySearchConfig(IRequestData reqData, Mode mode) {
+		reqData.enableSearch(true);
+		String strategy = mode.getSearchStrategy();
+		if (!mode.isForcedSearch() && StringUtils.isBlank(strategy)) {
+			return;
+		}
+		JSONObject searchOptions = new JSONObject();
+		if (mode.isForcedSearch()) {
+			searchOptions.put("forced_search", true);
+		}
+		if (StringUtils.isNotBlank(strategy)) {
+			searchOptions.put("search_strategy", strategy);
+		}
+		reqData.searchOptions(searchOptions);
 	}
 
 	public IRequestData createRequestDataForApiCheck() {
@@ -1112,7 +1138,7 @@ public class ChatManagerBase {
 		}
 		if (subMode.isEnableSearch()) {
 			// 联网搜索（如 qwen enable_search），provider 不支持时忽略该字段
-			reqData.getParameters().put("enable_search", true);
+			applySearchConfig(reqData, subMode);
 		}
 
 		// 拼接子 mode 各 step 的 prompts（跳过 apisCheck 与空内容 prompt）

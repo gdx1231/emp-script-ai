@@ -53,6 +53,10 @@ public class Mode {
 	// Debug output control: whether to show technical details like API calls
 	private boolean debugOutput = false; // default false, hide technical details from users
 	private boolean enableSearch = false; // 联网搜索（如 qwen enable_search），default false
+	// 联网搜索策略（qwen search_options.search_strategy）：turbo/max/agent/agent_max
+	private String searchStrategy;
+	// 是否强制联网搜索（qwen search_options.forced_search）
+	private boolean forcedSearch = false;
 	// Maximum number of history messages to include in each turn (default 30)
 	private int maxHistoryMessages = 30;
 	// Maximum total token count for history messages, in thousands (default 100 = 100K tokens)
@@ -620,6 +624,44 @@ public class Mode {
 		this.enableSearch = enableSearch;
 	}
 
+	/**
+	 * 联网搜索策略（qwen search_options.search_strategy）
+	 *
+	 * @return turbo/max/agent/agent_max；未设置时返回 null
+	 */
+	public String getSearchStrategy() {
+		return searchStrategy;
+	}
+
+	/**
+	 * 设置联网搜索策略，仅在 enableSearch=true 时生效
+	 *
+	 * @param searchStrategy turbo/max/agent/agent_max；空值表示不设置
+	 */
+	public void setSearchStrategy(String searchStrategy) {
+		this.searchStrategy = (searchStrategy == null || searchStrategy.trim().isEmpty())
+				? null
+				: searchStrategy.trim();
+	}
+
+	/**
+	 * 是否强制联网搜索（qwen search_options.forced_search）
+	 *
+	 * @return true 表示模型判断不需要搜索时也强制联网
+	 */
+	public boolean isForcedSearch() {
+		return forcedSearch;
+	}
+
+	/**
+	 * 设置是否强制联网搜索，仅在 enableSearch=true 时生效
+	 *
+	 * @param forcedSearch true 强制搜索
+	 */
+	public void setForcedSearch(boolean forcedSearch) {
+		this.forcedSearch = forcedSearch;
+	}
+
 	// Setters
 	public void setName(String name) {
 		this.name = name;
@@ -870,6 +912,8 @@ public class Mode {
 		copy.setUiCompleteTest(this.uiCompleteTest);
 		copy.setDebugOutput(this.debugOutput);
 		copy.setEnableSearch(this.enableSearch);
+		copy.setSearchStrategy(this.searchStrategy);
+		copy.setForcedSearch(this.forcedSearch);
 		copy.setMaxHistoryMessages(this.maxHistoryMessages);
 		copy.setMaxHistoryTokensK(this.maxHistoryTokensK);
 		if (this.paramChecks != null) {

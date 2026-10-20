@@ -186,6 +186,16 @@ public class ModeParser {
 		if (enableSearchAttr != null && enableSearchAttr.trim().length() > 0) {
 			mode.setEnableSearch(Boolean.parseBoolean(enableSearchAttr.trim()));
 		}
+		// Parse searchStrategy attribute（联网搜索策略：turbo/max/agent/agent_max）
+		String searchStrategyAttr = root.getAttribute("searchStrategy");
+		if (searchStrategyAttr != null && searchStrategyAttr.trim().length() > 0) {
+			mode.setSearchStrategy(searchStrategyAttr.trim());
+		}
+		// Parse forcedSearch attribute（强制联网搜索，仅 enableSearch=true 时生效）
+		String forcedSearchAttr = root.getAttribute("forcedSearch");
+		if (forcedSearchAttr != null && forcedSearchAttr.trim().length() > 0) {
+			mode.setForcedSearch(Boolean.parseBoolean(forcedSearchAttr.trim()));
+		}
 		// Parse maxHistoryMessages attribute (default 30)
 		String maxHistoryMsgAttr = root.getAttribute("maxHistoryMessages");
 		if (maxHistoryMsgAttr != null && maxHistoryMsgAttr.trim().length() > 0) {

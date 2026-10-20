@@ -67,6 +67,31 @@ public interface IRequestData {
 	}
 
 	/**
+	 * 设置是否启用 provider 内置的联网搜索（如 Qwen 的 {@code enable_search}）。
+	 * <p>
+	 * 默认空实现：不支持联网搜索的 provider 忽略该设置。
+	 *
+	 * @param enable true 开启，false 关闭
+	 * @return this
+	 */
+	default IRequestData enableSearch(boolean enable) {
+		return this;
+	}
+
+	/**
+	 * 设置联网搜索选项，字段由 provider 自行定义并转换
+	 * （如 Qwen 的 {@code search_options}）。
+	 * <p>
+	 * 默认空实现：不支持搜索选项的 provider 忽略该设置。
+	 *
+	 * @param options 搜索选项；null 或空对象表示清除
+	 * @return this
+	 */
+	default IRequestData searchOptions(JSONObject options) {
+		return this;
+	}
+
+	/**
 	 * 添加消息
 	 */
 	IRequestData addMessage(String content, String role);
