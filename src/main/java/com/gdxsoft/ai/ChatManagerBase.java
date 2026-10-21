@@ -460,6 +460,9 @@ public class ChatManagerBase {
 		if (mode.getTopP() != 0) {
 			reqData.topP(mode.getTopP());
 		}
+		if (!StringUtils.isBlank(mode.getResponseFormat())) {
+			reqData.responseFormat(mode.getResponseFormat());
+		}
 		if (mode.isEnableSearch()) {
 			// 联网搜索（如 qwen enable_search），provider 不支持时忽略该字段
 			applySearchConfig(reqData, mode);
