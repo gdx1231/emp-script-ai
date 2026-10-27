@@ -1,5 +1,7 @@
 package com.gdxsoft.ai.request.style;
 
+import java.util.Locale;
+
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -179,8 +181,87 @@ public abstract class OpenAiRequestData extends RequestDataBase {
 		return path.isEmpty() ? null : path;
 	}
 
+	/**
+	 * {@code response_format=json_object} 时补充的提示语。
+	 * OpenAI 与 DashScope 等兼容服务要求 messages 中出现 "json" 关键字，
+	 * 否则直接返回 400（DashScope: 'messages' must contain the word 'json'）。
+	 */
+	private static final String JSON_FORMAT_HINT = "请按照 json 格式输出。";
+
+	/**
+	 * 确保 {@code response_format=json_object} 时 messages 中含 "json" 关键字。
+	 * <p>
+	 * 调用方常常只设置 {@link IRequestData#responseFormat(String)} 而未在提示词里提及
+	 * json，这里统一补齐：已有 system 文本消息则追加到其末尾，否则在最前面插入一条
+	 * system 提示。未设置 json_object 时不做任何处理。
+	 */
+	private void ensureJsonKeywordInMessages() {
+		JSONObject responseFormat = parameters.optJSONObject("response_format");
+		if (responseFormat == null || !"json_object".equalsIgnoreCase(responseFormat.optString("type"))) {
+			return;
+		}
+		for (int i = 0; i < messages.length(); i++) {
+			if (containsJsonKeyword(messages.optJSONObject(i))) {
+				return;
+			}
+		}
+		for (int i = 0; i < messages.length(); i++) {
+			JSONObject msg = messages.optJSONObject(i);
+			if (msg == null || !"system".equals(msg.optString("role"))) {
+				continue;
+			}
+			if (msg.opt("content") instanceof String) {
+				msg.put("content", msg.getString("content") + "\n" + JSON_FORMAT_HINT);
+				return;
+			}
+		}
+		JSONObject hint = new JSONObject();
+		hint.put("role", "system");
+		hint.put("content", JSON_FORMAT_HINT);
+		// org.json 的 put(int, Object) 是替换指定下标而非插入，这里重建数组保证提示在首位
+		JSONArray reordered = new JSONArray();
+		reordered.put(hint);
+		reordered.putAll(messages);
+		for (int i = messages.length() - 1; i >= 0; i--) {
+			messages.remove(i);
+		}
+		messages.putAll(reordered);
+	}
+
+	/**
+	 * 判断单条消息（文本或多模态 content 数组）是否已包含 "json" 关键字。
+	 */
+	private boolean containsJsonKeyword(JSONObject message) {
+		if (message == null) {
+			return false;
+		}
+		Object content = message.opt("content");
+		if (content instanceof String) {
+			return containsJson((String) content);
+		}
+		if (content instanceof JSONArray) {
+			JSONArray parts = (JSONArray) content;
+			for (int i = 0; i < parts.length(); i++) {
+				Object part = parts.opt(i);
+				if (part instanceof JSONObject) {
+					if (containsJson(((JSONObject) part).optString("text", null))) {
+						return true;
+					}
+				} else if (part instanceof String && containsJson((String) part)) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	private boolean containsJson(String text) {
+		return text != null && text.toLowerCase(Locale.ROOT).contains("json");
+	}
+
 	@Override
 	public JSONObject build() {
+		ensureJsonKeywordInMessages();
 		JSONObject requestData = new JSONObject(parameters.toString());
 		requestData.put("model", this.model);
 		requestData.put("messages", messages);
